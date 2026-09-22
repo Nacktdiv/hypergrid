@@ -1,35 +1,52 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
+import { View, Text } from "react-native"
+import { Tabs, TabList, TabTrigger, TabSlot } from 'expo-router/ui';
+import { usePathname } from 'expo-router';
+import { CarFront, RotateCcwClock, User } from "lucide-react-native"
 
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+function CustomTabList({ children, ...props }: any) {
+    return (
+        <View className="absolute bottom-0 self-center pb-8 px-4 ">
+            <View {...props} className="flex-row items-center justify-between bg-custom-black rounded-full px-8 py-4 gap-6">
+                {children}
+            </View>
+        </View>
+    );
+}
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
+    const pathname = usePathname();
 
-  return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
-        }}
-      />
-    </Tabs>
-  );
+    const isStartFocused = pathname === "/" || pathname === "/(tabs)" || pathname === "/(tabs)/";
+    const isHistoryFocused = pathname.includes("history");
+    const isProfileFocused = pathname.includes("profile");
+
+    return (
+        <Tabs className="flex-1 bg-white">
+            <TabSlot />
+            <TabList asChild >
+                <CustomTabList>
+                    <TabTrigger name="index" href="./" className="w-fit">
+                        <View className="flex-col items-center justify-center gap-1 ">
+                            <CarFront size={20} color={isStartFocused ? "#F8FAFC" : "#94A3B8"} />
+                            <Text className={`text-sm font-quicksand ${isStartFocused ? "text-white" : "text-slate-400"}`}>Start</Text>
+                        </View>
+                    </TabTrigger>
+
+                    <TabTrigger name="history" href="./history" className="w-fit">
+                        <View className="flex-col items-center justify-center gap-1">
+                            <RotateCcwClock size={20} color={isHistoryFocused ? "#F8FAFC" : "#94A3B8"} />
+                            <Text className={`text-sm font-quicksand ${isHistoryFocused ? "text-white" : "text-slate-400"}`}>History</Text>
+                        </View>
+                    </TabTrigger>
+
+                    <TabTrigger name="profile" href="./profile" className="w-fit">
+                        <View className="flex-col items-center justify-center gap-1">
+                            <User size={20} color={isProfileFocused ? "#F8FAFC" : "#94A3B8"} />
+                            <Text className={`text-sm font-quicksand ${isProfileFocused ? "text-white" : "text-slate-400"}`}>Profile</Text>
+                        </View>
+                    </TabTrigger>
+                </CustomTabList>
+            </TabList>
+        </Tabs>
+    );
 }
