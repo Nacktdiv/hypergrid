@@ -1,58 +1,69 @@
-import { Text, View, Image } from "react-native";
-import { Button as ButtonUI } from '@/components/ui/button';
-import { Text as TextUI } from "@/components/ui/text";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-
 import { Settings } from "lucide-react-native";
+import { Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Touchable } from "@/components/ui/touchable";
+
+/**
+ * Auth / Login.
+ *
+ * Referensi desain: Figma page "Final Page Mobile" → frame `Login` #114:1019.
+ *   - background White C #F8FAFC (bukan `bg-white` murni)
+ *   - ilustrasi `hipergrid_final` #114:1023, 264×280
+ *   - heading "Log in to your account" Chivo Bold 32, center, #0F172A
+ *   - tombol "Masuk dengan Google", isi White C, border #F3F3F3 3px, radius 10
+ *   - tombol Settings di kanan bawah, bg #3B82F6, radius 50
+ *
+ * Tombol Google baru placeholder — navigasi ke onboarding. TODO: integrasikan
+ * `expo-auth-session` saat Tahap 2.
+ */
 export default function Index() {
-  const router = useRouter();
+  const router = useRouter()
 
   return (
-    <SafeAreaView className="flex-1 items-center justify-center bg-white px-4 pb-4 ">
-      <View className="w-full h-20 flex-row items-center justify-between py-4 z-10">
-        <View className="flex h-full flex-row items-center gap-2">
-          <View className="h-full aspect-square">
-            <Image 
-              source={require("@/assets/images/iconH.png")}
-              className="w-full h-full"
-              resizeMode="contain"
-            />
-          </View>
-          <Text className="text-xl font-chivo-bold text-black">HYPERGRID</Text>
-        </View>
-      </View>
+    <SafeAreaView className="flex-1 bg-custom-white">
+      <View className="flex-1 items-center justify-center gap-12 px-4">
+        {/* Ilustrasi — Figma `hipergrid_final 1` #114:1023 (264×280) */}
+        <Image
+          contentFit="contain"
+          source={require("@/assets/login/hipergrid-final.png")}
+          style={{ height: 280, width: 264 }}
+        />
 
-      <View className="flex-1 w-full flex items-center justify-center gap-12 ">
-        <View className="h-[180px] w-[180px]">
-          <Image 
-            source={require("@/assets/images/hypergrid-logo.png")}
-            className="w-full h-full"
-            resizeMode="contain"
-          />
-        </View>
-        <Text className="text-4xl font-chivo-bold text-black text-center">Log in to your account</Text>
-
-        <ButtonUI 
-          onPress={() => router.push("/(onboarding)")}
-          variant='outline' 
-          className="bg-custom-white h-fit flex-row items-center gap-3 px-6 py-3 border-custom-borderDisabled active:scale-95 active:bg-custom-disabled hover:bg-slate-100 transition-all duration-150"
+        <Text
+          className="text-center font-chivo-bold text-[32px] leading-[38px] text-[#0F172A]"
         >
-          <Image 
-            source={require("@/assets/icons/google.png")}
-            className="w-6 h-6"
-            resizeMode="contain"
-          />
-          <TextUI className="text-lg font-quicksand text-black">Log in with google</TextUI>
-        </ButtonUI>
+          Log in to your account
+        </Text>
+
+        {/* Figma `Google` #114:1032 — border #F3F3F3 3px, radius 10 */}
+        <Touchable
+          accessibilityHint="Lanjut ke onboarding"
+          accessibilityLabel="Masuk dengan Google"
+          accessibilityRole="button"
+          onPress={() => router.push("/(onboarding)")}
+        >
+          <View className="w-[230px] flex-row items-center justify-center gap-4 rounded-[10px] border-[3px] border-[#F3F3F3] bg-custom-white px-2 py-2">
+            <Image
+              contentFit="contain"
+              source={require("@/assets/icons/google.png")}
+              style={{ height: 24, width: 24 }}
+            />
+            <Text className="font-quicksand text-base text-[#0F172A]">
+              Masuk dengan Google
+            </Text>
+          </View>
+        </Touchable>
       </View>
 
-      <View className="absolute bottom-0 left-0 right-0 flex-row items-center justify-end px-4 py-4 z-10">
-        <ButtonUI className="border-box bg-custom-primary h-fit w-fit p-2 rounded-full border-[6px] border-[#A1C3FB] active:scale-90 active:bg-blue-600 hover:scale-105 transition-all duration-150 shadow-lg">
-          <Settings size={32} color="#F8FAFC" />
-        </ButtonUI>
+      {/* Tombol Settings — Figma `Setting` #155:133 (bg #3B82F6, radius 50) */}
+      <View className="absolute bottom-0 right-0 flex-row items-center justify-end p-4">
+        <View className="h-[46px] w-[47px] items-center justify-center rounded-full bg-[#3B82F6]">
+          <Settings color="#F8FAFC" size={24} />
+        </View>
       </View>
     </SafeAreaView>
-  );
+  )
 }
