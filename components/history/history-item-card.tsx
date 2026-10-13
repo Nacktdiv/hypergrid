@@ -21,15 +21,15 @@ export function HistoryItemCard({ entry }: { entry: HistoryEntry }) {
   return (
     <View className="rounded-3xl border border-[#E2E2E2] bg-white p-5">
       <Touchable
-        accessibilityHint="Buka atau tutup catatan perjalanan"
-        accessibilityLabel={`${entry.from} ke ${entry.to}`}
+        accessibilityHint="Expand or collapse trip notes"
+        accessibilityLabel={`${entry.from} to ${entry.to}`}
         accessibilityRole="button"
         onPress={() => setOpen((value) => !value)}
       >
         <View className="flex-row items-start justify-between gap-4">
           <View className="flex-1 gap-3">
-            <Stop label="Dari" name={entry.from} />
-            <Stop label="Ke" name={entry.to} last />
+            <Stop label="From" name={entry.from} />
+            <Stop label="To" name={entry.to} last />
           </View>
 
           <View className="items-end gap-1">
@@ -63,7 +63,7 @@ export function HistoryItemCard({ entry }: { entry: HistoryEntry }) {
                 hasGuncangan ? "text-custom-danger" : "text-slate-500"
               )}
             >
-              {entry.guncangan} guncangan
+              {entry.guncangan} {entry.guncangan === 1 ? "shock" : "shocks"}
             </Text>
           </View>
 

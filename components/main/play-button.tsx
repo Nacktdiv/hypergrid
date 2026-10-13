@@ -13,7 +13,7 @@ export function PlayButton() {
   return (
     <Link href="/ride" asChild>
       <Touchable
-        accessibilityLabel="Mulai perjalanan"
+        accessibilityLabel="Start drive"
         accessibilityRole="button"
       >
         <View className="h-12 w-full items-center justify-center rounded-full border-2 border-custom-primary bg-custom-primary">

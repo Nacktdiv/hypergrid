@@ -1,5 +1,5 @@
 import { Image, type ImageSource } from "expo-image";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import MapView, { Callout, Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 
 import {
@@ -14,144 +14,180 @@ import {
 /**
  * Peta HyperGrid.
  *
- * Memakai `react-native-maps` — library ini sudah termasuk di Expo Go, jadi
- * peta langsung bisa dicoba tanpa development build:
- *   npx expo start  →  pindai QR code dengan Expo Go
- *
- * CATATAN
- * 1. Penanda kerusakan digambar sebagai `Marker` berisi lingkaran 36px
- *    bespoke, bukan `Circle`. Alasannya: Figma memakai lingkaran fixed-size
- *    dengan angka di dalamnya, dan marker itulah yang bisa di-tap (Circle
- *    tidak punya callback tap di versi ini). Ukurannya juga tetap konstan
- *    saat zoom, sama seperti desain.
- * 2. Di Expo Go, Android memakai peta bawaan Google Maps. Saat rilis ke app
- *    store, API key + config plugin perlu disiapkan (lihat README).
- * 3. Seluruh isi peta berasal dari prop `data` (`MapData`), sehingga saat data
- *    API sudah tersedia cukup ganti sumber datanya — komponen ini tidak perlu
- *    diubah. TODO(Tahap 2): sumber data peta pindah ke API.
+ * Memakai `react-native-maps` — library ini sudah termasuk di Expo Go.
+ * Mendukung penanda klaster interaktif, rute polyline, lokasi pengguna, dan callback tap kerusakan.
  */
 
 /** Ukuran ikon kendaraan di peta, dalam px logis. */
-const VEHICLE_ICON_SIZE = 44
+const VEHICLE_ICON_SIZE = 44;
 
 export type HypergridMapProps = {
-  data: MapData
+  data: MapData;
   /** Ikon kendaraan aktif (hasil `require(...)`). */
-  vehicleIcon: ImageSource
+  vehicleIcon: ImageSource;
   /** Matikan gestur pan/zoom — untuk peta thumbnail di dalam ScrollView. */
-  interactive?: boolean
-}
+  interactive?: boolean;
+  /** Callback saat titik kerusakan jalan ditekan */
+  onDamagePress?: (point: DamagePoint) => void;
+};
 
 export function HypergridMap({
   data,
   vehicleIcon,
   interactive = true,
+  onDamagePress,
 }: HypergridMapProps) {
+  // Pada iOS default menggunakan Apple Maps (undefined). Pada Android menggunakan Google Maps.
+  const mapProvider = Platform.OS === "android" ? PROVIDER_GOOGLE : undefined;
+  const currentRegion = toRegion(data.camera);
+
   return (
-    <MapView
-      initialRegion={toRegion(data.camera)}
-      pitchEnabled={false}
-      provider={PROVIDER_GOOGLE}
-      rotateEnabled={interactive}
-      scrollEnabled={interactive}
-      showsCompass={false}
-      showsMyLocationButton={false}
-      showsPointsOfInterests={false}
-      showsUserLocation={false}
-      style={StyleSheet.absoluteFill}
-      toolbarEnabled={false}
-      zoomEnabled={interactive}
-    >
-      {/* Jalur rute — Figma #114:1272 */}
-      <Polyline
-        coordinates={data.route.coordinates}
-        geodesic
-        strokeColor={ROUTE_COLOR}
-        strokeWidth={5}
-      />
+    <View style={styles.container}>
+      <MapView
+        initialRegion={currentRegion}
+        key={`map-${data.camera.latitude}-${data.camera.longitude}`}
+        loadingBackgroundColor="#F8FAFC"
+        loadingEnabled={true}
+        loadingIndicatorColor="#009EFF"
+        onMapReady={() => {
+          console.log("[HypergridMap] Native map successfully mounted and ready");
+        }}
+        pitchEnabled={false}
+        provider={mapProvider}
+        rotateEnabled={interactive}
+        scrollEnabled={interactive}
+        showsCompass={false}
+        showsMyLocationButton={false}
+        showsPointsOfInterests={false}
+        showsUserLocation={false}
+        style={styles.map}
+        toolbarEnabled={false}
+        zoomEnabled={interactive}
+      >
+        {/* Jalur rute — Figma #114:1272 */}
+        {data.route.coordinates.length > 0 ? (
+          <Polyline
+            coordinates={data.route.coordinates}
+            geodesic
+            strokeColor={ROUTE_COLOR}
+            strokeWidth={5}
+          />
+        ) : null}
 
-      {data.damagePoints.map((point) => (
-        <DamageMarker key={point.id} point={point} />
-      ))}
+        {data.damagePoints.map((point) => (
+          <DamageMarker
+            key={point.id}
+            point={point}
+            onPress={onDamagePress}
+          />
+        ))}
 
-      {/* Kendaraan aktif — mengikuti pilihan di VehicleSelector */}
-      <Marker anchor={{ x: 0.5, y: 0.5 }} coordinate={data.vehiclePosition} title="Kendaraan aktif">
-        <Image
-          contentFit="contain"
-          source={vehicleIcon}
-          style={{ height: VEHICLE_ICON_SIZE, width: VEHICLE_ICON_SIZE }}
-        />
-      </Marker>
+        {/* Kendaraan aktif — mengikuti pilihan di VehicleSelector */}
+        <Marker
+          anchor={{ x: 0.5, y: 0.5 }}
+          coordinate={data.vehiclePosition}
+          title="Kendaraan aktif"
+        >
+          <Image
+            contentFit="contain"
+            source={vehicleIcon}
+            style={{ height: VEHICLE_ICON_SIZE, width: VEHICLE_ICON_SIZE }}
+          />
+        </Marker>
 
-      {/* Titik user — Figma `You` #I114:1274;2:723 */}
-      <Marker anchor={{ x: 0.5, y: 0.5 }} coordinate={data.userLocation} tracksViewChanges={false}>
-        <View
-          style={[
-            styles.userDot,
-            { backgroundColor: USER_COLOR },
-          ]}
-        />
-      </Marker>
-    </MapView>
-  )
+        {/* Titik user — Figma `You` #I114:1274;2:723 */}
+        <Marker
+          anchor={{ x: 0.5, y: 0.5 }}
+          coordinate={data.userLocation}
+          tracksViewChanges={false}
+        >
+          <View style={[styles.userDot, { backgroundColor: USER_COLOR }]} />
+        </Marker>
+      </MapView>
+    </View>
+  );
 }
 
 /**
  * Lingkaran kerusakan 36px dengan jumlah laporan — Figma `Red` #155:148,
  * `Yellow 1` #114:1278, `Yellow 2` #155:152.
  */
-function DamageMarker({ point }: { point: DamagePoint }) {
-  const isLow = point.severity === "low"
+function DamageMarker({
+  point,
+  onPress,
+}: {
+  point: DamagePoint;
+  onPress?: (point: DamagePoint) => void;
+}) {
+  const isLow = point.severity === "low";
 
   return (
     <Marker
       anchor={{ x: 0.5, y: 0.5 }}
       coordinate={point.position}
-      onPress={() => onDamagePress(point)}
+      onPress={() => {
+        if (onPress) {
+          onPress(point);
+        } else {
+          console.log(
+            `[HyperGrid] marker ${point.id} ditekan — ${point.reportCount} laporan, severity ${point.severity}`
+          );
+        }
+      }}
       tracksViewChanges={false}
     >
-      <View style={[styles.damageDot, { backgroundColor: SEVERITY_COLOR[point.severity] }]}>
-        <Text style={[styles.damageCount, { color: isLow ? "#121212" : "#FFFFFF" }]}>
+      <View
+        style={[
+          styles.damageDot,
+          { backgroundColor: SEVERITY_COLOR[point.severity] },
+        ]}
+      >
+        <Text
+          style={[
+            styles.damageCount,
+            { color: isLow ? "#121212" : "#FFFFFF" },
+          ]}
+        >
           {point.reportCount}
         </Text>
       </View>
 
       <Callout tooltip>
         <View style={styles.callout}>
-          <Text style={styles.calloutTitle}>{point.reportCount} laporan kerusakan</Text>
-          <Text style={styles.calloutBody}>Severity: {point.severity}</Text>
+          <Text style={styles.calloutTitle}>
+            {point.reportCount} laporan kerusakan
+          </Text>
+          <Text style={styles.calloutBody}>Keparahan: {point.severity}</Text>
         </View>
       </Callout>
     </Marker>
-  )
+  );
 }
 
 /** `react-native-maps` memakai delta (derajat), bukan zoom level. */
 function toRegion(center: LatLng & { zoom: number }) {
-  // Perbandingan kasar: zoom 14 ≈ 0.02° delta, zoom 15.5 ≈ 0.007°.
-  const delta = 2 ** -center.zoom * 400
+  const delta = 2 ** -center.zoom * 400;
 
   return {
     latitude: center.latitude,
     longitude: center.longitude,
     latitudeDelta: delta,
     longitudeDelta: delta,
-  }
-}
-
-/**
- * Tap pada penanda kerusakan.
- * TODO(Tahap 2): ganti dengan navigasi ke halaman detail laporan.
- */
-function onDamagePress(point: DamagePoint) {
-  // Callout sudah menampilkan detail, jadi cukup log ke console dulu.
-  // TODO(Tahap 2): arahkan ke halaman detail dari API.
-  console.log(
-    `[HyperGrid] marker ${point.id} ditekan — ${point.reportCount} laporan, severity ${point.severity}`
-  )
+  };
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    height: "100%",
+    position: "relative",
+    width: "100%",
+  },
+  map: {
+    ...StyleSheet.absoluteFill,
+    height: "100%",
+    width: "100%",
+  },
   damageDot: {
     alignItems: "center",
     borderRadius: 20,
@@ -188,4 +224,4 @@ const styles = StyleSheet.create({
   calloutBody: {
     fontSize: 12,
   },
-})
+});

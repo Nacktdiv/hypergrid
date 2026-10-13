@@ -10,7 +10,7 @@ import type { Metric } from "./mock-data";
  */
 export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
   return (
-    <View className="flex-row gap-2">
+    <View className="flex-row gap-2 ">
       {metrics.map((metric) => (
         <MetricCard key={metric.id} metric={metric} />
       ))}
@@ -20,12 +20,12 @@ export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
 
 function MetricCard({ metric }: { metric: Metric }) {
   return (
-    <View className="flex-1 justify-between rounded-3xl border border-[#E2E2E2] bg-white p-3 min-w-0">
+    <View className="flex-1 justify-between rounded-3xl border border-custom-black bg-white shadow-sm p-3 gap-3 min-w-0">
       {/* Header: Ikon di atas / terpisah agar label punya ruang penuh */}
-      <View className="gap-1.5 mb-2">
+      <View className="gap-1.5">
         <MetricIcon id={metric.id} color={metric.accent} />
         <Text 
-          className="text-[11px] font-medium leading-tight text-slate-500" 
+          className="text-[12px]  font-medium leading-tight text-slate-500" 
           numberOfLines={2}
         >
           {metric.label}
@@ -33,8 +33,8 @@ function MetricCard({ metric }: { metric: Metric }) {
       </View>
 
       {/* Value & Unit: Fleksibel dan menyesuaikan angka panjang */}
-      <View className="flex-row items-baseline gap-0.5 flex-wrap">
-        <Text className="font-mono-bold text-xl leading-none text-custom-black">
+      <View className="flex-row items-baseline gap-1 flex-wrap">
+        <Text className="font-mono-bold text-lg leading-none text-custom-black">
           {metric.value}
         </Text>
         {metric.unit ? (

@@ -12,12 +12,20 @@ import { TelemetryRows } from "./telemetry-rows";
  *   2. Matrix: Vibration & Speed
  *   3. status bar progress
  */
-export function BottomHud() {
+export function BottomHud({
+  speed,
+  vibration,
+  shockLevel,
+}: {
+  speed?: number | string;
+  vibration?: number | string;
+  shockLevel?: number;
+} = {}) {
   return (
     <View className="gap-2 rounded-[20px] bg-custom-black p-4">
       <TelemetryHeader />
-      <TelemetryRows />
-      <ShockGauge />
+      <TelemetryRows speed={speed} vibration={vibration} />
+      <ShockGauge level={shockLevel} />
     </View>
-  )
+  );
 }

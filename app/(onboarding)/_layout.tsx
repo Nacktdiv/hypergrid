@@ -7,6 +7,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { PortalHost } from "@rn-primitives/portal";
 import { Slot, useRouter } from "expo-router";
 
+import { useAuth } from "@/hooks/use-auth";
+
 export type OnboardingContextType = {
     progress: number;
     setProgress: React.Dispatch<React.SetStateAction<number>>;
@@ -16,6 +18,7 @@ export const OnboardingContext = createContext<OnboardingContextType | undefined
 
 export default function RootLayout() {
     const router = useRouter();
+    const { completeOnboarding } = useAuth();
 
     const [percentage, setPercentage] = useState<number>(0);
     const [progress, setProgress] = useState<number>(1);
@@ -25,6 +28,12 @@ export default function RootLayout() {
         const timer = setTimeout(() => setPercentage(constant * progress), 250);
         return () => clearTimeout(timer);
     }, [progress]);
+
+    const handleFinish = async () => {
+        await completeOnboarding();
+        router.replace("/(tabs)");
+    };
+
     return (
         <OnboardingContext.Provider value={{ progress, setProgress }}>
             <SafeAreaView className="relative flex-1 items-center justify-center bg-white px-4 pb-8">
@@ -41,9 +50,7 @@ export default function RootLayout() {
                     </View>
                     
                     <ButtonUI 
-                        onPress={() => {
-                            router.push("/(tabs)");
-                        }}
+                        onPress={handleFinish}
                         className="bg-transparent h-fit px-3 py-1.5 rounded-lg active:bg-slate-100 active:scale-95 hover:bg-slate-50 transition-all duration-150">
                         <TextUI className="text-lg font-quicksand-bold text-black active:opacity-70">Skip</TextUI>
                     </ButtonUI>
@@ -60,7 +67,7 @@ export default function RootLayout() {
                         if (progress < 3) {
                             setProgress(progress + 1);
                         } else if (progress === 3) {
-                            router.push("/(tabs)");
+                            handleFinish();
                         }
                     }}
                     className="bg-custom-primary w-full h-fit py-2 rounded-xl shadow-md active:scale-[0.98] active:opacity-90 hover:opacity-95 hover:shadow-lg transition-all duration-150">

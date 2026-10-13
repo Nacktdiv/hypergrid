@@ -5,14 +5,29 @@ import { TELEMETRY_ROWS } from "./mock-data";
 /**
  * Baris telemetry — Figma View 1 `Matrix` #114:1417.
  *
- * Dua kolom: label (Quicksand 12, putih) di atas,
- * angka besar Quicksand SemiBold 36 + unit Quicksand SemiBold 16 di bawah.
- * Value di-hardcode di mock-data.
+ * Dua kolom: Vibration & Speed.
+ * Mendukung nilai dinamis dari sensor / Edge AI maupun fallback default.
  */
-export function TelemetryRows() {
+export function TelemetryRows({
+  speed,
+  vibration,
+}: {
+  speed?: number | string;
+  vibration?: number | string;
+} = {}) {
+  const displayRows = TELEMETRY_ROWS.map((row) => {
+    if (row.id === "speed" && speed !== undefined) {
+      return { ...row, value: String(speed) };
+    }
+    if (row.id === "vibration" && vibration !== undefined) {
+      return { ...row, value: String(vibration) };
+    }
+    return row;
+  });
+
   return (
     <View className="flex-row gap-2.5">
-      {TELEMETRY_ROWS.map((row) => (
+      {displayRows.map((row) => (
         <View key={row.id} className="flex-1 gap-2">
           <Text className="font-quicksand-semibold text-xs text-white">
             {row.label}
@@ -29,5 +44,5 @@ export function TelemetryRows() {
         </View>
       ))}
     </View>
-  )
+  );
 }

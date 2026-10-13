@@ -27,9 +27,9 @@ export const STATUS_META: Record<
   DriveStatus,
   { label: string; color: string; textColor: string }
 > = {
-  safe: { label: "AMAN", color: "#009EFF", textColor: "#FFFFFF" },
-  warning: { label: "PERINGATAN", color: "#F59E0B", textColor: "#000000" },
-  speeding: { label: "TERLALU CEPAT", color: "#EF4444", textColor: "#FFFFFF" },
+  safe: { label: "SAFE", color: "#009EFF", textColor: "#FFFFFF" },
+  warning: { label: "WARNING", color: "#F59E0B", textColor: "#000000" },
+  speeding: { label: "TOO FAST", color: "#EF4444", textColor: "#FFFFFF" },
 }
 
 /** Status aktif untuk demo */

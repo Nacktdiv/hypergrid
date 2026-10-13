@@ -1,25 +1,60 @@
+import React, { useMemo } from "react";
 import { View } from "react-native";
 
 import { cn } from "@/lib/utils";
-import { HypergridMap } from "@/components/map/hypergrid-map";
-import { RIDE_MAP_DATA } from "@/components/map/map-data";
+import { LeafletMap } from "@/components/map/leaflet-map";
+import {
+  RIDE_MAP_DATA,
+  type DamagePoint,
+  type LatLng,
+  type MapData,
+} from "@/components/map/map-data";
 
-import { CAR_IMAGE } from "./mock-data";
+export interface LiveMapProps {
+  isPaused?: boolean;
+  currentCoords?: LatLng | null;
+  routeHistory?: LatLng[];
+  liveDetections?: DamagePoint[];
+}
 
 /**
- * Peta live full-screen untuk Drive Mode.
+ * Peta live full-screen untuk Drive Mode (Leaflet + OpenStreetMap).
  *
- * Memakai map native yang sama dengan Main Page, hanya kamera dibuat lebih
- * dekat (zoom 15.5) mengikuti desain `start driving` #114:1384.
- *
- * Gestur pan/zoom tetap aktif karena pengguna sedang menelusuri rute.
- * Saat dijeda, peta diredupkan (opacity 60%).
- * TODO(Tahap 2): data peta (rute, titik kerusakan) dibaca dari API.
+ * Menerima koordinat live perangkat dan jejak rute perjalanan nyata pengguna.
  */
-export function LiveMap({ isPaused = false }: { isPaused?: boolean }) {
+export function LiveMap({
+  isPaused = false,
+  currentCoords,
+  routeHistory = [],
+  liveDetections = [],
+}: LiveMapProps) {
+  const mapData: MapData = useMemo(() => {
+    const centerPoint: LatLng = currentCoords || RIDE_MAP_DATA.camera;
+    const finalRoute =
+      routeHistory.length > 0 ? routeHistory : [centerPoint];
+
+    return {
+      camera: {
+        latitude: centerPoint.latitude,
+        longitude: centerPoint.longitude,
+        zoom: 16,
+      },
+      route: {
+        id: "live-drive-route",
+        coordinates: finalRoute,
+      },
+      damagePoints:
+        liveDetections.length > 0
+          ? liveDetections
+          : RIDE_MAP_DATA.damagePoints,
+      userLocation: centerPoint,
+      vehiclePosition: centerPoint,
+    };
+  }, [currentCoords, routeHistory, liveDetections]);
+
   return (
     <View className={cn("flex-1", isPaused && "opacity-60")}>
-      <HypergridMap data={RIDE_MAP_DATA} vehicleIcon={CAR_IMAGE} />
+      <LeafletMap data={mapData} interactive={!isPaused} />
     </View>
-  )
+  );
 }

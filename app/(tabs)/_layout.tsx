@@ -1,7 +1,7 @@
-import { View, Text } from "react-native"
-import { Tabs, TabList, TabTrigger, TabSlot } from 'expo-router/ui';
+import { View, Text } from "react-native";
 import { usePathname } from 'expo-router';
-import { CarFront, RotateCcwClock, User } from "lucide-react-native"
+import { Tabs, TabList, TabTrigger, TabSlot } from 'expo-router/ui';
+import { CarFront, RotateCcwClock, User } from "lucide-react-native";
 
 function CustomTabList({ children, ...props }: any) {
     return (
@@ -18,7 +18,7 @@ function CustomTabList({ children, ...props }: any) {
 export default function RootLayout() {
     const pathname = usePathname();
 
-    const isStartFocused = pathname === "/" || pathname === "/(tabs)" || pathname === "/(tabs)/";
+    const isStartFocused = pathname === "/" || pathname === "/(tabs)" || pathname === "/(tabs)/" || pathname === "/(tabs)/index";
     const isHistoryFocused = pathname.includes("history");
     const isProfileFocused = pathname.includes("profile");
 
@@ -27,7 +27,7 @@ export default function RootLayout() {
             <TabSlot />
             <TabList asChild >
                 <CustomTabList>
-                    <TabTrigger name="index" href="./" className="w-fit">
+                    <TabTrigger name="index" href="/(tabs)" className="w-fit">
                         <View className="flex-col items-center justify-center gap-1 py-2">
                             <CarFront size={20} color={isStartFocused ? "#F8FAFC" : "#94A3B8"} />
                             <Text className={`text-sm font-quicksand ${isStartFocused ? "text-white" : "text-slate-400"}`}>Start</Text>

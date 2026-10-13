@@ -1,5 +1,5 @@
 import { Image, type ImageSource } from "expo-image";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
 import {
@@ -7,26 +7,24 @@ import {
   SEVERITY_COLOR,
   USER_COLOR,
   projectToPercent,
+  type DamagePoint,
   type LatLng,
   type MapData,
 } from "./map-data";
 
 /**
- * Fallback peta untuk platform web.
+ * Fallback peta untuk platform web atau mode visual.
  *
- * `react-native-maps` tidak berjalan di browser, jadi saat preview di
- * `npx expo start --web` peta digambar memakai gambar statis Figma.
- * Data yang digambar tetap berasal dari `MapData` yang sama dengan map
- * device — hanya posisinya diproyeksikan linier ke dalam area gambar.
- *
- * Di device (iOS/Android) komponen ini tidak pernah dipakai.
+ * Menggambar layout peta statis Figma dengan marker kerusakan interaktif.
  */
 export function StaticMapFallback({
   data,
   vehicleIcon,
+  onDamagePress,
 }: {
   data: MapData
   vehicleIcon: ImageSource
+  onDamagePress?: (point: DamagePoint) => void
 }) {
   return (
     <View className="flex-1 overflow-hidden">
@@ -40,8 +38,10 @@ export function StaticMapFallback({
       <RoutePath coordinates={data.route.coordinates} />
 
       {data.damagePoints.map((point) => (
-        <View
+        <TouchableOpacity
           key={point.id}
+          activeOpacity={0.8}
+          onPress={() => onDamagePress?.(point)}
           className="absolute h-9 w-9 items-center justify-center rounded-full"
           style={{
             backgroundColor: SEVERITY_COLOR[point.severity],
@@ -53,6 +53,7 @@ export function StaticMapFallback({
             shadowOpacity: 0.25,
             shadowRadius: 4,
             top: projectToPercent(point.position).top,
+            zIndex: 10,
           }}
         >
           <Text
@@ -61,7 +62,7 @@ export function StaticMapFallback({
           >
             {point.reportCount}
           </Text>
-        </View>
+        </TouchableOpacity>
       ))}
 
       {/* Ikon kendaraan aktif — mengikuti pilihan di VehicleSelector */}

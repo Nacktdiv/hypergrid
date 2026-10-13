@@ -13,22 +13,22 @@ import { type VehicleId } from "@/components/main/mock-data";
  * Referensi desain: Figma page "Final Page Mobile" → frame `Main page` #114:1267.
  * Container Figma: padding 16px horizontal + 128px bawah, gap 24px.
  *
- * Interaktif: pemilihan kendaraan (state lokal) dan navigasi ke HUD.
- * Tanpa API, tanpa perhitungan, tanpa sensor.
+ * Interaktif: pemilihan kendaraan dan peta navigasi spasial PostGIS.
  */
 export default function StartScreen() {
-  const [vehicle, setVehicle] = useState<VehicleId>("car")
+  const [vehicle, setVehicle] = useState<VehicleId>("car");
 
   return (
-    <SafeAreaView className="flex-1 bg-custom-white " edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-custom-white" edges={["top"]}>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="flex-grow gap-6 px-4 pt-4 "
+        contentContainerClassName="flex-grow gap-6 px-4 pt-4"
         showsVerticalScrollIndicator={false}
       >
         <Text className="font-chivo-bold text-xl text-black">Main Page</Text>
 
-        <View className="flex-1 min-h-[280px]">
+        {/* Container Peta dengan Tinggi Eksplisit agar MapView tidak kolaps di ScrollView */}
+        <View className="w-full flex-1">
           <MainMap vehicleId={vehicle} />
         </View>
 
@@ -37,5 +37,5 @@ export default function StartScreen() {
         <PlayButton />
       </ScrollView>
     </SafeAreaView>
-  )
+  );
 }

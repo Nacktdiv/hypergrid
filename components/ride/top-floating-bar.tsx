@@ -15,7 +15,7 @@ export function TopFloatingBar({ onBack }: { onBack?: () => void }) {
     <View className="flex-row items-center gap-4">
       {/* Back button — Figma `back button` #114:1397 */}
       <Touchable
-        accessibilityLabel="Kembali"
+        accessibilityLabel="Back"
         accessibilityRole="button"
         onPress={onBack}
       >

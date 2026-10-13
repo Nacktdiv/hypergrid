@@ -10,14 +10,18 @@ import { PROFILE } from "./mock-data";
 /**
  * Top Profile Header.
  * Figma #114:1311 (judul "Profile", centered) + #114:1312 (avatar 112px + tombol kamera 32px).
- *
- * Interaktif: tombol kamera bisa ditekan (belum ada galeri/native picker).
  */
-export function ProfileHeader({ onEditPhoto }: { onEditPhoto?: () => void }) {
-  const [isEditing, setIsEditing] = useState(false)
+export function ProfileHeader({
+  userName,
+  onEditPhoto,
+}: {
+  userName?: string;
+  onEditPhoto?: () => void;
+} = {}) {
+  const [isEditing, setIsEditing] = useState(false);
 
   return (
-    <View className="items-center gap-6">
+    <View className="items-center gap-4">
       <Text className="text-center font-chivo-bold text-xl text-black">
         Profile
       </Text>
@@ -43,12 +47,12 @@ export function ProfileHeader({ onEditPhoto }: { onEditPhoto?: () => void }) {
 
         {/* Tombol kamera 32px di kanan-bawah avatar — Figma #114:1316 */}
         <Touchable
-          accessibilityLabel="Ganti foto profil"
+          accessibilityLabel="Change profile photo"
           accessibilityRole="button"
           className="absolute -bottom-1 -right-1"
           onPress={() => {
-            setIsEditing((value) => !value)
-            onEditPhoto?.()
+            setIsEditing((value) => !value);
+            onEditPhoto?.();
           }}
         >
           <View
@@ -66,6 +70,12 @@ export function ProfileHeader({ onEditPhoto }: { onEditPhoto?: () => void }) {
           </View>
         </Touchable>
       </View>
+
+      {userName ? (
+        <Text className="font-chivo-bold text-lg text-custom-black">
+          {userName}
+        </Text>
+      ) : null}
     </View>
-  )
+  );
 }

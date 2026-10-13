@@ -1,28 +1,49 @@
+import React, { useMemo } from "react";
 import { View } from "react-native";
 
-import { HypergridMap } from "@/components/map/hypergrid-map";
-import { HISTORY_MAP_DATA } from "@/components/map/map-data";
+import { LeafletMap } from "@/components/map/leaflet-map";
+import type { DamagePoint, LatLng, MapData } from "@/components/map/map-data";
 
-import { CAR_IMAGE } from "@/components/ride/mock-data";
+export interface RouteMapPreviewProps {
+  routeCoordinates?: LatLng[];
+  damagePoints?: DamagePoint[];
+}
 
 /**
- * Route Map Preview — kartu peta ringkas di Riwayat Perjalanan.
- *
- * Sekarang memakai map native yang sama dengan Main Page, hanya gestur
- * pan/zoom dimatikan (`interactive={false}`) supaya peta tidak aberrant
- * mengambil alih scroll Screen.
- *
- * TODO(Tahap 2): ganti `HISTORY_MAP_DATA` dengan rute milik hari yang sedang
- * dipilih, dibaca dari API (lihat `components/history/mock-data.ts`).
+ * Route Map Preview — peta ringkas riwayat perjalanan (Leaflet OpenStreetMap).
+ * Menggunakan data rute perjalanan dan titik kerusakan nyata dari server.
  */
-export function RouteMapPreview() {
+export function RouteMapPreview({
+  routeCoordinates = [],
+  damagePoints = [],
+}: RouteMapPreviewProps) {
+  const mapData: MapData = useMemo(() => {
+    const centerPoint: LatLng =
+      routeCoordinates.length > 0
+        ? routeCoordinates[0]
+        : damagePoints.length > 0
+        ? damagePoints[0].position
+        : { latitude: -6.2088, longitude: 106.8456 };
+
+    return {
+      camera: {
+        latitude: centerPoint.latitude,
+        longitude: centerPoint.longitude,
+        zoom: 14,
+      },
+      route: {
+        id: "history-route",
+        coordinates: routeCoordinates,
+      },
+      damagePoints: damagePoints,
+      userLocation: centerPoint,
+      vehiclePosition: centerPoint,
+    };
+  }, [routeCoordinates, damagePoints]);
+
   return (
-    <View className="h-52 overflow-hidden rounded-2xl border border-[#CAD5E2]">
-      <HypergridMap
-        data={HISTORY_MAP_DATA}
-        interactive={false}
-        vehicleIcon={CAR_IMAGE}
-      />
+    <View className="h-56 overflow-hidden rounded-2xl border-2 border-slate-900 bg-white shadow-sm">
+      <LeafletMap data={mapData} interactive={true} />
     </View>
-  )
+  );
 }

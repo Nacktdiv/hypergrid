@@ -44,7 +44,7 @@ export type PersonalInfoField = {
 
 export const PERSONAL_INFO: PersonalInfoField[] = [
   { id: "email", label: "Email", value: "nadhif.muhammad@gmail.com", icon: "email" },
-  { id: "phone", label: "Nomor HP", value: "+62 812-3456-7890", icon: "phone" },
-  { id: "driver", label: "ID Driver", value: "HG-2024-00817", icon: "driver" },
-  { id: "sensor", label: "Tipe Sensor Utama", value: "Smartphone", icon: "sensor" },
+  { id: "phone", label: "Phone Number", value: "+1 (555) 012-3456", icon: "phone" },
+  { id: "driver", label: "Driver ID", value: "HG-2024-00817", icon: "driver" },
+  { id: "sensor", label: "Primary Sensor Type", value: "Smartphone", icon: "sensor" },
 ]

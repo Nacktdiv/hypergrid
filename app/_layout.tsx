@@ -1,6 +1,7 @@
 import { PortalHost } from '@rn-primitives/portal';
 import { useEffect } from "react";
 import { SplashScreen, Stack } from "expo-router";
+import { AuthProvider } from "@/contexts/auth-context";
 import "../global.css";
 
 import {
@@ -19,6 +20,18 @@ import {
 } from "@expo-google-fonts/jetbrains-mono";
 
 SplashScreen.preventAutoHideAsync();
+
+function RootNavigation() {
+  return (
+    <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
+      <Stack.Screen name="index" />
+      <Stack.Screen name="(auth)" />
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="ride" />
+      <Stack.Screen name="(onboarding)" />
+    </Stack>
+  );
+}
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -42,9 +55,9 @@ export default function RootLayout() {
   }
 
   return (
-    <>
-      <Stack screenOptions={{ headerShown: false }} />
+    <AuthProvider>
+      <RootNavigation />
       <PortalHost />
-    </>
+    </AuthProvider>
   );
 }
