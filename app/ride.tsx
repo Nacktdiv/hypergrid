@@ -2,10 +2,11 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Accelerometer } from "expo-sensors";
+import { Accelerometer, Gyroscope } from "expo-sensors";
 import {
   Activity,
   AlertTriangle,
+  Brain,
   Cpu,
   Sparkles,
 } from "lucide-react-native";
@@ -20,18 +21,20 @@ import { useEdgeAi } from "@/hooks/use-edge-ai";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
 import { useUserLocation } from "@/hooks/use-user-location";
 import { offlineQueue } from "@/services/api/offline-queue";
+import { EDGE_AI_CONFIG } from "@/edge-ai/model-config";
+import type { RawSensorSample } from "@/edge-ai/types";
 import type { DamagePoint } from "@/components/map/map-data";
 
 /**
  * Start Drive Mode (Live Tracking HUD).
  *
- * Mengintegrasikan:
- *   - Live GPS Tracking koordinat perjalanan pengguna (Breadcrumb route)
- *   - Live Accelerometer Sensor HP untuk deteksi guncangan fisik nyata
- *   - On-Device Edge AI Anomaly Detector (dengan confidence dummy terkalibrasi)
- *   - Driver Early Warning PostGIS (`/nearby`) dengan radius 25 meter
- *   - Telemetri kecepatan & guncangan vertikal real-time
- *   - Background Batch Sync via OfflineQueue saat perjalanan selesai
+ * Sensor pipeline:
+ *  1. Accelerometer + Gyroscope @ 20 Hz → addSample() → rolling 1.5 s window
+ *  2. GPS @ 1 Hz → kecepatan EMA-filtered untuk fitur model
+ *  3. Cooldown 3 s + threshold Z-peak ≥ 1.8G → trigger inferensi TFLite (47 fitur)
+ *  4. Fallback legacy Z-peak saat model belum siap
+ *  5. Deteksi → kirim ke backend / offline queue
+ *  6. PostGIS early warning radius 25 m via /nearby
  */
 export default function RideScreen() {
   const router = useRouter();
@@ -39,19 +42,24 @@ export default function RideScreen() {
   const [isPaused, setIsPaused] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
 
-  // Status Telemetri Live
-  const [currentSpeed, setCurrentSpeed] = useState(45);
-  const [currentVibration, setCurrentVibration] = useState(100);
-  const [shockLevel, setShockLevel] = useState(35);
+  // ── Telemetri Live ───────────────────────────────────────────────────────────
+  const [currentSpeed, setCurrentSpeed] = useState(0);
+  const [currentVibration, setCurrentVibration] = useState(0);
+  const [shockLevel, setShockLevel] = useState(0);
   const [anomalyBanner, setAnomalyBanner] = useState<string | null>(null);
   const [liveDetections, setLiveDetections] = useState<DamagePoint[]>([]);
 
-  // Status Sensor Akselerometer HP
+  // ── Sensor state ─────────────────────────────────────────────────────────────
   const [sensorEnabled, setSensorEnabled] = useState(true);
   const [liveGForce, setLiveGForce] = useState<number>(1.0);
   const lastDetectionTimeRef = useRef<number>(0);
 
-  // GPS Live Tracking Perjalanan
+  // ── Gyroscope state (buffer, dipakai di addSample) ───────────────────────────
+  const gyroRef = useRef<{ gx: number; gy: number; gz: number }>({
+    gx: 0, gy: 0, gz: 0,
+  });
+
+  // ── GPS Live Tracking ────────────────────────────────────────────────────────
   const {
     coords: liveCoords,
     speedKmh: gpsSpeed,
@@ -59,144 +67,158 @@ export default function RideScreen() {
     stopTracking,
   } = useUserLocation(true);
 
-  // Hook Edge AI dan PostGIS Early Warning
+  // ── Edge AI + TFLite ─────────────────────────────────────────────────────────
   const {
     detectedCount,
     lastResult,
-    processFrame,
+    modelReady,
+    modelLoading,
+    addSample,
+    runInference,
+    resetWindow,
     triggerSimulatedDetection,
   } = useEdgeAi();
 
   const { nearbyCluster, checkNearby } = usePotholeClusters();
 
-  // 1. Loop Telemetri Kecepatan Kendaraan & Early Warning PostGIS
+  // ── 1. Sync GPS Speed ke state & PostGIS Early Warning ──────────────────────
   useEffect(() => {
     if (isPaused || isFinished) return;
 
     const telemetryTimer = setInterval(() => {
-      // Jika GPS mendeteksi pergerakan nyata, pakai kecepatan GPS
-      if (gpsSpeed > 0) {
-        setCurrentSpeed(Math.round(gpsSpeed));
-      } else {
-        const dynamicSpeed = Math.floor(40 + Math.random() * 8);
-        setCurrentSpeed(dynamicSpeed);
-      }
+      setCurrentSpeed(Math.round(gpsSpeed));
 
-      // Jika sensor HP dimatikan, simulasikan vibrasi standar
-      if (!sensorEnabled) {
-        const dynamicVibration = Math.floor(95 + Math.random() * 15);
-        setCurrentVibration(dynamicVibration);
-      }
-
-      // Early Warning Check pada koordinat GPS nyata saat ini
-      const lat = liveCoords ? liveCoords.latitude : -6.2088;
-      const lon = liveCoords ? liveCoords.longitude : 106.8456;
+      // Early Warning Check pada koordinat GPS saat ini
+      const lat = liveCoords?.latitude ?? -6.2088;
+      const lon = liveCoords?.longitude ?? 106.8456;
       checkNearby(lat, lon, 25);
-    }, 2500);
+    }, 2000);
 
     return () => clearInterval(telemetryTimer);
-  }, [isPaused, isFinished, sensorEnabled, checkNearby, liveCoords, gpsSpeed]);
+  }, [isPaused, isFinished, checkNearby, liveCoords, gpsSpeed]);
 
-  // 2. LIVE DETEKSI GUNCANGAN MENGGUNAKAN SENSOR HP (ACCELEROMETER)
+  // ── 2. Gyroscope Listener — simpan nilai gyro terbaru ke ref ────────────────
   useEffect(() => {
     if (isPaused || isFinished || !sensorEnabled) return;
 
-    Accelerometer.setUpdateInterval(120);
+    Gyroscope.setUpdateInterval(EDGE_AI_CONFIG.sampleRateMs);
+
+    const subscription = Gyroscope.addListener(({ x, y, z }) => {
+      gyroRef.current = { gx: x, gy: y, gz: z };
+    });
+
+    return () => subscription.remove();
+  }, [isPaused, isFinished, sensorEnabled]);
+
+  // ── 3. Accelerometer Listener — kumpulkan window + trigger inferensi ─────────
+  useEffect(() => {
+    if (isPaused || isFinished || !sensorEnabled) return;
+
+    Accelerometer.setUpdateInterval(EDGE_AI_CONFIG.sampleRateMs); // 50ms = 20 Hz
 
     const subscription = Accelerometer.addListener(({ x, y, z }) => {
-      // Hitung magnitudo total gaya gravitasi G = √(x² + y² + z²)
+      // Magnitudo total untuk tampilan G-force HUD
       const totalG = Math.sqrt(x * x + y * y + z * z);
       const roundedG = Math.round(totalG * 100) / 100;
       setLiveGForce(roundedG);
 
-      // Hitung deviasi guncangan terhadap gravitasi normal (1.0G)
+      // Shock level visual (0–100)
       const dynamicDelta = Math.abs(totalG - 1.0);
-      const computedLevel = Math.min(
-        100,
-        Math.max(12, Math.round(dynamicDelta * 55 + 15))
-      );
+      const computedLevel = Math.min(100, Math.max(8, Math.round(dynamicDelta * 60 + 10)));
       setShockLevel(computedLevel);
 
-      // Update vibrasi dinamis berdasarkan sensor akselerometer (m/s²)
+      // Vibrasi dalam m/s²
       setCurrentVibration(Math.round(totalG * 9.81 * 10));
 
-      // Ambang batas guncangan anomali jalan (≥ 1.7G)
+      // ── Tambahkan sampel ke rolling window buffer ──────────────────────────
+      const sample: RawSensorSample = {
+        ax: x,
+        ay: y,
+        az: z,
+        gx: gyroRef.current.gx,
+        gy: gyroRef.current.gy,
+        gz: gyroRef.current.gz,
+        speedKmh: gpsSpeed,
+        timestampMs: Date.now(),
+      };
+      addSample(sample);
+
+      // ── Threshold pre-filter: hanya trigger inferensi saat ada guncangan ──
+      // Z-peak threshold 1.8G + cooldown 3 detik
       const now = Date.now();
-      if (totalG >= 1.7 && now - lastDetectionTimeRef.current > 3000) {
+      const zPeak = Math.abs(z);
+      if (zPeak >= 1.8 && now - lastDetectionTimeRef.current > EDGE_AI_CONFIG.detectionCooldownMs) {
         lastDetectionTimeRef.current = now;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
 
-        const currentLat = liveCoords ? liveCoords.latitude : -6.2088;
-        const currentLon = liveCoords ? liveCoords.longitude : 106.8456;
+        const currentLat = liveCoords?.latitude ?? -6.2088;
+        const currentLon = liveCoords?.longitude ?? 106.8456;
 
-        // Jalankan inferensi Edge AI
-        processFrame({
-          zAccel: totalG,
-          xAccel: x,
-          yAccel: y,
-          latitude: currentLat,
-          longitude: currentLon,
-          speedKmh: currentSpeed,
-          timestamp: new Date().toISOString(),
-        })
+        // Jalankan inferensi TFLite (atau fallback Z-peak)
+        runInference({ latitude: currentLat, longitude: currentLon })
           .then((res) => {
-            if (res.isAnomalyDetected) {
+            if (res?.isAnomalyDetected) {
               const confPct = Math.round(res.confidence * 100);
+              const probPct = Math.round(res.probability * 100);
+              const isTflite = !res.modelVersion.includes('fallback');
+
               setAnomalyBanner(
-                `Phone Sensor: ${roundedG}G Shock! Edge AI: ${confPct}% Confidence`
+                isTflite
+                  ? `TFLite: ${probPct}% Pothole (${res.confidenceTier}) • ${roundedG}G`
+                  : `Sensor: ${roundedG}G Shock • Legacy ${confPct}%`
               );
 
-              // Tambahkan titik kerusakan langsung di peta HUD berkendara
               const newDamage: DamagePoint = {
                 id: `det_${Date.now()}`,
                 position: { latitude: currentLat, longitude: currentLon },
-                severity: totalG >= 2.2 ? "high" : "medium",
+                severity:
+                  res.estimatedSeverity === "severe" || res.estimatedSeverity === "high"
+                    ? "high"
+                    : "medium",
                 reportCount: 1,
               };
               setLiveDetections((prev) => [...prev, newDamage]);
-
-              setTimeout(() => setAnomalyBanner(null), 4000);
+              setTimeout(() => setAnomalyBanner(null), 4500);
             }
           })
           .catch((err) => {
-            console.warn("[Accelerometer] Error inferensi Edge AI:", err);
+            console.warn("[RideScreen] Inferensi gagal:", err);
           });
       }
     });
 
-    return () => {
-      subscription.remove();
-    };
-  }, [isPaused, isFinished, sensorEnabled, currentSpeed, processFrame, liveCoords]);
+    return () => subscription.remove();
+  }, [isPaused, isFinished, sensorEnabled, gpsSpeed, addSample, runInference, liveCoords]);
 
-  // 3. Tangani Notifikasi Early Warning
+  // ── 4. Early Warning Haptic ──────────────────────────────────────────────────
   useEffect(() => {
     if (nearbyCluster) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(
-        () => {}
-      );
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
     }
   }, [nearbyCluster]);
 
-  // 4. Trigger Deteksi Anomali Manual (Simulasi Pengujian)
+  // ── 5. Trigger Simulasi Manual ───────────────────────────────────────────────
   const handleTriggerAnomaly = useCallback(async () => {
-    setShockLevel(85);
+    setShockLevel(88);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
 
-    const currentLat = liveCoords ? liveCoords.latitude : -6.2088;
-    const currentLon = liveCoords ? liveCoords.longitude : 106.8456;
+    const currentLat = liveCoords?.latitude ?? -6.2088;
+    const currentLon = liveCoords?.longitude ?? 106.8456;
 
     try {
       const result = await triggerSimulatedDetection({
         latitude: currentLat,
         longitude: currentLon,
-        speedKmh: currentSpeed,
+        speedKmh: currentSpeed || 35,
       });
 
-      if (result.isAnomalyDetected) {
-        const confPct = Math.round(result.confidence * 100);
+      if (result?.isAnomalyDetected) {
+        const probPct = Math.round(result.probability * 100);
+        const isTflite = !result.modelVersion.includes('fallback');
         setAnomalyBanner(
-          `Simulation: Shock Detected! Edge AI: ${confPct}% (Z-Peak: ${result.zAccelPeak.toFixed(2)}G)`
+          isTflite
+            ? `Simulation TFLite: ${probPct}% • ${result.confidenceTier} • Z=${result.zAccelPeak.toFixed(2)}G`
+            : `Simulation Legacy: Z=${result.zAccelPeak.toFixed(2)}G • ${Math.round(result.confidence * 100)}%`
         );
 
         const newDamage: DamagePoint = {
@@ -206,25 +228,22 @@ export default function RideScreen() {
           reportCount: 1,
         };
         setLiveDetections((prev) => [...prev, newDamage]);
-
-        setTimeout(() => {
-          setAnomalyBanner(null);
-          setShockLevel(30);
-        }, 4000);
+        setTimeout(() => { setAnomalyBanner(null); setShockLevel(15); }, 4500);
       }
     } catch (e) {
-      console.warn("[RideScreen] Deteksi error:", e);
+      console.warn("[RideScreen] Simulasi gagal:", e);
     }
   }, [triggerSimulatedDetection, currentSpeed, liveCoords]);
 
-  // 5. Selesai Perjalanan (Stop Drive & Flush Offline Queue)
+  // ── 6. Stop Drive ────────────────────────────────────────────────────────────
   const handleStopDrive = async () => {
     setIsFinished(true);
     stopTracking();
+    resetWindow();
     try {
       await offlineQueue.flush();
     } catch (err) {
-      console.warn("[RideScreen] Gagal flush antrean:", err);
+      console.warn("[RideScreen] Flush queue gagal:", err);
     }
   };
 
@@ -241,9 +260,35 @@ export default function RideScreen() {
         <View className="px-4" style={{ paddingTop: insets.top + 12 }}>
           <TopFloatingBar onBack={() => router.back()} />
 
+          {/* MODEL STATUS BADGE */}
+          <View className="mt-2 self-start">
+            {modelLoading ? (
+              <View className="flex-row items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-950/80 px-3 py-1.5">
+                <Brain size={12} color="#FBD38D" />
+                <Text className="font-mono text-[10px] text-amber-300">
+                  Loading TFLite model…
+                </Text>
+              </View>
+            ) : modelReady ? (
+              <View className="flex-row items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-950/70 px-3 py-1.5">
+                <Brain size={12} color="#34D399" />
+                <Text className="font-mono text-[10px] text-emerald-300">
+                  HG Model v2 · Ready
+                </Text>
+              </View>
+            ) : (
+              <View className="flex-row items-center gap-1.5 rounded-xl border border-slate-600/40 bg-slate-900/70 px-3 py-1.5">
+                <Brain size={12} color="#94A3B8" />
+                <Text className="font-mono text-[10px] text-slate-400">
+                  Fallback Mode
+                </Text>
+              </View>
+            )}
+          </View>
+
           {/* EARLY WARNING BANNER (POSTGIS NEARBY) */}
           {nearbyCluster ? (
-            <View className="mt-3 flex-row items-center gap-2.5 rounded-2xl border-2 border-amber-500 bg-amber-500/90 px-4 py-2.5 shadow-lg backdrop-blur-md">
+            <View className="mt-2 flex-row items-center gap-2.5 rounded-2xl border-2 border-amber-500 bg-amber-500/90 px-4 py-2.5 shadow-lg">
               <AlertTriangle size={18} color="#FFFFFF" />
               <View className="flex-1">
                 <Text className="font-quicksand-bold text-xs text-white">
@@ -254,7 +299,7 @@ export default function RideScreen() {
                   {nearbyCluster.distance_meters
                     ? `${nearbyCluster.distance_meters.toFixed(1)} meters`
                     : "15 meters"}{" "}
-                  • Severity: {nearbyCluster.severity.toUpperCase()}
+                  · Severity: {nearbyCluster.severity.toUpperCase()}
                 </Text>
               </View>
             </View>
@@ -264,7 +309,7 @@ export default function RideScreen() {
           {anomalyBanner ? (
             <View className="mt-2 flex-row items-center gap-2 rounded-2xl border border-sky-400 bg-sky-950/90 px-4 py-2 shadow-md">
               <Sparkles size={16} color="#38BDF8" />
-              <Text className="font-quicksand-semibold text-xs text-sky-200">
+              <Text className="flex-1 font-quicksand-semibold text-xs text-sky-200">
                 {anomalyBanner}
               </Text>
             </View>
@@ -275,11 +320,11 @@ export default function RideScreen() {
           className="absolute inset-x-0 bottom-0 gap-3"
           style={{ paddingBottom: insets.bottom + 16 }}
         >
-          {/* BAR KONTROL SENSOR HP & SIMULASI */}
+          {/* SENSOR CONTROLS */}
           <View className="flex-row items-center justify-between px-4">
-            {/* TOGGLE SENSOR HP */}
+            {/* TOGGLE SENSOR */}
             <Touchable
-              accessibilityLabel="Toggle phone accelerometer sensor"
+              accessibilityLabel="Toggle accelerometer and gyroscope sensor"
               accessibilityRole="button"
               onPress={() => setSensorEnabled((prev) => !prev)}
             >
@@ -290,30 +335,27 @@ export default function RideScreen() {
                     : "border-slate-700 bg-slate-900/80"
                 }`}
               >
-                <Activity
-                  size={13}
-                  color={sensorEnabled ? "#34D399" : "#94A3B8"}
-                />
+                <Activity size={13} color={sensorEnabled ? "#34D399" : "#94A3B8"} />
                 <Text
                   className={`font-mono text-[11px] ${
                     sensorEnabled ? "text-emerald-300" : "text-slate-400"
                   }`}
                 >
-                  Phone Sensor: {sensorEnabled ? `${liveGForce}G` : "Off"}
+                  {sensorEnabled ? `${liveGForce}G · Acc+Gyro` : "Sensor Off"}
                 </Text>
               </View>
             </Touchable>
 
-            {/* TOMBOL TEST TRIGGER MANUAL */}
+            {/* MANUAL TEST TRIGGER */}
             <Touchable
-              accessibilityLabel="Simulate Edge AI shock detection"
+              accessibilityLabel="Simulate Edge AI pothole detection"
               accessibilityRole="button"
               onPress={handleTriggerAnomaly}
             >
               <View className="flex-row items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-950/80 px-3 py-1.5 shadow-sm">
                 <Cpu size={13} color="#38BDF8" />
                 <Text className="font-mono text-[11px] text-sky-200">
-                  Simulation ({detectedCount})
+                  Simulate ({detectedCount})
                 </Text>
               </View>
             </Touchable>
@@ -338,7 +380,7 @@ export default function RideScreen() {
           {isFinished ? (
             <FinishBanner
               detectedCount={detectedCount}
-              lastConfidence={lastResult?.confidence}
+              lastResult={lastResult}
               onDismiss={() => {
                 setIsFinished(false);
                 router.replace("/(tabs)/history");
@@ -352,18 +394,24 @@ export default function RideScreen() {
 }
 
 /**
- * Banner konfirmasi ringkasan perjalanan setelah "Stop Drive" ditekan.
+ * Banner ringkasan perjalanan setelah "Stop Drive" ditekan.
  */
 function FinishBanner({
   detectedCount,
-  lastConfidence,
+  lastResult,
   onDismiss,
 }: {
   detectedCount: number;
-  lastConfidence?: number;
+  lastResult: any;
   onDismiss: () => void;
 }) {
-  const confPercent = lastConfidence ? Math.round(lastConfidence * 100) : 94;
+  const isTflite = lastResult && !lastResult.modelVersion?.includes('fallback');
+  const confPercent = lastResult
+    ? Math.round(lastResult.confidence * 100)
+    : 0;
+  const probPercent = lastResult
+    ? Math.round(lastResult.probability * 100)
+    : 0;
 
   return (
     <View className="mx-4">
@@ -377,31 +425,37 @@ function FinishBanner({
 
         <View className="my-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3">
           <View className="flex-row justify-between py-1">
-            <Text className="text-xs text-slate-400">Total Road Anomalies</Text>
-            <Text className="font-mono-bold text-xs text-white">
-              {detectedCount} Points
-            </Text>
+            <Text className="text-xs text-slate-400">Road Anomalies Detected</Text>
+            <Text className="font-mono text-xs text-white">{detectedCount} Points</Text>
           </View>
           <View className="flex-row justify-between py-1">
-            <Text className="text-xs text-slate-400">Edge AI Confidence</Text>
-            <Text className="font-mono-bold text-xs text-emerald-400">
-              {confPercent}% (Dummy Test)
+            <Text className="text-xs text-slate-400">AI Engine</Text>
+            <Text className={`font-mono text-xs ${isTflite ? "text-emerald-400" : "text-amber-400"}`}>
+              {isTflite ? "HG TFLite v2" : "Legacy Fallback"}
             </Text>
           </View>
+          {lastResult && (
+            <>
+              <View className="flex-row justify-between py-1">
+                <Text className="text-xs text-slate-400">Last Probability</Text>
+                <Text className="font-mono text-xs text-sky-300">{probPercent}%</Text>
+              </View>
+              <View className="flex-row justify-between py-1">
+                <Text className="text-xs text-slate-400">Last Confidence</Text>
+                <Text className="font-mono text-xs text-emerald-400">
+                  {confPercent}% ({lastResult.confidenceTier})
+                </Text>
+              </View>
+            </>
+          )}
           <View className="flex-row justify-between py-1">
             <Text className="text-xs text-slate-400">Server Status</Text>
-            <Text className="font-mono-bold text-xs text-sky-400">
-              Synchronized
-            </Text>
+            <Text className="font-mono text-xs text-sky-400">Synchronized</Text>
           </View>
         </View>
 
-        <Touchable
-          accessibilityLabel="Open trip history"
-          className="self-start"
-          onPress={onDismiss}
-        >
-          <View className="rounded-full bg-custom-primary px-5 py-2">
+        <Touchable accessibilityLabel="View trip history" onPress={onDismiss}>
+          <View className="self-start rounded-full bg-custom-primary px-5 py-2">
             <Text className="font-quicksand-bold text-xs text-white">
               View Trip History →
             </Text>

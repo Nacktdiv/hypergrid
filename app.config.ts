@@ -44,6 +44,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       "expo-router",
       "expo-splash-screen",
       "expo-web-browser",
+      "react-native-fast-tflite",
     ],
   }
 }
