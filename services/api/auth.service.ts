@@ -1,6 +1,5 @@
-import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
-import { apiClient } from './client';
+import { authClient } from './auth-client';
 import { tokenStorage } from './token-storage';
 import type {
   AuthResponse,
@@ -11,95 +10,102 @@ import type {
 } from '@/types/api';
 
 /**
- * Service Autentikasi HyperGrid (Better-Auth).
- * Mengelola pendaftaran, login email, login Google OAuth, validasi sesi token, dan update profil.
+ * Service Autentikasi HyperGrid berbasis SDK resmi Better-Auth.
+ * Mengintegrasikan authClient (@better-auth/expo + better-auth/react)
+ * dengan sinkronisasi SecureStore, session refresh, dan OAuth.
  */
 export const authService = {
   /**
-   * Pendaftaran akun petugas baru
-   * POST /api/auth/sign-up/email
+   * Pendaftaran akun petugas baru menggunakan Better-Auth SDK
    */
   async signUp(dto: SignUpEmailDto): Promise<AuthResponse> {
-    const data = await apiClient.post<AuthResponse>('/auth/sign-up/email', dto, {
-      skipAuth: true,
+    const { data, error } = await authClient.signUp.email({
+      email: dto.email.trim(),
+      password: dto.password,
+      name: dto.name.trim(),
     });
 
-    if (data?.token) {
-      await tokenStorage.setToken(data.token);
-    }
-    if (data?.user) {
-      await tokenStorage.setUser(data.user);
+    if (error) {
+      throw new Error(error.message || 'Failed to sign up');
     }
 
-    return data;
+    const user: AuthUser = {
+      id: data?.user?.id || 'usr_' + Date.now(),
+      email: data?.user?.email || dto.email.trim(),
+      name: data?.user?.name || dto.name.trim(),
+      image: (data?.user as any)?.image ?? null,
+      isOnboarded: false,
+    };
+
+    const token = (data as any)?.token || (data as any)?.session?.token || '';
+    if (token) {
+      await tokenStorage.setToken(token);
+    }
+    await tokenStorage.setUser(user);
+
+    return { token, user };
   },
 
   /**
-   * Masuk akun petugas
-   * POST /api/auth/sign-in/email
+   * Masuk akun petugas menggunakan Better-Auth SDK
    */
   async signIn(dto: SignInEmailDto): Promise<AuthResponse> {
-    const data = await apiClient.post<AuthResponse>('/auth/sign-in/email', dto, {
-      skipAuth: true,
+    const { data, error } = await authClient.signIn.email({
+      email: dto.email.trim(),
+      password: dto.password,
     });
 
-    if (data?.token) {
-      await tokenStorage.setToken(data.token);
-    }
-    if (data?.user) {
-      await tokenStorage.setUser(data.user);
+    if (error) {
+      throw new Error(error.message || 'Invalid email or password');
     }
 
-    return data;
+    const user: AuthUser = {
+      id: data?.user?.id || 'usr_' + Date.now(),
+      email: data?.user?.email || dto.email.trim(),
+      name: data?.user?.name || 'Petugas HyperGrid',
+      image: (data?.user as any)?.image ?? null,
+      isOnboarded: (data?.user as any)?.isOnboarded ?? false,
+    };
+
+    const token = (data as any)?.token || (data as any)?.session?.token || '';
+    if (token) {
+      await tokenStorage.setToken(token);
+    }
+    await tokenStorage.setUser(user);
+
+    return { token, user };
   },
 
   /**
-   * Masuk akun menggunakan Google OAuth (Better-Auth Social Provider)
-   * POST /api/auth/sign-in/social
+   * Masuk akun menggunakan Google OAuth via Better-Auth Expo SDK
    */
   async signInWithGoogle(): Promise<AuthResponse | null> {
     const callbackURL = Linking.createURL('/auth/callback');
     try {
-      const socialData = await apiClient.post<{ url: string; redirect: boolean }>(
-        '/auth/sign-in/social',
-        {
-          provider: 'google',
-          callbackURL,
-        },
-        {
-          skipAuth: true,
-          headers: {
-            Origin: 'http://localhost:8081',
-          },
-        }
-      );
+      const { data, error } = await authClient.signIn.social({
+        provider: 'google',
+        callbackURL,
+      });
 
-      if (socialData?.url) {
-        const authResult = await WebBrowser.openAuthSessionAsync(
-          socialData.url,
-          callbackURL
-        );
+      if (error) {
+        throw new Error(error.message || 'Google sign-in failed');
+      }
 
-        if (authResult.type === 'success' && authResult.url) {
-          try {
-            const urlObj = new URL(authResult.url);
-            const token = urlObj.searchParams.get('token');
-            if (token) {
-              await tokenStorage.setToken(token);
-            }
-          } catch {
-            // Abaikan parsing URL jika format skema custom
-          }
-        }
+      // Ambil sesi aktif yang baru diverifikasi
+      const sessionData = await this.getSession();
+      if (sessionData?.user) {
+        const token = (await tokenStorage.getToken()) || sessionData.session?.token || '';
+        return {
+          token,
+          user: sessionData.user,
+        };
+      }
 
-        // Ambil sesi aktif yang baru terbentuk
-        const sessionData = await this.getSession();
-        if (sessionData?.user) {
-          return {
-            token: (await tokenStorage.getToken()) || '',
-            user: sessionData.user,
-          };
-        }
+      if (data && 'user' in data && (data as any).user) {
+        return {
+          token: (data as any)?.token || '',
+          user: (data as any).user as AuthUser,
+        };
       }
     } catch (error) {
       console.warn('[authService] Google OAuth flow cancelled or failed:', error);
@@ -110,39 +116,66 @@ export const authService = {
   },
 
   /**
-   * Keluar dari sesi aplikasi
-   * POST /api/auth/sign-out
+   * Keluar dari sesi aplikasi via Better-Auth SDK
    */
   async signOut(): Promise<{ success: boolean }> {
     try {
-      const res = await apiClient.post<{ success: boolean }>('/auth/sign-out', {});
-      await tokenStorage.clearAll();
-      return res || { success: true };
+      await (authClient.signOut as any)();
     } catch (error) {
-      // Pastikan token lokal tetap dibersihkan meskipun server error
+      console.warn('[authService] Better-Auth signOut error:', error);
+    } finally {
       await tokenStorage.clearAll();
-      return { success: true };
+    }
+    return { success: true };
+  },
+
+  /**
+   * Verifikasi sesi aktif petugas via Better-Auth SDK
+   */
+  async getSession(): Promise<AuthSessionResponse | null> {
+    try {
+      const { data, error } = await (authClient.getSession as any)();
+      if (error || !data?.user) {
+        return null;
+      }
+
+      const user: AuthUser = {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name || 'Petugas HyperGrid',
+        image: (data.user as any)?.image ?? null,
+        isOnboarded: (data.user as any)?.isOnboarded ?? false,
+      };
+
+      await tokenStorage.setUser(user);
+
+      const session = {
+        id: data.session?.id || 'sess_' + Date.now(),
+        userId: data.user.id,
+        expiresAt: data.session?.expiresAt
+          ? new Date(data.session.expiresAt).toISOString()
+          : new Date(Date.now() + 86400000).toISOString(),
+        token: (data.session as any)?.token || (await tokenStorage.getToken()) || '',
+      };
+
+      if (session.token) {
+        await tokenStorage.setToken(session.token);
+      }
+
+      return { session, user };
+    } catch {
+      return null;
     }
   },
 
   /**
-   * Verifikasi sesi aktif petugas
-   * GET /api/auth/get-session
+   * Tandai proses onboarding selesai
    */
-  async getSession(): Promise<AuthSessionResponse | null> {
-    const token = await tokenStorage.getToken();
-    if (!token) return null;
-
-    try {
-      const response = await apiClient.get<AuthSessionResponse>('/auth/get-session');
-      if (response?.user) {
-        await tokenStorage.setUser(response.user);
-      }
-      return response;
-    } catch (error) {
-      // Jika token expired (401), bersihkan storage
-      await tokenStorage.clearAll();
-      return null;
+  async completeOnboarding(): Promise<void> {
+    await tokenStorage.setOnboardingCompleted(true);
+    const user = await tokenStorage.getUser<AuthUser>();
+    if (user) {
+      await tokenStorage.setUser({ ...user, isOnboarded: true });
     }
   },
 
@@ -154,7 +187,7 @@ export const authService = {
   },
 
   /**
-   * Memperbarui profil petugas ke server Better-Auth dan penyimpanan lokal
+   * Memperbarui profil petugas di penyimpanan lokal
    */
   async updateProfile(updates: Partial<AuthUser> & Record<string, any>): Promise<AuthUser> {
     const current = (await tokenStorage.getUser<AuthUser>()) || {
@@ -162,40 +195,17 @@ export const authService = {
       name: 'Petugas HyperGrid',
       email: 'petugas@hypergrid.io',
     };
-
-    try {
-      // Kirim pembaruan ke endpoint Better-Auth di backend
-      const res = await apiClient.post<any>('/auth/update-user', updates);
-      const serverUser = (res && 'user' in res) ? res.user : (res as AuthUser);
-      if (serverUser?.id) {
-        await tokenStorage.setUser(serverUser);
-        return serverUser;
-      }
-    } catch (err) {
-      console.warn('[authService] Gagal updateProfile ke server, memperbarui cache lokal:', err);
-    }
-
     const updated = { ...current, ...updates };
     await tokenStorage.setUser(updated);
     return updated as AuthUser;
   },
 
   /**
-   * Menyimpan status penyelesaian onboarding ke database server via Better-Auth
-   */
-  async completeOnboarding(): Promise<void> {
-    await tokenStorage.setOnboardingCompleted(true);
-    try {
-      await this.updateProfile({ isOnboarded: true });
-    } catch (err) {
-      console.warn('[authService] Gagal menyimpan status onboarding ke server:', err);
-    }
-  },
-
-  /**
    * Cek apakah user sedang login
    */
   async isAuthenticated(): Promise<boolean> {
+    const session = await this.getSession();
+    if (session?.user) return true;
     const token = await tokenStorage.getToken();
     return Boolean(token);
   },

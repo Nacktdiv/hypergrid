@@ -20,7 +20,7 @@ export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
 
 function MetricCard({ metric }: { metric: Metric }) {
   return (
-    <View className="flex-1 justify-between rounded-3xl border border-custom-black bg-white shadow-sm p-3 gap-3 min-w-0">
+    <View className="flex-1 justify-between rounded-3xl border border-[#E2E2E2] bg-white shadow-sm p-3 gap-3 min-w-0">
       {/* Header: Ikon di atas / terpisah agar label punya ruang penuh */}
       <View className="gap-1.5">
         <MetricIcon id={metric.id} color={metric.accent} />

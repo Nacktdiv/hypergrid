@@ -1,6 +1,7 @@
 import { getApiBaseUrl, API_TIMEOUT_MS } from './config';
 import { tokenStorage } from './token-storage';
 import { authEvents } from './auth-events';
+import { authClient } from './auth-client';
 
 export class ApiError extends Error {
   public status: number;
@@ -62,6 +63,13 @@ class HttpClient {
     };
 
     if (!skipAuth) {
+      try {
+        const cookie = await (authClient as any).getCookie?.();
+        if (cookie) {
+          requestHeaders['Cookie'] = cookie;
+        }
+      } catch {}
+
       const token = await tokenStorage.getToken();
       if (token) {
         requestHeaders['Authorization'] = `Bearer ${token}`;

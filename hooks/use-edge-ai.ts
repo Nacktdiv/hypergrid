@@ -17,14 +17,19 @@ import { offlineQueue } from '@/services/api/offline-queue';
  * 1. Model TFLite (hg_model_v2.tflite) dimuat satu kali saat hook mount.
  * 2. Setiap sampel sensor (acc + gyro + speed) ditambahkan ke buffer window
  *    via `addSample()`. Buffer mempertahankan sampel dalam jendela waktu 1.5 detik.
- * 3. Saat dipanggil, `runInference()` mengekstraksi 47 fitur dari window dan
- *    menjalankan model TFLite. Jika model belum siap, fallback ke inferensi Z-peak.
- * 4. Saat terdeteksi, hasil langsung dikirim ke backend / offline queue.
- *
- * Digunakan oleh ride.tsx (Accelerometer + Gyroscope + GPS speed).
+ * 3. Saat dipanggil, `runInference()` mengevaluasi window sensor:
+ *    - Mode A: Full TFLite (47 fitur) jika model native siap
+ *    - Mode B: Smart Window Heuristic (3D EMA gravity removal, Crest Factor, ratio vertikal/horizontal)
+ *    - Mode C: Fallback frame tunggal terkalibrasi
+ * 4. Saat anomali terdeteksi secara valid, hasil dikirim ke backend / offline queue.
  */
 export function useEdgeAi() {
-  const { predict, isReady: modelReady, isLoading: modelLoading, error: modelError } = useTfliteModel();
+  const {
+    predict,
+    isReady: modelReady,
+    isLoading: modelLoading,
+    error: modelError,
+  } = useTfliteModel();
 
   const [lastResult, setLastResult] = useState<EdgeDetectionResult | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -55,34 +60,43 @@ export function useEdgeAi() {
 
   /**
    * Jalankan inferensi pada snapshot window buffer saat ini.
-   * Selalu snapshot buffer dulu agar tidak race condition.
    *
-   * @param coords   Koordinat GPS saat deteksi
-   * @param options  offlineOnly: paksa simpan ke queue tanpa kirim server
+   * @param coords        Koordinat GPS saat deteksi
+   * @param options       offlineOnly: paksa simpan ke queue tanpa kirim server
+   * @param vehicleConfig Ambang batas sensor adaptif sesuai jenis kendaraan
    */
   const runInference = useCallback(
     async (
       coords: { latitude: number; longitude: number },
-      options?: { offlineOnly?: boolean }
+      options?: { offlineOnly?: boolean },
+      vehicleConfig?: {
+        zShockThreshold?: number;
+        minMovingSpeed?: number;
+        severityThresholds?: { severe: number; high: number; medium: number };
+      }
     ): Promise<EdgeDetectionResult | null> => {
       setIsProcessing(true);
       try {
         const snapshot = [...windowBufferRef.current];
 
+        const window: SensorWindow = {
+          samples: snapshot,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          timestamp: new Date().toISOString(),
+        };
+
         let result: EdgeDetectionResult;
 
         if (modelReady && snapshot.length >= EDGE_AI_CONFIG.minSamplesForInference) {
-          // ── Mode A: Full TFLite (47 fitur dari window) ──────────────────────
-          const window: SensorWindow = {
-            samples: snapshot,
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            timestamp: new Date().toISOString(),
-          };
+          // ── Mode A: Full TFLite (47 fitur matematis dari window) ───────────
           result = await defaultEdgeDetector.inferWindow(window, predict);
+        } else if (snapshot.length >= 3) {
+          // ── Mode B: Smart Window Heuristic (3D EMA Gravitasi + Crest Factor) ─
+          result = defaultEdgeDetector.inferWindowHeuristic(window, vehicleConfig);
         } else {
-          // ── Mode B: Fallback Z-peak (model belum ready atau buffer kurang) ──
-          const zValues = snapshot.map(s => Math.abs(s.az));
+          // ── Mode C: Fallback frame tunggal terkalibrasi ────────────────────
+          const zValues = snapshot.map((s) => Math.abs(s.az));
           const zPeak = zValues.length > 0 ? Math.max(...zValues) : 0;
           const speedAvg =
             snapshot.length > 0
@@ -130,32 +144,52 @@ export function useEdgeAi() {
    */
   const triggerSimulatedDetection = useCallback(
     async (coords: { latitude: number; longitude: number; speedKmh?: number }) => {
-      // Buat window sintetis 20 sampel (~1 detik) dengan puncak guncangan 3.6G
       const now = Date.now();
-      const syntheticSamples: RawSensorSample[] = Array.from({ length: 20 }, (_, i) => {
-        const t = now - (20 - i) * EDGE_AI_CONFIG.sampleRateMs;
-        // Tiga sampel tengah (i=8,9,10) dibuat dengan amplitude tinggi (pothole event)
-        const isPeak = i >= 8 && i <= 10;
-        const az = isPeak ? -(3.6 + Math.random() * 0.3) : -(1.0 + (Math.random() - 0.5) * 0.2);
-        const ax = isPeak ? (Math.random() - 0.5) * 0.8 : (Math.random() - 0.5) * 0.1;
-        const ay = isPeak ? (Math.random() - 0.5) * 0.5 : (Math.random() - 0.5) * 0.1;
-        const gPeak = isPeak ? Math.random() * 1.5 : Math.random() * 0.1;
-        return {
-          ax, ay, az,
-          gx: isPeak ? gPeak : Math.random() * 0.05,
-          gy: isPeak ? gPeak * 0.6 : Math.random() * 0.05,
-          gz: isPeak ? gPeak * 0.4 : Math.random() * 0.03,
-          speedKmh: coords.speedKmh ?? 35,
-          timestampMs: t,
-        };
-      });
+      const syntheticSamples: RawSensorSample[] = Array.from(
+        { length: 20 },
+        (_, i) => {
+          const t = now - (20 - i) * EDGE_AI_CONFIG.sampleRateMs;
+          const isPeak = i >= 8 && i <= 10;
+          const az = isPeak
+            ? -(3.6 + Math.random() * 0.3)
+            : -(1.0 + (Math.random() - 0.5) * 0.1);
+          const ax = isPeak ? (Math.random() - 0.5) * 0.4 : (Math.random() - 0.5) * 0.05;
+          const ay = isPeak ? (Math.random() - 0.5) * 0.3 : (Math.random() - 0.5) * 0.05;
+          const gPeak = isPeak ? Math.random() * 1.5 : Math.random() * 0.05;
+          return {
+            ax,
+            ay,
+            az,
+            gx: isPeak ? gPeak : Math.random() * 0.05,
+            gy: isPeak ? gPeak * 0.6 : Math.random() * 0.05,
+            gz: isPeak ? gPeak * 0.4 : Math.random() * 0.03,
+            speedKmh: coords.speedKmh ?? 35,
+            timestampMs: t,
+          };
+        }
+      );
 
-      // Isi buffer sementara dengan sampel sintetis
       windowBufferRef.current = syntheticSamples;
 
       return runInference(coords, { offlineOnly: false });
     },
     [runInference]
+  );
+
+  const processFrame = useCallback(
+    async (
+      frame: SensorFrame,
+      options?: { offlineOnly?: boolean }
+    ): Promise<EdgeDetectionResult> => {
+      const result = defaultEdgeDetector.inferLegacy(frame);
+      setLastResult(result);
+      if (result.isAnomalyDetected) {
+        setDetectedCount((prev) => prev + 1);
+        await defaultEdgeDetector.processAndIngest(result, options);
+      }
+      return result;
+    },
+    []
   );
 
   return {
@@ -167,6 +201,7 @@ export function useEdgeAi() {
     modelError,
     deviceId: defaultEdgeDetector.getDeviceId(),
     addSample,
+    processFrame,
     runInference,
     resetWindow,
     triggerSimulatedDetection,

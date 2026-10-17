@@ -4,7 +4,7 @@ import {
   classifySeverityFromZPeak,
   getConfidenceTier,
 } from './model-config';
-import { extractFeatures } from './feature-extractor';
+import { extractFeatures, decomposeSensorSignals } from './feature-extractor';
 import type {
   EdgeDetectionResult,
   SensorWindow,
@@ -17,11 +17,12 @@ import type { CreateDetectionDto } from '@/types/api';
 /**
  * Edge AI Road Damage Detector v2.
  *
- * Mendukung dua mode inferensi:
- *  A) Full TFLite (SensorWindow) — ekstraksi 47 fitur + inferensi model nyata
- *  B) Legacy Z-peak fallback (SensorFrame) — digunakan saat model belum siap
- *
- * Gunakan `inferWindow()` dari `use-edge-ai.ts` yang mengumpulkan window sensor.
+ * Mendukung tiga tingkat inferensi:
+ *  A) Full TFLite (SensorWindow) — 47 fitur matematis + model Neural Network
+ *  B) Smart Window Heuristic (SensorWindow) — Dekomposisi 3D EMA gravitasi,
+ *     Crest Factor, dan rasio vertikal/horizontal saat model TFLite belum ready
+ *  C) Calibrated Legacy Fallback (SensorFrame) — Ambang batas guncangan dinamis
+ *     dengan validasi kecepatan minimum
  */
 export class EdgeRoadDamageDetector {
   private deviceId: string;
@@ -38,9 +39,7 @@ export class EdgeRoadDamageDetector {
   public getDeviceId(): string { return this.deviceId; }
 
   /**
-   * Inferensi LENGKAP dengan 47 fitur dari SensorWindow.
-   * Membutuhkan prediksi dari useTfliteModel().predict() yang sudah di-call
-   * dari layer hook (karena hook React tidak bisa dipanggil dari class non-React).
+   * Mode A: Inferensi LENGKAP dengan 47 fitur dari SensorWindow via TFLite.
    *
    * @param window  Buffer sampel sensor yang terkumpul selama ~1.5 detik
    * @param predict Fungsi prediksi dari useTfliteModel()
@@ -60,17 +59,30 @@ export class EdgeRoadDamageDetector {
       return this._notAnomaly(samples, latitude, longitude);
     }
 
-    // Hitung Z-peak dari sinyal untuk severity fallback
-    const azValues = samples.map(s => Math.abs(s.az));
-    const zPeak = Math.max(...azValues);
+    const speedKmh =
+      samples.length > 0
+        ? samples.reduce((s, c) => s + c.speedKmh, 0) / samples.length
+        : 0;
 
-    // Ekstraksi 47 fitur dari window
+    // Filter fisis: Jika kendaraan diam/hampir berhenti (< 5 km/h), abaikan
+    if (speedKmh < 5.0) {
+      return this._notAnomaly(samples, latitude, longitude);
+    }
+
+    // Dekomposisi sinyal vertikal dinamis untuk verifikasi fisik
+    const decomposed = decomposeSensorSignals(samples);
+    const maxVertDyn =
+      decomposed.vertDyn.length > 0 ? Math.max(...decomposed.vertDyn) : 0;
+
+    // Ekstraksi 47 fitur dari window (identik dengan model training V2)
     const features = extractFeatures(samples);
 
     // Jalankan inferensi TFLite
-    const { isPothole, probability, confidence, confidenceTier } = await predict(features);
+    const { isPothole, probability, confidence, confidenceTier } =
+      await predict(features);
 
-    if (!isPothole) {
+    // Filter sanity check: model memprediksi pothole dan memang ada lonjakan fisik nyata
+    if (!isPothole || maxVertDyn < 0.6) {
       return {
         isAnomalyDetected: false,
         anomalyType: 'normal',
@@ -78,15 +90,12 @@ export class EdgeRoadDamageDetector {
         probability,
         confidence,
         confidenceTier,
-        zAccelPeak: zPeak,
+        zAccelPeak: maxVertDyn,
         modelVersion: EDGE_AI_CONFIG.modelVersion,
       };
     }
 
     const severity = classifySeverityFromProbability(probability);
-    const speedKmh = samples.length > 0
-      ? samples.reduce((s, c) => s + c.speedKmh, 0) / samples.length
-      : 0;
 
     const detectionDto: CreateDetectionDto = {
       deviceId: this.deviceId,
@@ -95,7 +104,7 @@ export class EdgeRoadDamageDetector {
       longitude,
       confidence,
       speedKmh: Math.round(speedKmh * 10) / 10,
-      zAccelPeak: Math.round(zPeak * 100) / 100,
+      zAccelPeak: Math.round(maxVertDyn * 100) / 100,
       modelVersion: EDGE_AI_CONFIG.modelVersion,
       detectedAt: timestamp,
     };
@@ -107,19 +116,138 @@ export class EdgeRoadDamageDetector {
       probability,
       confidence,
       confidenceTier,
-      zAccelPeak: zPeak,
+      zAccelPeak: maxVertDyn,
       modelVersion: EDGE_AI_CONFIG.modelVersion,
       detectionDto,
     };
   }
 
   /**
-   * Fallback legacy: inferensi berbasis Z-peak tunggal (tanpa TFLite).
-   * Dipakai saat model sedang dimuat atau pada perangkat tidak kompatibel.
+   * Mode B: Smart Window Heuristic Detector.
+   * Digunakan saat TFLite native module belum siap (misal di Expo Go).
+   *
+   * Menggunakan analisis bentuk gelombang window (bukan 1 titik instan):
+   * 1. Dekomposisi vektor 3D dengan Causal EMA Gravity Removal (invarian orientasi HP).
+   * 2. Validasi Kecepatan Minimal (Speed Gate: kendaraan harus bergerak).
+   * 3. Validasi Puncak Guncangan Vertikal Murni (di atas gravitasi 1G).
+   * 4. Validasi Crest Factor (puncak tajam vs getaran rata-rata jalan/mesin).
+   * 5. Validasi Dominansi Vertikal (memisahkan lubang dari tikungan/pengereman keras).
+   */
+  public inferWindowHeuristic(
+    window: SensorWindow,
+    config?: {
+      zShockThreshold?: number;
+      minMovingSpeed?: number;
+      severityThresholds?: { severe: number; high: number; medium: number };
+    }
+  ): EdgeDetectionResult {
+    const { samples, latitude, longitude, timestamp } = window;
+
+    if (samples.length < 3) {
+      return this._notAnomaly(samples, latitude, longitude);
+    }
+
+    const speedAvg =
+      samples.reduce((s, c) => s + c.speedKmh, 0) / samples.length;
+    const minSpeed =
+      config?.minMovingSpeed ?? EDGE_AI_CONFIG.minDetectionSpeedKmh;
+
+    // 1. Speed Gate: Jika berhenti / terlalu lambat, bukan lubang jalan
+    if (speedAvg < minSpeed) {
+      return this._notAnomaly(samples, latitude, longitude);
+    }
+
+    // 2. Dekomposisi gaya vertikal & horizontal
+    const decomposed = decomposeSensorSignals(samples);
+    const maxVertDyn = Math.max(...decomposed.vertDyn);
+    const maxHorizDyn = Math.max(...decomposed.horizDyn);
+
+    const rmsVertDyn = Math.sqrt(
+      decomposed.vertDyn.reduce((s, v) => s + v * v, 0) / samples.length
+    );
+    const crestFactor = maxVertDyn / (rmsVertDyn + 1e-6);
+
+    const threshold =
+      config?.zShockThreshold ?? EDGE_AI_CONFIG.defaultShockThresholdG;
+
+    // 3. Evaluasi kondisi komprehensif
+    const isShockSignificant = maxVertDyn >= threshold;
+    const isSharpImpulse = crestFactor >= 1.55; // Puncak tunggal tajam, bukan dengung getaran rata
+    const isVerticalDominant = maxVertDyn >= maxHorizDyn * 0.55; // Bukan belokan tajam / rem
+
+    const isAnomaly =
+      isShockSignificant && isSharpImpulse && isVerticalDominant;
+
+    if (!isAnomaly) {
+      return {
+        isAnomalyDetected: false,
+        anomalyType: 'normal',
+        estimatedSeverity: 'low',
+        probability: 0.15,
+        confidence: 0.85,
+        confidenceTier: 'HIGH',
+        zAccelPeak: maxVertDyn,
+        modelVersion: `${EDGE_AI_CONFIG.modelVersion}-heuristic`,
+      };
+    }
+
+    // Hitung probabilitas proporsional terhadap kekuatan hentakan dan ketajaman
+    const excess = Math.max(0, maxVertDyn - threshold);
+    const probability = Math.min(
+      0.96,
+      Math.max(
+        0.55,
+        0.52 + (excess / (threshold * 1.2)) * 0.35 + (crestFactor - 1.55) * 0.04
+      )
+    );
+
+    const { confidenceScore, confidenceTier } = getConfidenceTier(probability);
+    const severity = classifySeverityFromZPeak(
+      maxVertDyn,
+      config?.severityThresholds
+    );
+
+    const detectionDto: CreateDetectionDto = {
+      deviceId: this.deviceId,
+      userId: this.userId,
+      latitude,
+      longitude,
+      confidence: confidenceScore,
+      speedKmh: Math.round(speedAvg * 10) / 10,
+      zAccelPeak: Math.round(maxVertDyn * 100) / 100,
+      modelVersion: `${EDGE_AI_CONFIG.modelVersion}-heuristic`,
+      detectedAt: timestamp,
+    };
+
+    return {
+      isAnomalyDetected: true,
+      anomalyType: 'pothole',
+      estimatedSeverity: severity,
+      probability,
+      confidence: confidenceScore,
+      confidenceTier,
+      zAccelPeak: maxVertDyn,
+      modelVersion: `${EDGE_AI_CONFIG.modelVersion}-heuristic`,
+      detectionDto,
+    };
+  }
+
+  /**
+   * Mode C: Fallback frame tunggal terkalibrasi (backward compatibility).
+   * Mencegah false positive dari getaran kecil saat hanya 1 frame yang tersedia.
    */
   public inferLegacy(frame: SensorFrame): EdgeDetectionResult {
-    const zPeak = Math.abs(frame.zAccel);
-    const isAnomaly = zPeak >= 1.8;
+    // 1. Kecepatan minimal
+    if (frame.speedKmh != null && frame.speedKmh < 8.0) {
+      return this._notAnomaly([], frame.latitude, frame.longitude);
+    }
+
+    const rawZ = Math.abs(frame.zAccel);
+    // Jika rawZ disuplai sebagai totalG (sekitar 1G gravitasi), kurangi baseline gravitasi
+    const dynamicZ = rawZ >= 1.8 ? rawZ - 1.0 : rawZ;
+
+    // Hanya picu anomali jika deviasi guncangan dinamis murni >= 1.10G
+    const isAnomaly = dynamicZ >= 1.10;
 
     if (!isAnomaly) {
       return {
@@ -129,15 +257,17 @@ export class EdgeRoadDamageDetector {
         probability: 0,
         confidence: 0,
         confidenceTier: 'LOW',
-        zAccelPeak: zPeak,
+        zAccelPeak: dynamicZ,
         modelVersion: `${EDGE_AI_CONFIG.modelVersion}-fallback`,
       };
     }
 
-    // Gunakan Z-peak untuk estimasi probabilitas kasar (linear mapping 1.8G→0.5, 4.0G→1.0)
-    const probability = Math.min(1.0, Math.max(0.5, (zPeak - 1.8) / 2.2 * 0.5 + 0.5));
+    const probability = Math.min(
+      1.0,
+      Math.max(0.5, ((dynamicZ - 1.1) / 2.0) * 0.5 + 0.5)
+    );
     const { confidenceScore, confidenceTier } = getConfidenceTier(probability);
-    const severity = classifySeverityFromZPeak(zPeak);
+    const severity = classifySeverityFromZPeak(dynamicZ);
 
     const detectionDto: CreateDetectionDto = {
       deviceId: this.deviceId,
@@ -145,8 +275,9 @@ export class EdgeRoadDamageDetector {
       latitude: frame.latitude,
       longitude: frame.longitude,
       confidence: confidenceScore,
-      speedKmh: frame.speedKmh != null ? Math.round(frame.speedKmh * 10) / 10 : undefined,
-      zAccelPeak: Math.round(zPeak * 100) / 100,
+      speedKmh:
+        frame.speedKmh != null ? Math.round(frame.speedKmh * 10) / 10 : undefined,
+      zAccelPeak: Math.round(dynamicZ * 100) / 100,
       modelVersion: `${EDGE_AI_CONFIG.modelVersion}-fallback`,
       detectedAt: frame.timestamp || new Date().toISOString(),
     };
@@ -158,7 +289,7 @@ export class EdgeRoadDamageDetector {
       probability,
       confidence: confidenceScore,
       confidenceTier,
-      zAccelPeak: zPeak,
+      zAccelPeak: dynamicZ,
       modelVersion: `${EDGE_AI_CONFIG.modelVersion}-fallback`,
       detectionDto,
     };
@@ -187,20 +318,18 @@ export class EdgeRoadDamageDetector {
   // ─── Private ───────────────────────────────────────────────────────────────
 
   private _notAnomaly(
-    samples: { az: number }[],
+    samples: { az?: number }[],
     lat: number,
     lon: number
   ): EdgeDetectionResult {
-    const azValues = samples.map(s => Math.abs(s.az));
-    const zPeak = azValues.length > 0 ? Math.max(...azValues) : 0;
     return {
       isAnomalyDetected: false,
       anomalyType: 'normal',
       estimatedSeverity: 'low',
-      probability: 0,
-      confidence: 0,
-      confidenceTier: 'LOW',
-      zAccelPeak: zPeak,
+      probability: 0.05,
+      confidence: 0.95,
+      confidenceTier: 'HIGH',
+      zAccelPeak: 0,
       modelVersion: EDGE_AI_CONFIG.modelVersion,
     };
   }

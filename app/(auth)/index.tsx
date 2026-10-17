@@ -94,11 +94,10 @@ export default function Index() {
         // User baru register selalu diarahkan ke onboarding terlebih dahulu
         router.replace("/(onboarding)");
       } else {
-        const res = await signIn({ email: email.trim(), password });
+        await signIn({ email: email.trim(), password });
         setAuthModalVisible(false);
-        // User login: cek status onboarding dari database atau state
-        const userIsOnboarded = Boolean(res?.user?.isOnboarded ?? isOnboardingCompleted);
-        if (!userIsOnboarded) {
+        // User login biasa: jika belum pernah onboarding ke onboarding, jika sudah langsung ke tabs
+        if (!isOnboardingCompleted) {
           router.replace("/(onboarding)");
         } else {
           router.replace("/(tabs)");
@@ -116,8 +115,7 @@ export default function Index() {
     try {
       const res = await signInWithGoogle();
       if (res?.user) {
-        const userIsOnboarded = Boolean(res.user.isOnboarded ?? isOnboardingCompleted);
-        if (!userIsOnboarded) {
+        if (!isOnboardingCompleted) {
           router.replace("/(onboarding)");
         } else {
           router.replace("/(tabs)");
@@ -199,23 +197,6 @@ export default function Index() {
               </Text>
             </View>
           </Touchable>
-
-          {/* Create New Account Button
-          <Touchable
-            accessibilityHint="Create new officer account"
-            accessibilityLabel="Create New Account"
-            accessibilityRole="button"
-            onPress={() => {
-              setIsRegisterMode(true);
-              setAuthModalVisible(true);
-            }}
-          >
-            <View className="flex-row items-center justify-center gap-2 rounded-[12px] border border-slate-300 bg-slate-50 px-4 py-3">
-              <Text className="font-quicksand-semibold text-sm text-slate-700">
-                Create New Account
-              </Text>
-            </View>
-          </Touchable> */}
 
           {/* Sign In with Google Button */}
           <Touchable

@@ -1,10 +1,2 @@
-# pnpm configuration settings
-# Configured for CI environments (e.g. EAS Build) using pnpm v10+
-
 allowBuilds:
   unrs-resolver: true
-
-onlyBuiltDependencies:
-  - unrs-resolver
-
-strictDepBuilds: false

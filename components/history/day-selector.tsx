@@ -76,7 +76,7 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
             className={cn(
               "h-[58px] w-[58px] items-center justify-center rounded-2xl border-2 shadow-sm",
               isCustomDateSelected
-                ? "border-custom-black bg-sustom-disabled"
+                ? "border-custom-black bg-custom-black"
                 : "border-custom-borderDisabled bg-white"
             )}
           >

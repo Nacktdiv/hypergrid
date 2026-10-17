@@ -70,8 +70,10 @@ export default function RootLayout() {
                             handleFinish();
                         }
                     }}
-                    className="bg-custom-primary w-full h-fit py-2 rounded-xl shadow-md active:scale-[0.98] active:opacity-90 hover:opacity-95 hover:shadow-lg transition-all duration-150">
-                    <TextUI className="text-lg font-quicksand-bold text-white text-center">Next</TextUI>
+                    className="bg-custom-primary w-full h-fit py-3 rounded-xl shadow-md active:scale-[0.98] active:opacity-90 transition-all duration-150">
+                    <TextUI className="text-base font-quicksand-bold text-white text-center">
+                        {progress === 3 ? "Get Started" : "Next"}
+                    </TextUI>
                 </ButtonUI>
                 <PortalHost />
             </SafeAreaView>

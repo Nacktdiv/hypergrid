@@ -48,46 +48,38 @@ type VehicleCardProps = {
 
 function VehicleCard({ id, label, image, isActive, onSelect }: VehicleCardProps) {
   return (
-    <View
-      className={cn(
-        "w-full flex flex-1 rounded-2xl border-2 items-center justify-center py-3 px-2 overflow-hidden",
-        isActive
+    <Touchable
+      className="flex-1"
+      onPress={() => onSelect(id)}
+      scaleTo={0.94}
+      accessibilityLabel={label}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: isActive }}
+    >
+      <View
+        className={cn(
+          "w-full rounded-2xl border-2 items-center justify-center py-3 px-2 overflow-hidden flex-col gap-1",
+          isActive
             ? "border-custom-primary bg-custom-active"
             : "border-custom-borderDisabled bg-custom-disabled"
-      )}
-    >
-      <Touchable
-        className={cn(
-          "flex-1",
         )}
-        onPress={() => onSelect(id)}
-        scaleTo={0.94}
-        accessibilityLabel={label}
-        accessibilityRole="radio"
-        accessibilityState={{ selected: isActive }}
       >
-        <View
+        <Image
+          source={image}
+          style={{ height: 28, width: 48 }}
+          contentFit="contain"
+          transition={200}
+        />
+        <Text
           className={cn(
-            "w-full flex flex-col items-center justify-center gap-1",
+            "font-chivo-bold text-sm text-center",
+            isActive ? "text-custom-primary" : "text-slate-500"
           )}
+          numberOfLines={1}
         >
-          <Image
-            source={image}
-            style={{ height: 28, width: 48 }}
-            contentFit="contain"
-            transition={200}
-          />
-          <Text
-            className={cn(
-              "font-chivo-bold text-sm text-center",
-              isActive ? "text-custom-primary" : "text-slate-500"
-            )}
-            numberOfLines={1}
-          >
-            {label}
-          </Text>
-        </View>
-      </Touchable>
-    </View>
-  )
+          {label}
+        </Text>
+      </View>
+    </Touchable>
+  );
 }

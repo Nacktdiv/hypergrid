@@ -20,14 +20,25 @@ function rms(arr: number[]): number {
 }
 
 function minVal(arr: number[]): number {
-  return arr.reduce((a, b) => Math.min(a, b), arr[0] ?? 0);
+  if (arr.length === 0) return 0;
+  return arr.reduce((a, b) => Math.min(a, b), arr[0]);
 }
 
 function maxVal(arr: number[]): number {
-  return arr.reduce((a, b) => Math.max(a, b), arr[0] ?? 0);
+  if (arr.length === 0) return 0;
+  return arr.reduce((a, b) => Math.max(a, b), arr[0]);
 }
 
-/** Statistik set: [mean, std, min, max, range, rms] */
+function median(arr: number[]): number {
+  if (arr.length === 0) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/** Statistik set: [mean, std, min, max, range (ptp), rms] */
 function stats6(arr: number[]): [number, number, number, number, number, number] {
   const mu = mean(arr);
   const mn = minVal(arr);
@@ -35,30 +46,98 @@ function stats6(arr: number[]): [number, number, number, number, number, number]
   return [mu, std(arr, mu), mn, mx, mx - mn, rms(arr)];
 }
 
-/** Zero-crossing rate (berapa kali tanda berubah dari positif ke negatif atau sebaliknya) */
-function zeroCrossingRate(arr: number[]): number {
-  if (arr.length < 2) return 0;
-  let crossings = 0;
-  for (let i = 1; i < arr.length; i++) {
-    if (arr[i - 1] * arr[i] < 0) crossings++;
-  }
-  return crossings / (arr.length - 1);
+export interface DecomposedSignals {
+  vertDyn: number[];
+  horizDyn: number[];
+  accMag: number[];
+  gyroMag: number[];
+  speedClean: number[];
+  gNormAvg: number;
 }
 
-/** Crest factor = max / rms  (rasio puncak-ke-RMS) */
-function crestFactor(arr: number[]): number {
-  const r = rms(arr);
-  return r === 0 ? 0 : maxVal(arr.map(Math.abs)) / r;
-}
-
-/** Hitung jerk (diferensial/dt) dari sinyal dengan dt = timestampMs diff */
-function computeJerk(values: number[], timesMs: number[]): number[] {
-  const jerk: number[] = [];
-  for (let i = 1; i < values.length; i++) {
-    const dt = (timesMs[i] - timesMs[i - 1]) / 1000; // detik
-    jerk.push(dt > 0 ? (values[i] - values[i - 1]) / dt : 0);
+/**
+ * Dekomposisi sinyal 3D sensor menggunakan Causal EMA Gravity Tracking.
+ *
+ * 100% konsisten dengan implementasi Python: `RoadFeatureExtractorV2._decompose_signals_causal`.
+ * Memproyeksikan vektor akselerasi ke arah gravitasi bumi sesungguhnya,
+ * sehingga orientasi HP (miring, tidur, tegak di holder) tidak merusak sinyal vertikal.
+ */
+export function decomposeSensorSignals(
+  samples: RawSensorSample[],
+  emaAlpha = 0.1
+): DecomposedSignals {
+  const n = samples.length;
+  if (n === 0) {
+    return {
+      vertDyn: [],
+      horizDyn: [],
+      accMag: [],
+      gyroMag: [],
+      speedClean: [],
+      gNormAvg: 1.0,
+    };
   }
-  return jerk;
+
+  const vertDyn: number[] = [];
+  const horizDyn: number[] = [];
+  const accMag: number[] = [];
+  const gyroMag: number[] = [];
+  const speedClean: number[] = [];
+
+  let gxCurr = samples[0].ax;
+  let gyCurr = samples[0].ay;
+  let gzCurr = samples[0].az;
+  let totalGNorm = 0;
+
+  for (let i = 0; i < n; i++) {
+    const s = samples[i];
+    const ax = s.ax;
+    const ay = s.ay;
+    const az = s.az;
+
+    // 1. Causal Gravity Estimation via Exponential Moving Average (EMA)
+    gxCurr = (1.0 - emaAlpha) * gxCurr + emaAlpha * ax;
+    gyCurr = (1.0 - emaAlpha) * gyCurr + emaAlpha * ay;
+    gzCurr = (1.0 - emaAlpha) * gzCurr + emaAlpha * az;
+
+    const gNorm =
+      Math.sqrt(gxCurr * gxCurr + gyCurr * gyCurr + gzCurr * gzCurr) + 1e-6;
+    totalGNorm += gNorm;
+    const gUnitX = gxCurr / gNorm;
+    const gUnitY = gyCurr / gNorm;
+    const gUnitZ = gzCurr / gNorm;
+
+    // 2. Dynamic Vertical Shock (Sejajar arah gravitasi bumi, baseline gravitasi dihilangkan)
+    const aVert = ax * gUnitX + ay * gUnitY + az * gUnitZ;
+    const aVertDyn = Math.abs(aVert - gNorm);
+
+    // 3. Dynamic Horizontal Forces (Tegak lurus gravitasi: belok, rem, akselerasi)
+    const diffX = ax - aVert * gUnitX;
+    const diffY = ay - aVert * gUnitY;
+    const diffZ = az - aVert * gUnitZ;
+    const aHorizDyn = Math.sqrt(
+      diffX * diffX + diffY * diffY + diffZ * diffZ
+    );
+
+    // 4. Magnitudo total
+    const am = Math.sqrt(ax * ax + ay * ay + az * az);
+    const gm = Math.sqrt(s.gx * s.gx + s.gy * s.gy + s.gz * s.gz);
+
+    vertDyn.push(aVertDyn);
+    horizDyn.push(aHorizDyn);
+    accMag.push(am);
+    gyroMag.push(gm);
+    speedClean.push(Math.max(0, s.speedKmh));
+  }
+
+  return {
+    vertDyn,
+    horizDyn,
+    accMag,
+    gyroMag,
+    speedClean,
+    gNormAvg: totalGNorm / n,
+  };
 }
 
 // ─── Ekstraksi 47 fitur ──────────────────────────────────────────────────────
@@ -66,122 +145,128 @@ function computeJerk(values: number[], timesMs: number[]): number[] {
 /**
  * Mengekstraksi tepat 47 fitur dari window N sampel sensor.
  *
- * Urutan persis sesuai TFLITE_INTEGRATION_GUIDE.md:
- *  [0..5]   vert_dyn (az sinyal dinamis): mean, std, min, max, range, rms
- *  [6..11]  horiz_dyn (magnitude XY): mean, std, min, max, range, rms
- *  [12..17] acc_mag (|a| total): mean, std, min, max, range, rms
- *  [18..23] gyro_mag (|g| total): mean, std, min, max, range, rms
- *  [24..29] jerk_vert: mean, std, min, max, range, rms
+ * 100% konsisten secara matematis dengan `RoadFeatureExtractorV2` di Python:
+ *  [0..5]   vert_dyn: mean, std, min, max, range, rms
+ *  [6..11]  horiz_dyn: mean, std, min, max, range, rms
+ *  [12..17] acc_mag: mean, std, min, max, range, rms
+ *  [18..23] gyro_mag: mean, std, min, max, range, rms
+ *  [24..29] jerk_vert: mean, std, min, max, range, rms (np.diff tanpa bagi dt)
  *  [30..35] gyro_jerk_mag: mean, std, min, max, range, rms
  *  [36..41] speed_clean: mean, std, min, max, range, rms
- *  [42]     crest_factor_vert
- *  [43]     vert_to_horiz_ratio
- *  [44]     speed_norm_vert_shock
- *  [45]     vert_zcr
- *  [46]     is_moving (0 atau 1)
+ *  [42]     crest_factor_vert = max_v / (rms_v + 1e-6)
+ *  [43]     vert_to_horiz_ratio = (max_v + 1e-6) / (max_h + 1e-6)
+ *  [44]     speed_norm_vert_shock = max_v / (mean_spd + 1.5)
+ *  [45]     vert_zcr = median-centered zero-crossing rate
+ *  [46]     is_moving (1 jika sp_mean >= 1.5 km/h, 0 sebaliknya)
  *
  * @returns Float32Array panjang 47 siap diumpan ke model TFLite.
  */
 export function extractFeatures(samples: RawSensorSample[]): Float32Array {
-  const n = samples.length;
+  const { vertDyn, horizDyn, accMag, gyroMag, speedClean } =
+    decomposeSensorSignals(samples, 0.1);
 
-  // --- Pisahkan sinyal mentah ---
-  const azRaw    = samples.map(s => s.az);
-  const axRaw    = samples.map(s => s.ax);
-  const ayRaw    = samples.map(s => s.ay);
-  const gxRaw    = samples.map(s => s.gx);
-  const gyRaw    = samples.map(s => s.gy);
-  const gzRaw    = samples.map(s => s.gz);
-  const speedArr = samples.map(s => s.speedKmh);
-  const timesMs  = samples.map(s => s.timestampMs);
+  // Jerk Vertikal & Gyroscope (Selisih sampel ke sampel, sesuai pipeline training Python np.diff)
+  const jerkVert = [0];
+  for (let j = 1; j < vertDyn.length; j++) {
+    jerkVert.push(Math.abs(vertDyn[j] - vertDyn[j - 1]));
+  }
 
-  // --- Sinyal dinamis: hilangkan komponen gravitasi dari az ---
-  // Estimasi gravitasi dengan rata-rata (baseline DC) lalu substraksi
-  const azMeanDc = mean(azRaw);
-  const vertDyn  = azRaw.map(v => v - azMeanDc);   // komponen guncangan saja
+  const gyroJerk = [0];
+  for (let j = 1; j < gyroMag.length; j++) {
+    gyroJerk.push(Math.abs(gyroMag[j] - gyroMag[j - 1]));
+  }
 
-  // --- Magnitudo horizontal (akar XY tanpa komponen gravitasi) ---
-  const horizDyn = samples.map((s) => {
-    const xd = s.ax - mean(axRaw);  // remove DC
-    const yd = s.ay - mean(ayRaw);
-    return Math.sqrt(xd * xd + yd * yd);
-  });
+  // 6 statistik per sinyal
+  const [vd_mean, vd_std, vd_min, vd_max, vd_rng, vd_rms] = stats6(vertDyn);
+  const [hd_mean, hd_std, hd_min, hd_max, hd_rng, hd_rms] = stats6(horizDyn);
+  const [am_mean, am_std, am_min, am_max, am_rng, am_rms] = stats6(accMag);
+  const [gm_mean, gm_std, gm_min, gm_max, gm_rng, gm_rms] = stats6(gyroMag);
+  const [jv_mean, jv_std, jv_min, jv_max, jv_rng, jv_rms] = stats6(jerkVert);
+  const [gj_mean, gj_std, gj_min, gj_max, gj_rng, gj_rms] = stats6(gyroJerk);
+  const [sp_mean, sp_std, sp_min, sp_max, sp_rng, sp_rms] = stats6(speedClean);
 
-  // --- Magnitudo akselerometer total ---
-  const accMag = samples.map(s =>
-    Math.sqrt(s.ax * s.ax + s.ay * s.ay + s.az * s.az)
-  );
+  // 5 fitur domain kustom
+  const crestFactorVert = vd_max / (vd_rms + 1e-6);
+  const vertToHorizRatio = (vd_max + 1e-6) / (hd_max + 1e-6);
+  const speedNormVertShock = vd_max / (sp_mean + 1.5);
 
-  // --- Magnitudo gyroscope total ---
-  const gyroMag = samples.map(s =>
-    Math.sqrt(s.gx * s.gx + s.gy * s.gy + s.gz * s.gz)
-  );
+  const medV = median(vertDyn);
+  let zcrCrossings = 0;
+  for (let j = 1; j < vertDyn.length; j++) {
+    const cPrev = vertDyn[j - 1] - medV;
+    const cCurr = vertDyn[j] - medV;
+    if (cPrev * cCurr < 0) zcrCrossings++;
+  }
+  const vertZcr =
+    vertDyn.length > 1 ? zcrCrossings / (vertDyn.length - 1 + 1e-6) : 0;
+  const isMoving = sp_mean >= 1.5 ? 1.0 : 0.0;
 
-  // --- Jerk vertikal (turunan vertDyn terhadap waktu) ---
-  const jerkVert = computeJerk(vertDyn, timesMs);
-  if (jerkVert.length === 0) jerkVert.push(0);
-
-  // --- Jerk magnitudo gyroscope ---
-  const gyroJerk = computeJerk(gyroMag, timesMs);
-  if (gyroJerk.length === 0) gyroJerk.push(0);
-
-  // --- Kecepatan bersih (clamp negatif ke 0) ---
-  const speedClean = speedArr.map(v => Math.max(0, v));
-
-  // --- Statistik 6 dimensi per sinyal ---
-  const [vd_mean, vd_std, vd_min, vd_max, vd_rng, vd_rms]   = stats6(vertDyn);
-  const [hd_mean, hd_std, hd_min, hd_max, hd_rng, hd_rms]   = stats6(horizDyn);
-  const [am_mean, am_std, am_min, am_max, am_rng, am_rms]    = stats6(accMag);
-  const [gm_mean, gm_std, gm_min, gm_max, gm_rng, gm_rms]   = stats6(gyroMag);
-  const [jv_mean, jv_std, jv_min, jv_max, jv_rng, jv_rms]   = stats6(jerkVert);
-  const [gj_mean, gj_std, gj_min, gj_max, gj_rng, gj_rms]   = stats6(gyroJerk);
-  const [sp_mean, sp_std, sp_min, sp_max, sp_rng, sp_rms]    = stats6(speedClean);
-
-  // --- 5 fitur kustom ---
-  const crestFactorVert    = crestFactor(vertDyn);
-  const vertToHorizRatio   = hd_rms > 0 ? vd_rms / hd_rms : 0;
-  const speedNormVertShock = sp_mean > 0 ? vd_rms / sp_mean : vd_rms;
-  const vertZcr            = zeroCrossingRate(vertDyn);
-  const isMoving           = sp_mean > 2.0 ? 1.0 : 0.0;  // bergerak jika rata-rata kecepatan > 2 km/h
-
-  // --- Susun 47 fitur dalam urutan yang sesuai guide ---
+  // Susun 47 fitur float32
   const features = new Float32Array(47);
-  let i = 0;
+  let idx = 0;
 
   // [0..5] vert_dyn
-  features[i++] = vd_mean; features[i++] = vd_std; features[i++] = vd_min;
-  features[i++] = vd_max;  features[i++] = vd_rng; features[i++] = vd_rms;
+  features[idx++] = vd_mean;
+  features[idx++] = vd_std;
+  features[idx++] = vd_min;
+  features[idx++] = vd_max;
+  features[idx++] = vd_rng;
+  features[idx++] = vd_rms;
 
   // [6..11] horiz_dyn
-  features[i++] = hd_mean; features[i++] = hd_std; features[i++] = hd_min;
-  features[i++] = hd_max;  features[i++] = hd_rng; features[i++] = hd_rms;
+  features[idx++] = hd_mean;
+  features[idx++] = hd_std;
+  features[idx++] = hd_min;
+  features[idx++] = hd_max;
+  features[idx++] = hd_rng;
+  features[idx++] = hd_rms;
 
   // [12..17] acc_mag
-  features[i++] = am_mean; features[i++] = am_std; features[i++] = am_min;
-  features[i++] = am_max;  features[i++] = am_rng; features[i++] = am_rms;
+  features[idx++] = am_mean;
+  features[idx++] = am_std;
+  features[idx++] = am_min;
+  features[idx++] = am_max;
+  features[idx++] = am_rng;
+  features[idx++] = am_rms;
 
   // [18..23] gyro_mag
-  features[i++] = gm_mean; features[i++] = gm_std; features[i++] = gm_min;
-  features[i++] = gm_max;  features[i++] = gm_rng; features[i++] = gm_rms;
+  features[idx++] = gm_mean;
+  features[idx++] = gm_std;
+  features[idx++] = gm_min;
+  features[idx++] = gm_max;
+  features[idx++] = gm_rng;
+  features[idx++] = gm_rms;
 
   // [24..29] jerk_vert
-  features[i++] = jv_mean; features[i++] = jv_std; features[i++] = jv_min;
-  features[i++] = jv_max;  features[i++] = jv_rng; features[i++] = jv_rms;
+  features[idx++] = jv_mean;
+  features[idx++] = jv_std;
+  features[idx++] = jv_min;
+  features[idx++] = jv_max;
+  features[idx++] = jv_rng;
+  features[idx++] = jv_rms;
 
   // [30..35] gyro_jerk
-  features[i++] = gj_mean; features[i++] = gj_std; features[i++] = gj_min;
-  features[i++] = gj_max;  features[i++] = gj_rng; features[i++] = gj_rms;
+  features[idx++] = gj_mean;
+  features[idx++] = gj_std;
+  features[idx++] = gj_min;
+  features[idx++] = gj_max;
+  features[idx++] = gj_rng;
+  features[idx++] = gj_rms;
 
   // [36..41] speed_clean
-  features[i++] = sp_mean; features[i++] = sp_std; features[i++] = sp_min;
-  features[i++] = sp_max;  features[i++] = sp_rng; features[i++] = sp_rms;
+  features[idx++] = sp_mean;
+  features[idx++] = sp_std;
+  features[idx++] = sp_min;
+  features[idx++] = sp_max;
+  features[idx++] = sp_rng;
+  features[idx++] = sp_rms;
 
   // [42..46] fitur kustom
-  features[i++] = crestFactorVert;
-  features[i++] = vertToHorizRatio;
-  features[i++] = speedNormVertShock;
-  features[i++] = vertZcr;
-  features[i++] = isMoving;
+  features[idx++] = crestFactorVert;
+  features[idx++] = vertToHorizRatio;
+  features[idx++] = speedNormVertShock;
+  features[idx++] = vertZcr;
+  features[idx++] = isMoving;
 
-  return features;  // length = 47
+  return features;
 }

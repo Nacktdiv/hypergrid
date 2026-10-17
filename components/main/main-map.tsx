@@ -158,7 +158,6 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
       ) : (
         <LeafletMap
           data={mapData}
-          vehicleType={vehicleId}
           onDamagePress={handleMarkerPress}
         />
       )}
@@ -202,7 +201,7 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
             <View className="flex-row items-center gap-1.5 rounded-full border border-sky-300 bg-white/95 px-2.5 py-1 shadow-sm backdrop-blur-md">
               <Layers size={11} color="#009EFF" />
               <Text className="font-mono-bold text-[10px] text-sky-700">
-                {useVectorMap ? "🗺️ Visual Map" : "🌍 OpenStreetMap"}
+                {useVectorMap ? "Visual Map" : "OpenStreetMap"}
               </Text>
             </View>
           </Touchable>

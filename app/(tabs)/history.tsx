@@ -217,7 +217,7 @@ export default function HistoryScreen() {
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top"]}>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-4 pt-4"
+        contentContainerClassName="gap-6 px-4 pt-4 pb-8"
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -333,9 +333,9 @@ export default function HistoryScreen() {
 
         {/* DAFTAR LOG DETAIL PERJALANAN */}
         <View className="gap-3">
-          <View className="flex-row items-baseline justify-between">
-            <View className="flex-row justify-center items-center">
-              <Text className="flex-1 font-chivo-bold text-lg uppercase tracking-tight text-slate-900">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-1 flex-row items-baseline gap-2">
+              <Text className="font-chivo-bold text-lg uppercase tracking-tight text-slate-900">
                 Telemetry Log Entries
               </Text>
               <Text className="font-mono text-[11px] text-slate-500">
