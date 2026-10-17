@@ -368,7 +368,7 @@ export default function Index() {
               <TextInput
                 autoCapitalize="none"
                 className="rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-mono text-xs text-[#0F172A]"
-                placeholder="http://10.0.2.2:4000/api"
+                placeholder={process.env.EXPO_PUBLIC_API_URL || "https://hg-server.onrender.com"}
                 value={serverUrlInput}
                 onChangeText={setServerUrlInput}
               />
