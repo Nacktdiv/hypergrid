@@ -49,6 +49,7 @@ function AuthRouteGuard({ children }: { children: React.ReactNode }) {
     const isProtectedRoute = firstSegment === '(tabs)' || firstSegment === 'ride';
     const isAuthRoute = firstSegment === '(auth)';
     const isOnboardingRoute = firstSegment === '(onboarding)';
+    const isUserOnboarded = Boolean(user?.isOnboarded || isOnboardingCompleted);
 
     // 1. Jika belum login tapi berada di protected route atau onboarding
     if (!user && (isProtectedRoute || isOnboardingRoute)) {
@@ -59,7 +60,7 @@ function AuthRouteGuard({ children }: { children: React.ReactNode }) {
 
     // 2. Jika sudah login tapi masih berada di halaman login (auth)
     if (user && isAuthRoute) {
-      if (!isOnboardingCompleted) {
+      if (!isUserOnboarded) {
         console.log('[AuthMiddleware] User baru login/register. Mengarahkan ke onboarding...');
         router.replace('/(onboarding)');
       } else {
@@ -70,7 +71,7 @@ function AuthRouteGuard({ children }: { children: React.ReactNode }) {
     }
 
     // 3. Jika sudah login dan sudah menyelesaikan onboarding tapi masih di onboarding
-    if (user && isOnboardingRoute && isOnboardingCompleted) {
+    if (user && isOnboardingRoute && isUserOnboarded) {
       console.log('[AuthMiddleware] Onboarding sudah selesai. Mengarahkan ke tabs...');
       router.replace('/(tabs)');
       return;
@@ -92,28 +93,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const completeOnboarding = useCallback(async () => {
-    await tokenStorage.setOnboardingCompleted(true);
+    await authService.completeOnboarding();
     setIsOnboardingCompleted(true);
+    setUser((prev) => (prev ? { ...prev, isOnboarded: true } : prev));
   }, []);
 
   const checkSession = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      // 0. Cek status onboarding
-      const onboarded = await tokenStorage.isOnboardingCompleted();
-      setIsOnboardingCompleted(onboarded);
+      // 0. Cek status onboarding lokal
+      const localOnboarded = await tokenStorage.isOnboardingCompleted();
 
       // 1. Cek cache user di penyimpanan lokal terlebih dahulu
       const stored = await authService.getStoredUser<AuthUser>();
       if (stored) {
         setUser(stored);
+        if (stored.isOnboarded) {
+          setIsOnboardingCompleted(true);
+        } else {
+          setIsOnboardingCompleted(localOnboarded);
+        }
+      } else {
+        setIsOnboardingCompleted(localOnboarded);
       }
 
       // 2. Validasi ke server backend (Better-Auth)
       const sessionData = await authService.getSession();
       if (sessionData?.user) {
         setUser(sessionData.user);
+        const serverOnboarded = Boolean(sessionData.user.isOnboarded || localOnboarded);
+        setIsOnboardingCompleted(serverOnboarded);
+        if (sessionData.user.isOnboarded) {
+          await tokenStorage.setOnboardingCompleted(true);
+        }
       } else {
         // Jika server menolak sesi / sesi tidak ada
         setUser(null);
@@ -149,6 +162,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await authService.signIn(dto);
       setUser(res.user);
+      const isDone = Boolean(res.user.isOnboarded);
+      setIsOnboardingCompleted(isDone);
+      if (isDone) {
+        await tokenStorage.setOnboardingCompleted(true);
+      }
       return res;
     } catch (err: any) {
       const msg = err.message || 'Gagal masuk akun';
@@ -166,6 +184,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await authService.signUp(dto);
       setUser(res.user);
+      setIsOnboardingCompleted(false);
+      await tokenStorage.setOnboardingCompleted(false);
       return res;
     } catch (err: any) {
       const msg = err.message || 'Gagal mendaftar akun';
@@ -184,6 +204,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await authService.signInWithGoogle();
       if (res?.user) {
         setUser(res.user);
+        const isDone = Boolean(res.user.isOnboarded);
+        setIsOnboardingCompleted(isDone);
+        if (isDone) {
+          await tokenStorage.setOnboardingCompleted(true);
+        }
       }
       return res;
     } catch (err: any) {

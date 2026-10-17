@@ -12,6 +12,7 @@ import {
 
 export interface LiveMapProps {
   isPaused?: boolean;
+  vehicleType?: "car" | "motor" | "bicycle";
   currentCoords?: LatLng | null;
   routeHistory?: LatLng[];
   liveDetections?: DamagePoint[];
@@ -24,6 +25,7 @@ export interface LiveMapProps {
  */
 export function LiveMap({
   isPaused = false,
+  vehicleType = "car",
   currentCoords,
   routeHistory = [],
   liveDetections = [],
@@ -54,7 +56,7 @@ export function LiveMap({
 
   return (
     <View className={cn("flex-1", isPaused && "opacity-60")}>
-      <LeafletMap data={mapData} interactive={!isPaused} />
+      <LeafletMap data={mapData} vehicleType={vehicleType} interactive={!isPaused} />
     </View>
   );
 }

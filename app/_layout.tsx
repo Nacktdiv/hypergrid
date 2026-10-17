@@ -2,6 +2,7 @@ import { PortalHost } from '@rn-primitives/portal';
 import { useEffect } from "react";
 import { SplashScreen, Stack } from "expo-router";
 import { AuthProvider } from "@/contexts/auth-context";
+import { VehicleProvider } from "@/contexts/vehicle-context";
 import "../global.css";
 
 import {
@@ -56,8 +57,10 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <RootNavigation />
-      <PortalHost />
+      <VehicleProvider>
+        <RootNavigation />
+        <PortalHost />
+      </VehicleProvider>
     </AuthProvider>
   );
 }

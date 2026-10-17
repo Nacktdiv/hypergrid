@@ -119,6 +119,8 @@ export interface AuthUser {
   email: string;
   name: string;
   emailVerified?: boolean;
+  isOnboarded?: boolean;
+  image?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -24,7 +24,8 @@ export default function RootIndex() {
     return <Redirect href="/(auth)" />;
   }
 
-  if (!isOnboardingCompleted) {
+  const isUserOnboarded = Boolean(user?.isOnboarded || isOnboardingCompleted);
+  if (!isUserOnboarded) {
     return <Redirect href="/(onboarding)" />;
   }
 

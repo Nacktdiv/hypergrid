@@ -94,10 +94,11 @@ export default function Index() {
         // User baru register selalu diarahkan ke onboarding terlebih dahulu
         router.replace("/(onboarding)");
       } else {
-        await signIn({ email: email.trim(), password });
+        const res = await signIn({ email: email.trim(), password });
         setAuthModalVisible(false);
-        // User login biasa: jika belum pernah onboarding ke onboarding, jika sudah langsung ke tabs
-        if (!isOnboardingCompleted) {
+        // User login: cek status onboarding dari database atau state
+        const userIsOnboarded = Boolean(res?.user?.isOnboarded ?? isOnboardingCompleted);
+        if (!userIsOnboarded) {
           router.replace("/(onboarding)");
         } else {
           router.replace("/(tabs)");
@@ -115,7 +116,8 @@ export default function Index() {
     try {
       const res = await signInWithGoogle();
       if (res?.user) {
-        if (!isOnboardingCompleted) {
+        const userIsOnboarded = Boolean(res.user.isOnboarded ?? isOnboardingCompleted);
+        if (!userIsOnboarded) {
           router.replace("/(onboarding)");
         } else {
           router.replace("/(tabs)");

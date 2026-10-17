@@ -65,10 +65,18 @@ export function classifySeverityFromProbability(prob: number): PotholeSeverity {
 
 /**
  * Severity fallback dari Z-peak (digunakan saat model belum siap / mode legacy).
+ * Mendukung ambang batas adaptif per jenis kendaraan.
  */
-export function classifySeverityFromZPeak(zPeak: number): PotholeSeverity {
-  if (zPeak >= 3.8) return 'severe';
-  if (zPeak >= 2.8) return 'high';
-  if (zPeak >= 1.8) return 'medium';
+export function classifySeverityFromZPeak(
+  zPeak: number,
+  thresholds?: { severe: number; high: number; medium: number }
+): PotholeSeverity {
+  const severe = thresholds?.severe ?? 3.8;
+  const high = thresholds?.high ?? 2.8;
+  const medium = thresholds?.medium ?? 1.8;
+
+  if (zPeak >= severe) return 'severe';
+  if (zPeak >= high) return 'high';
+  if (zPeak >= medium) return 'medium';
   return 'low';
 }

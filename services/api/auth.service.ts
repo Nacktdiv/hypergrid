@@ -154,7 +154,7 @@ export const authService = {
   },
 
   /**
-   * Memperbarui profil petugas di penyimpanan lokal
+   * Memperbarui profil petugas ke server Better-Auth dan penyimpanan lokal
    */
   async updateProfile(updates: Partial<AuthUser> & Record<string, any>): Promise<AuthUser> {
     const current = (await tokenStorage.getUser<AuthUser>()) || {
@@ -162,9 +162,34 @@ export const authService = {
       name: 'Petugas HyperGrid',
       email: 'petugas@hypergrid.io',
     };
+
+    try {
+      // Kirim pembaruan ke endpoint Better-Auth di backend
+      const res = await apiClient.post<any>('/auth/update-user', updates);
+      const serverUser = (res && 'user' in res) ? res.user : (res as AuthUser);
+      if (serverUser?.id) {
+        await tokenStorage.setUser(serverUser);
+        return serverUser;
+      }
+    } catch (err) {
+      console.warn('[authService] Gagal updateProfile ke server, memperbarui cache lokal:', err);
+    }
+
     const updated = { ...current, ...updates };
     await tokenStorage.setUser(updated);
     return updated as AuthUser;
+  },
+
+  /**
+   * Menyimpan status penyelesaian onboarding ke database server via Better-Auth
+   */
+  async completeOnboarding(): Promise<void> {
+    await tokenStorage.setOnboardingCompleted(true);
+    try {
+      await this.updateProfile({ isOnboarded: true });
+    } catch (err) {
+      console.warn('[authService] Gagal menyimpan status onboarding ke server:', err);
+    }
   },
 
   /**

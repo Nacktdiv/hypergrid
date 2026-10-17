@@ -17,6 +17,7 @@ import { DriveActions } from "@/components/ride/drive-actions";
 import { LiveMap } from "@/components/ride/live-map";
 import { TopFloatingBar } from "@/components/ride/top-floating-bar";
 import { Touchable } from "@/components/ui/touchable";
+import { useVehicle, type VehicleProfile } from "@/contexts/vehicle-context";
 import { useEdgeAi } from "@/hooks/use-edge-ai";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
 import { useUserLocation } from "@/hooks/use-user-location";
@@ -28,10 +29,10 @@ import type { DamagePoint } from "@/components/map/map-data";
 /**
  * Start Drive Mode (Live Tracking HUD).
  *
- * Sensor pipeline:
+ * Sensor pipeline terkalibrasi per kendaraan:
  *  1. Accelerometer + Gyroscope @ 20 Hz → addSample() → rolling 1.5 s window
- *  2. GPS @ 1 Hz → kecepatan EMA-filtered untuk fitur model
- *  3. Cooldown 3 s + threshold Z-peak ≥ 1.8G → trigger inferensi TFLite (47 fitur)
+ *  2. GPS @ 1 Hz → kecepatan EMA-filtered dengan alpha adaptif (Mobil MPV: 0.20, Motor: 0.35, Sepeda: 0.40)
+ *  3. Cooldown 3 s + threshold Z-peak adaptif (MPV: 1.65G, Motor: 2.20G, Sepeda: 1.90G)
  *  4. Fallback legacy Z-peak saat model belum siap
  *  5. Deteksi → kirim ke backend / offline queue
  *  6. PostGIS early warning radius 25 m via /nearby
@@ -39,6 +40,7 @@ import type { DamagePoint } from "@/components/map/map-data";
 export default function RideScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { vehicleProfile } = useVehicle();
   const [isPaused, setIsPaused] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
 
@@ -59,13 +61,16 @@ export default function RideScreen() {
     gx: 0, gy: 0, gz: 0,
   });
 
-  // ── GPS Live Tracking ────────────────────────────────────────────────────────
+  // ── GPS Live Tracking (Dikalibrasi Sesuai Karakteristik Kendaraan) ───────────
   const {
     coords: liveCoords,
     speedKmh: gpsSpeed,
     routeHistory,
     stopTracking,
-  } = useUserLocation(true);
+  } = useUserLocation(true, {
+    speedEmaAlpha: vehicleProfile.sensorConfig.speedEmaAlpha,
+    maxSpeedGlitch: vehicleProfile.sensorConfig.maxSpeedGlitch,
+  });
 
   // ── Edge AI + TFLite ─────────────────────────────────────────────────────────
   const {
@@ -122,13 +127,25 @@ export default function RideScreen() {
       const roundedG = Math.round(totalG * 100) / 100;
       setLiveGForce(roundedG);
 
-      // Shock level visual (0–100)
+      // Shock level visual (0–100) dikalibrasi per karakteristik redaman kendaraan
       const dynamicDelta = Math.abs(totalG - 1.0);
-      const computedLevel = Math.min(100, Math.max(8, Math.round(dynamicDelta * 60 + 10)));
+      const computedLevel = Math.min(
+        100,
+        Math.max(
+          8,
+          Math.round(
+            dynamicDelta * vehicleProfile.sensorConfig.shockGaugeMultiplier + 10
+          )
+        )
+      );
       setShockLevel(computedLevel);
 
-      // Vibrasi dalam m/s²
-      setCurrentVibration(Math.round(totalG * 9.81 * 10));
+      // Vibrasi dalam m/s² dikalibrasi sesuai faktor transmisi getaran sasis
+      setCurrentVibration(
+        Math.round(
+          totalG * 9.81 * 10 * vehicleProfile.sensorConfig.vibrationFactor
+        )
+      );
 
       // ── Tambahkan sampel ke rolling window buffer ──────────────────────────
       const sample: RawSensorSample = {
@@ -143,11 +160,15 @@ export default function RideScreen() {
       };
       addSample(sample);
 
-      // ── Threshold pre-filter: hanya trigger inferensi saat ada guncangan ──
-      // Z-peak threshold 1.8G + cooldown 3 detik
+      // ── Threshold pre-filter: trigger inferensi berdasarkan ambang batas kendaraan ──
+      // Mobil MPV: 1.65G, Motor Skutik: 2.20G, Sepeda: 1.90G
       const now = Date.now();
       const zPeak = Math.abs(z);
-      if (zPeak >= 1.8 && now - lastDetectionTimeRef.current > EDGE_AI_CONFIG.detectionCooldownMs) {
+      const zThreshold = vehicleProfile.sensorConfig.zShockThreshold;
+      if (
+        zPeak >= zThreshold &&
+        now - lastDetectionTimeRef.current > EDGE_AI_CONFIG.detectionCooldownMs
+      ) {
         lastDetectionTimeRef.current = now;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
 
@@ -188,7 +209,7 @@ export default function RideScreen() {
     });
 
     return () => subscription.remove();
-  }, [isPaused, isFinished, sensorEnabled, gpsSpeed, addSample, runInference, liveCoords]);
+  }, [isPaused, isFinished, sensorEnabled, gpsSpeed, addSample, runInference, liveCoords, vehicleProfile]);
 
   // ── 4. Early Warning Haptic ──────────────────────────────────────────────────
   useEffect(() => {
@@ -254,6 +275,7 @@ export default function RideScreen() {
         currentCoords={liveCoords}
         routeHistory={routeHistory}
         liveDetections={liveDetections}
+        vehicleType={vehicleProfile.id}
       />
 
       <View className="absolute inset-0">
@@ -341,7 +363,7 @@ export default function RideScreen() {
                     sensorEnabled ? "text-emerald-300" : "text-slate-400"
                   }`}
                 >
-                  {sensorEnabled ? `${liveGForce}G · Acc+Gyro` : "Sensor Off"}
+                  {sensorEnabled ? `${liveGForce}G · ${vehicleProfile.type}` : "Sensor Off"}
                 </Text>
               </View>
             </Touchable>
@@ -381,6 +403,7 @@ export default function RideScreen() {
             <FinishBanner
               detectedCount={detectedCount}
               lastResult={lastResult}
+              vehicleProfile={vehicleProfile}
               onDismiss={() => {
                 setIsFinished(false);
                 router.replace("/(tabs)/history");
@@ -399,10 +422,12 @@ export default function RideScreen() {
 function FinishBanner({
   detectedCount,
   lastResult,
+  vehicleProfile,
   onDismiss,
 }: {
   detectedCount: number;
   lastResult: any;
+  vehicleProfile?: VehicleProfile;
   onDismiss: () => void;
 }) {
   const isTflite = lastResult && !lastResult.modelVersion?.includes('fallback');
@@ -424,6 +449,14 @@ function FinishBanner({
         </Text>
 
         <View className="my-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+          {vehicleProfile && (
+            <View className="flex-row justify-between py-1">
+              <Text className="text-xs text-slate-400">Vehicle</Text>
+              <Text className="font-mono text-xs text-custom-primary">
+                {vehicleProfile.name} ({vehicleProfile.type})
+              </Text>
+            </View>
+          )}
           <View className="flex-row justify-between py-1">
             <Text className="text-xs text-slate-400">Road Anomalies Detected</Text>
             <Text className="font-mono text-xs text-white">{detectedCount} Points</Text>

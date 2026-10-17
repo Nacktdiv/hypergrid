@@ -5,6 +5,7 @@ import type { DamagePoint, MapData } from "./map-data";
 
 export type LeafletMapProps = {
   data: MapData;
+  vehicleType?: "car" | "motor" | "bicycle";
   /** Matikan gestur pan/zoom — untuk peta ringkas di riwayat */
   interactive?: boolean;
   /** Callback saat titik kerusakan ditekan */
@@ -15,6 +16,7 @@ const WebViewComponent = WebView as any;
 
 export function LeafletMap({
   data,
+  vehicleType = "car",
   interactive = true,
   onDamagePress,
 }: LeafletMapProps) {
@@ -161,9 +163,10 @@ export function LeafletMap({
 
       // Vehicle Marker
       var vehicleCoord = ${vehicleCoord};
+      var vehicleEmoji = "${vehicleType === "motor" ? "🏍️" : vehicleType === "bicycle" ? "🚲" : "🚗"}";
       var vehicleIcon = L.divIcon({
         className: '',
-        html: '<div class="vehicle-marker">🚗</div>',
+        html: '<div class="vehicle-marker">' + vehicleEmoji + '</div>',
         iconSize: [38, 38],
         iconAnchor: [19, 19]
       });
@@ -176,7 +179,7 @@ export function LeafletMap({
 </body>
 </html>
     `;
-  }, [data, interactive]);
+  }, [data, interactive, vehicleType]);
 
   const handleMessage = (event: any) => {
     try {

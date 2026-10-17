@@ -158,6 +158,7 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
       ) : (
         <LeafletMap
           data={mapData}
+          vehicleType={vehicleId}
           onDamagePress={handleMarkerPress}
         />
       )}

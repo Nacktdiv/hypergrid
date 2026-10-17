@@ -40,7 +40,10 @@ function haversineMeters(a: LatLng, b: LatLng): number {
   return R * 2 * Math.atan2(Math.sqrt(hav), Math.sqrt(1 - hav));
 }
 
-export function useUserLocation(autoStartTracking = false) {
+export function useUserLocation(
+  autoStartTracking = false,
+  options?: { speedEmaAlpha?: number; maxSpeedGlitch?: number }
+) {
   const [state, setState] = useState<UserLocationState>({
     coords: null,
     accuracy: null,
@@ -151,14 +154,16 @@ export function useUserLocation(autoStartTracking = false) {
             rawKmh = 0;
           }
 
-          // ── Sanity check: reject GPS glitch (kecepatan tidak realistis > 200 km/h) ──
-          if (rawKmh > 200) {
+          // ── Sanity check: reject GPS glitch sesuai profil kendaraan ──
+          const maxGlitch = options?.maxSpeedGlitch ?? 200;
+          if (rawKmh > maxGlitch) {
             rawKmh = emaSpeedRef.current; // gunakan nilai EMA terakhir
           }
 
-          // ── EMA low-pass filter ────────────────────────────────────────────
+          // ── EMA low-pass filter (responsif sesuai dinamika kendaraan) ─────────
+          const alpha = options?.speedEmaAlpha ?? SPEED_EMA_ALPHA;
           emaSpeedRef.current =
-            SPEED_EMA_ALPHA * rawKmh + (1 - SPEED_EMA_ALPHA) * emaSpeedRef.current;
+            alpha * rawKmh + (1 - alpha) * emaSpeedRef.current;
 
           const filteredKmh = Math.max(0, emaSpeedRef.current);
 

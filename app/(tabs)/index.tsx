@@ -1,11 +1,10 @@
-import { useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useVehicle } from "@/contexts/vehicle-context";
 import { MainMap } from "@/components/main/main-map";
 import { PlayButton } from "@/components/main/play-button";
 import { VehicleSelector } from "@/components/main/vehicle-selector";
-import { type VehicleId } from "@/components/main/mock-data";
 
 /**
  * Main Page (Start).
@@ -16,7 +15,7 @@ import { type VehicleId } from "@/components/main/mock-data";
  * Interaktif: pemilihan kendaraan dan peta navigasi spasial PostGIS.
  */
 export default function StartScreen() {
-  const [vehicle, setVehicle] = useState<VehicleId>("car");
+  const { vehicleId, setVehicle } = useVehicle();
 
   return (
     <SafeAreaView className="flex-1 bg-custom-white" edges={["top"]}>
@@ -29,10 +28,10 @@ export default function StartScreen() {
 
         {/* Container Peta dengan Tinggi Eksplisit agar MapView tidak kolaps di ScrollView */}
         <View className="w-full flex-1">
-          <MainMap vehicleId={vehicle} />
+          <MainMap vehicleId={vehicleId} />
         </View>
 
-        <VehicleSelector onSelect={setVehicle} selected={vehicle} />
+        <VehicleSelector onSelect={setVehicle} selected={vehicleId} />
 
         <PlayButton />
       </ScrollView>
