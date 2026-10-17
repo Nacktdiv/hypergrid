@@ -44,7 +44,11 @@ type FilterStatus = "all" | PotholeStatus;
  */
 export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
   const { clusters, fetchClusters, updateStatus } = usePotholeClusters();
-  const { coords: liveCoords, getImmediateLocation } = useUserLocation();
+  const {
+    coords: liveCoords,
+    getImmediateLocation,
+    errorMsg,
+  } = useUserLocation();
 
   const [activeFilter, setActiveFilter] = useState<FilterStatus>("all");
   const [selectedCluster, setSelectedCluster] = useState<PotholeCluster | null>(
@@ -88,6 +92,8 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
             severity: c.severity === "severe" ? "high" : c.severity,
             reportCount: c.detection_count,
           }))
+        : liveCoords
+        ? []
         : MAIN_MAP_DATA.damagePoints;
 
     return {
@@ -96,7 +102,9 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
         longitude: baseCenter.longitude,
         zoom: liveCoords ? 15 : MAIN_MAP_DATA.camera.zoom,
       },
-      route: MAIN_MAP_DATA.route,
+      route: liveCoords
+        ? { id: "user-route", coordinates: [] }
+        : MAIN_MAP_DATA.route,
       damagePoints: liveDamagePoints,
       userLocation: baseCenter,
       vehiclePosition: baseCenter,
@@ -143,6 +151,42 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
       setIsUpdatingStatus(false);
     }
   };
+
+  if (!liveCoords) {
+    return (
+      <View
+        className="flex-1 w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-800 bg-[#0B0F19] p-4"
+        style={{ height: 340, width: "100%" }}
+      >
+        {errorMsg ? (
+          <View className="items-center gap-2">
+            <ShieldAlert size={28} color="#F59E0B" />
+            <Text className="text-center font-quicksand-bold text-xs text-white">
+              {errorMsg}
+            </Text>
+            <Touchable
+              onPress={() => getImmediateLocation()}
+              className="mt-2 rounded-xl bg-sky-500 px-4 py-2"
+            >
+              <Text className="font-quicksand-bold text-xs text-white">
+                Coba Lagi
+              </Text>
+            </Touchable>
+          </View>
+        ) : (
+          <View className="items-center gap-2">
+            <ActivityIndicator size="small" color="#009EFF" />
+            <Text className="mt-2 font-quicksand-bold text-xs text-white">
+              Menghubungkan GPS...
+            </Text>
+            <Text className="text-center font-quicksand text-[11px] text-slate-400">
+              Mengunci posisi satelit perangkat Anda
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View

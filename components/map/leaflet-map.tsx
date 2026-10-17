@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useEffect, useState } from "react";
 import { StyleSheet, View, ActivityIndicator } from "react-native";
 import { WebView } from "react-native-webview";
 import type { DamagePoint, MapData } from "./map-data";
@@ -21,9 +21,16 @@ export function LeafletMap({
   onDamagePress,
 }: LeafletMapProps) {
   const webViewRef = useRef<any>(null);
+  const isMapLoaded = useRef<boolean>(false);
+  const lastInjectedPos = useRef<{ lat: number; lng: number } | null>(null);
 
+  // Simpan data awal saat pertama kali mount
+  const [initialData] = useState<MapData>(data);
+
+  // Buat HTML Leaflet sekali dengan titik awal nyata
   const htmlContent = useMemo(() => {
-    const { camera, route, damagePoints, userLocation, vehiclePosition } = data;
+    const { camera, route, damagePoints, userLocation, vehiclePosition } =
+      initialData;
     const centerLat = camera.latitude;
     const centerLng = camera.longitude;
     const zoomLevel = Math.max(12, Math.min(18, Math.round(camera.zoom)));
@@ -32,8 +39,14 @@ export function LeafletMap({
       route.coordinates.map((c) => [c.latitude, c.longitude])
     );
     const damageData = JSON.stringify(damagePoints);
-    const userCoord = JSON.stringify([userLocation.latitude, userLocation.longitude]);
-    const vehicleCoord = JSON.stringify([vehiclePosition.latitude, vehiclePosition.longitude]);
+    const userCoord = JSON.stringify([
+      userLocation.latitude,
+      userLocation.longitude,
+    ]);
+    const vehicleCoord = JSON.stringify([
+      vehiclePosition.latitude,
+      vehiclePosition.longitude,
+    ]);
 
     return `
 <!DOCTYPE html>
@@ -100,7 +113,7 @@ export function LeafletMap({
   <div id="map"></div>
   <script>
     try {
-      var map = L.map('map', {
+      window.map = L.map('map', {
         center: [${centerLat}, ${centerLng}],
         zoom: ${zoomLevel},
         zoomControl: ${interactive ? "true" : "false"},
@@ -115,54 +128,57 @@ export function LeafletMap({
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         subdomains: ['a', 'b', 'c']
-      }).addTo(map);
+      }).addTo(window.map);
 
       // Route Polyline
-      var routeCoords = ${routeCoords};
-      if (routeCoords && routeCoords.length > 0) {
-        L.polyline(routeCoords, {
+      var initialRoute = ${routeCoords};
+      window.routePolyline = null;
+      if (initialRoute && initialRoute.length > 0) {
+        window.routePolyline = L.polyline(initialRoute, {
           color: '#009EFF',
           weight: 5,
           opacity: 0.85,
           lineJoin: 'round'
-        }).addTo(map);
+        }).addTo(window.map);
       }
 
-      // Damage Clusters Markers
-      var damagePoints = ${damageData};
-      damagePoints.forEach(function(pt) {
-        var sevClass = pt.severity === 'high' ? 'severity-high' : (pt.severity === 'medium' ? 'severity-medium' : 'severity-low');
-        var html = '<div class="damage-marker ' + sevClass + '">' + pt.reportCount + '</div>';
-        var icon = L.divIcon({
-          className: '',
-          html: html,
-          iconSize: [34, 34],
-          iconAnchor: [17, 17]
+      // Damage Clusters Layer
+      window.damageLayer = L.layerGroup().addTo(window.map);
+      window.renderDamagePoints = function(points) {
+        window.damageLayer.clearLayers();
+        points.forEach(function(pt) {
+          var sevClass = pt.severity === 'high' ? 'severity-high' : (pt.severity === 'medium' ? 'severity-medium' : 'severity-low');
+          var html = '<div class="damage-marker ' + sevClass + '">' + pt.reportCount + '</div>';
+          var icon = L.divIcon({
+            className: '',
+            html: html,
+            iconSize: [34, 34],
+            iconAnchor: [17, 17]
+          });
+          var marker = L.marker([pt.position.latitude, pt.position.longitude], { icon: icon });
+          marker.on('click', function() {
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'DAMAGE_PRESS',
+                point: pt
+              }));
+            }
+          });
+          window.damageLayer.addLayer(marker);
         });
-
-        var marker = L.marker([pt.position.latitude, pt.position.longitude], { icon: icon }).addTo(map);
-        marker.on('click', function() {
-          if (window.ReactNativeWebView) {
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'DAMAGE_PRESS',
-              point: pt
-            }));
-          }
-        });
-      });
+      };
+      window.renderDamagePoints(${damageData});
 
       // User Marker
-      var userCoord = ${userCoord};
       var userIcon = L.divIcon({
         className: '',
         html: '<div class="user-marker"></div>',
         iconSize: [20, 20],
         iconAnchor: [10, 10]
       });
-      L.marker(userCoord, { icon: userIcon }).addTo(map);
+      window.userMarker = L.marker(${userCoord}, { icon: userIcon }).addTo(window.map);
 
       // Vehicle Marker
-      var vehicleCoord = ${vehicleCoord};
       var vehicleEmoji = "${vehicleType === "motor" ? "🏍️" : vehicleType === "bicycle" ? "🚲" : "🚗"}";
       var vehicleIcon = L.divIcon({
         className: '',
@@ -170,8 +186,32 @@ export function LeafletMap({
         iconSize: [38, 38],
         iconAnchor: [19, 19]
       });
-      L.marker(vehicleCoord, { icon: vehicleIcon }).addTo(map);
+      window.vehicleMarker = L.marker(${vehicleCoord}, { icon: vehicleIcon }).addTo(window.map);
 
+      // Helper pembaruan real-time dinamis (tanpa me-reload seluruh halaman)
+      window.updatePosition = function(lat, lng) {
+        if (window.vehicleMarker) window.vehicleMarker.setLatLng([lat, lng]);
+        if (window.userMarker) window.userMarker.setLatLng([lat, lng]);
+        if (window.map) window.map.panTo([lat, lng], { animate: true, duration: 0.6 });
+      };
+
+      window.updateRoute = function(coords) {
+        if (window.routePolyline) {
+          window.routePolyline.setLatLngs(coords);
+        } else if (coords && coords.length > 0) {
+          window.routePolyline = L.polyline(coords, {
+            color: '#009EFF',
+            weight: 5,
+            opacity: 0.85,
+            lineJoin: 'round'
+          }).addTo(window.map);
+        }
+      };
+
+      // Beritahu React Native bahwa map sudah siap menerima event dinamis
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'MAP_READY' }));
+      }
     } catch (e) {
       console.error(e);
     }
@@ -179,12 +219,60 @@ export function LeafletMap({
 </body>
 </html>
     `;
-  }, [data, interactive, vehicleType]);
+  }, [initialData, interactive, vehicleType]);
+
+  // Pembaruan posisi kendaraan & jejak rute via injectJavaScript (Ultra-smooth, no reload)
+  useEffect(() => {
+    if (!isMapLoaded.current || !webViewRef.current) return;
+
+    const lat = data.vehiclePosition.latitude;
+    const lng = data.vehiclePosition.longitude;
+
+    if (
+      lastInjectedPos.current &&
+      Math.abs(lastInjectedPos.current.lat - lat) < 0.000003 &&
+      Math.abs(lastInjectedPos.current.lng - lng) < 0.000003
+    ) {
+      return;
+    }
+    lastInjectedPos.current = { lat, lng };
+
+    const routeJson = JSON.stringify(
+      data.route.coordinates.map((c) => [c.latitude, c.longitude])
+    );
+    const damageJson = JSON.stringify(data.damagePoints);
+
+    const js = `
+      if (window.updatePosition) window.updatePosition(${lat}, ${lng});
+      if (window.updateRoute) window.updateRoute(${routeJson});
+      if (window.renderDamagePoints) window.renderDamagePoints(${damageJson});
+      true;
+    `;
+    webViewRef.current.injectJavaScript(js);
+  }, [
+    data.vehiclePosition.latitude,
+    data.vehiclePosition.longitude,
+    data.route.coordinates,
+    data.damagePoints,
+  ]);
 
   const handleMessage = (event: any) => {
     try {
       const payload = JSON.parse(event.nativeEvent.data);
-      if (payload.type === "DAMAGE_PRESS" && onDamagePress) {
+      if (payload.type === "MAP_READY") {
+        isMapLoaded.current = true;
+        // Langsung sinkronkan posisi saat ini begitu map siap
+        const lat = data.vehiclePosition.latitude;
+        const lng = data.vehiclePosition.longitude;
+        const routeJson = JSON.stringify(
+          data.route.coordinates.map((c) => [c.latitude, c.longitude])
+        );
+        webViewRef.current?.injectJavaScript(`
+          if (window.updatePosition) window.updatePosition(${lat}, ${lng});
+          if (window.updateRoute) window.updateRoute(${routeJson});
+          true;
+        `);
+      } else if (payload.type === "DAMAGE_PRESS" && onDamagePress) {
         onDamagePress(payload.point);
       }
     } catch {
@@ -224,7 +312,7 @@ const styles = StyleSheet.create({
   webView: {
     flex: 1,
     backgroundColor: "transparent",
-    opacity: 0.99, // Mencegah glitch render webview pada beberapa perangkat Android
+    opacity: 0.99,
   },
   loader: {
     ...StyleSheet.absoluteFill,

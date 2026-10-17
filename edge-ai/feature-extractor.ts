@@ -1,6 +1,6 @@
 import type { RawSensorSample } from './types';
 
-// ─── Statistik dasar ────────────────────────────────────────────────────────
+// ──── Statistik dasar ────────────────────────────────────────────────────────
 
 function mean(arr: number[]): number {
   if (arr.length === 0) return 0;

@@ -115,9 +115,9 @@ export default function RideScreen() {
         setCurrentVibration(dynamicVibration);
       }
 
-      const lat = liveCoords ? liveCoords.latitude : -6.2088;
-      const lon = liveCoords ? liveCoords.longitude : 106.8456;
-      checkNearby(lat, lon, 25);
+      if (liveCoords) {
+        checkNearby(liveCoords.latitude, liveCoords.longitude, 25);
+      }
     }, 2500);
 
     return () => clearInterval(telemetryTimer);
@@ -228,8 +228,16 @@ export default function RideScreen() {
         lastDetectionTimeRef.current = now;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
 
-        const currentLat = liveCoords ? liveCoords.latitude : -6.2088;
-        const currentLon = liveCoords ? liveCoords.longitude : 106.8456;
+        // Jangan pernah mencatat deteksi jika GPS belum mengunci koordinat nyata
+        if (!liveCoords) {
+          console.warn(
+            "[RideScreen] GPS belum terkunci, inferensi deteksi lubang ditunda."
+          );
+          return;
+        }
+
+        const currentLat = liveCoords.latitude;
+        const currentLon = liveCoords.longitude;
 
         // Jalankan inferensi komprehensif pada window sampel
         runInference(
@@ -296,11 +304,17 @@ export default function RideScreen() {
 
   // 5. Trigger Deteksi Anomali Manual (Simulasi Pengujian)
   const handleTriggerAnomaly = useCallback(async () => {
+    if (!liveCoords) {
+      setAnomalyBanner("GPS belum terkunci. Tunggu sinyal GPS.");
+      setTimeout(() => setAnomalyBanner(null), 3000);
+      return;
+    }
+
     setShockLevel(85);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
 
-    const currentLat = liveCoords ? liveCoords.latitude : -6.2088;
-    const currentLon = liveCoords ? liveCoords.longitude : 106.8456;
+    const currentLat = liveCoords.latitude;
+    const currentLon = liveCoords.longitude;
 
     try {
       const result = await triggerSimulatedDetection({

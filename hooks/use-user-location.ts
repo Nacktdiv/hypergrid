@@ -16,15 +16,23 @@ export interface UserLocationState {
 }
 
 /**
+ * Global cache lokasi terakhir perangkat (persistent antar pergantian tab/layar).
+ * Menghilangkan delay 2–5 detik saat berpindah dari halaman utama ke ride mode.
+ */
+let cachedLocation: {
+  coords: LatLng;
+  accuracy: number | null;
+  speedKmh: number;
+  timestampMs: number;
+} | null = null;
+
+/**
  * Low-pass EMA filter untuk kecepatan GPS.
- * α kecil = lebih halus (lambat reaksi), α besar = lebih responsif.
- * α = 0.25 cocok untuk update 1–2 Hz agar noise GPS tidak terasa.
  */
 const SPEED_EMA_ALPHA = 0.25;
 
 /**
  * Haversine distance antara dua koordinat (meter).
- * Digunakan sebagai cross-check untuk deteksi GPS glitch.
  */
 function haversineMeters(a: LatLng, b: LatLng): number {
   const R = 6_371_000;
@@ -44,22 +52,27 @@ export function useUserLocation(
   autoStartTracking = false,
   options?: { speedEmaAlpha?: number; maxSpeedGlitch?: number }
 ) {
+  // Inisialisasi langsung dari cache modul agar tidak ada delay awal (0 ms)
   const [state, setState] = useState<UserLocationState>({
-    coords: null,
-    accuracy: null,
-    speedKmh: 0,
-    rawSpeedKmh: 0,
-    routeHistory: [],
+    coords: cachedLocation ? cachedLocation.coords : null,
+    accuracy: cachedLocation ? cachedLocation.accuracy : null,
+    speedKmh: cachedLocation ? cachedLocation.speedKmh : 0,
+    rawSpeedKmh: cachedLocation ? cachedLocation.speedKmh : 0,
+    routeHistory: cachedLocation ? [cachedLocation.coords] : [],
     isTracking: false,
-    permissionGranted: false,
+    permissionGranted: cachedLocation != null,
     errorMsg: null,
   });
 
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
-  const emaSpeedRef = useRef<number>(0);   // EMA state yang persisten antar update
-  const lastLocRef  = useRef<{ coords: LatLng; timeMs: number } | null>(null);
+  const emaSpeedRef = useRef<number>(cachedLocation?.speedKmh ?? 0);
+  const lastLocRef = useRef<{ coords: LatLng; timeMs: number } | null>(
+    cachedLocation
+      ? { coords: cachedLocation.coords, timeMs: cachedLocation.timestampMs }
+      : null
+  );
 
-  // Ambil lokasi instan sekali (non-tracking)
+  // Ambil lokasi instan sekali (memanfaatkan fast cache OS + GPS akurasi tinggi)
   const getImmediateLocation = useCallback(async (): Promise<LatLng | null> => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -72,6 +85,39 @@ export function useUserLocation(
         return null;
       }
 
+      // 1. Ambil lokasi terakhir dari cache OS instan (0-20ms)
+      const lastKnown = await Location.getLastKnownPositionAsync().catch(() => null);
+      if (lastKnown) {
+        const fastCoords: LatLng = {
+          latitude: lastKnown.coords.latitude,
+          longitude: lastKnown.coords.longitude,
+        };
+        const rawKmh =
+          lastKnown.coords.speed != null && lastKnown.coords.speed >= 0
+            ? lastKnown.coords.speed * 3.6
+            : 0;
+
+        cachedLocation = {
+          coords: fastCoords,
+          accuracy: lastKnown.coords.accuracy,
+          speedKmh: rawKmh,
+          timestampMs: lastKnown.timestamp,
+        };
+
+        setState((prev) => ({
+          ...prev,
+          coords: fastCoords,
+          accuracy: lastKnown.coords.accuracy,
+          rawSpeedKmh: rawKmh,
+          speedKmh: rawKmh,
+          permissionGranted: true,
+          errorMsg: null,
+          routeHistory:
+            prev.routeHistory.length === 0 ? [fastCoords] : prev.routeHistory,
+        }));
+      }
+
+      // 2. Refresh dengan pembacaan satelit GPS akurasi tinggi
       const loc = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
@@ -81,9 +127,17 @@ export function useUserLocation(
         longitude: loc.coords.longitude,
       };
 
-      const rawKmh = loc.coords.speed != null && loc.coords.speed >= 0
-        ? loc.coords.speed * 3.6
-        : 0;
+      const rawKmh =
+        loc.coords.speed != null && loc.coords.speed >= 0
+          ? loc.coords.speed * 3.6
+          : 0;
+
+      cachedLocation = {
+        coords,
+        accuracy: loc.coords.accuracy,
+        speedKmh: rawKmh,
+        timestampMs: loc.timestamp,
+      };
 
       setState((prev) => ({
         ...prev,
@@ -93,6 +147,8 @@ export function useUserLocation(
         speedKmh: rawKmh,
         permissionGranted: true,
         errorMsg: null,
+        routeHistory:
+          prev.routeHistory.length === 0 ? [coords] : prev.routeHistory,
       }));
 
       return coords;
@@ -119,6 +175,30 @@ export function useUserLocation(
         return;
       }
 
+      // Pastikan ada posisi awal cepat sebelum watchPosition mengirim update pertama
+      if (!cachedLocation) {
+        const quick = await Location.getLastKnownPositionAsync().catch(() => null);
+        if (quick) {
+          const qCoords: LatLng = {
+            latitude: quick.coords.latitude,
+            longitude: quick.coords.longitude,
+          };
+          cachedLocation = {
+            coords: qCoords,
+            accuracy: quick.coords.accuracy,
+            speedKmh: 0,
+            timestampMs: quick.timestamp,
+          };
+          setState((prev) => ({
+            ...prev,
+            coords: qCoords,
+            permissionGranted: true,
+            routeHistory:
+              prev.routeHistory.length === 0 ? [qCoords] : prev.routeHistory,
+          }));
+        }
+      }
+
       if (locationSubscription.current) {
         locationSubscription.current.remove();
       }
@@ -126,8 +206,8 @@ export function useUserLocation(
       locationSubscription.current = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
-          distanceInterval: 2,   // Update setiap perpindahan 2 meter
-          timeInterval: 1000,    // atau setiap 1 detik
+          distanceInterval: 2, // Update setiap perpindahan 2 meter
+          timeInterval: 1000, // atau setiap 1 detik
         },
         (loc) => {
           const currentCoords: LatLng = {
@@ -137,16 +217,20 @@ export function useUserLocation(
           const nowMs = loc.timestamp;
 
           // ── Kecepatan dari GPS ─────────────────────────────────────────────
-          let rawKmh = loc.coords.speed != null && loc.coords.speed >= 0
-            ? loc.coords.speed * 3.6
-            : -1; // -1 berarti GPS tidak memberikan data kecepatan
+          let rawKmh =
+            loc.coords.speed != null && loc.coords.speed >= 0
+              ? loc.coords.speed * 3.6
+              : -1;
 
-          // ── Fallback: hitung kecepatan dari jarak/waktu jika GPS speed tidak ada ──
+          // ── Fallback jarak/waktu jika kecepatan GPS tidak tersedia ─────────
           if (rawKmh < 0 && lastLocRef.current) {
-            const dt = (nowMs - lastLocRef.current.timeMs) / 1000; // detik
+            const dt = (nowMs - lastLocRef.current.timeMs) / 1000;
             if (dt > 0) {
-              const distM = haversineMeters(lastLocRef.current.coords, currentCoords);
-              rawKmh = (distM / dt) * 3.6; // m/s → km/h
+              const distM = haversineMeters(
+                lastLocRef.current.coords,
+                currentCoords
+              );
+              rawKmh = (distM / dt) * 3.6;
             } else {
               rawKmh = 0;
             }
@@ -154,24 +238,29 @@ export function useUserLocation(
             rawKmh = 0;
           }
 
-          // ── Sanity check: reject GPS glitch sesuai profil kendaraan ──
+          // ── Sanity check: reject lonjakan glitch GPS ───────────────────────
           const maxGlitch = options?.maxSpeedGlitch ?? 200;
           if (rawKmh > maxGlitch) {
-            rawKmh = emaSpeedRef.current; // gunakan nilai EMA terakhir
+            rawKmh = emaSpeedRef.current;
           }
 
-          // ── EMA low-pass filter (responsif sesuai dinamika kendaraan) ─────────
+          // ── EMA low-pass filter kecepatan ─────────────────────────────────
           const alpha = options?.speedEmaAlpha ?? SPEED_EMA_ALPHA;
           emaSpeedRef.current =
             alpha * rawKmh + (1 - alpha) * emaSpeedRef.current;
 
           const filteredKmh = Math.max(0, emaSpeedRef.current);
 
-          // Update lastLoc untuk hitung fallback berikutnya
+          // Update lastLoc & global cache
           lastLocRef.current = { coords: currentCoords, timeMs: nowMs };
+          cachedLocation = {
+            coords: currentCoords,
+            accuracy: loc.coords.accuracy,
+            speedKmh: filteredKmh,
+            timestampMs: nowMs,
+          };
 
           setState((prev) => {
-            // Hindari duplikasi koordinat yang sama persis
             const last = prev.routeHistory[prev.routeHistory.length - 1];
             const isDifferent =
               !last ||
@@ -202,7 +291,7 @@ export function useUserLocation(
         errorMsg: err.message || "Failed to start GPS tracking.",
       }));
     }
-  }, []);
+  }, [options?.maxSpeedGlitch, options?.speedEmaAlpha]);
 
   const stopTracking = useCallback(() => {
     if (locationSubscription.current) {
@@ -211,7 +300,12 @@ export function useUserLocation(
     }
     emaSpeedRef.current = 0;
     lastLocRef.current = null;
-    setState((prev) => ({ ...prev, isTracking: false, speedKmh: 0, rawSpeedKmh: 0 }));
+    setState((prev) => ({
+      ...prev,
+      isTracking: false,
+      speedKmh: 0,
+      rawSpeedKmh: 0,
+    }));
   }, []);
 
   const clearRouteHistory = useCallback(() => {
