@@ -34,7 +34,7 @@ export const detectionsService = {
 
   /**
    * Mengambil daftar log deteksi mentah dengan opsi filter.
-   * GET /api/detections?limit=...&search=...&deviceId=...
+   * GET /api/detections?limit=...&search=...&deviceId=...&userId=...
    */
   async getDetections(filter?: DetectionsQueryFilter): Promise<RawDetection[]> {
     return apiClient.get<RawDetection[]>('/detections', {
@@ -42,8 +42,23 @@ export const detectionsService = {
         limit: filter?.limit,
         search: filter?.search,
         deviceId: filter?.deviceId,
+        userId: filter?.userId,
       },
     });
+  },
+
+  /**
+   * Mengambil riwayat deteksi khusus akun user tertentu.
+   * GET /api/detections/user/:userId
+   */
+  async getUserDetections(
+    userId: string,
+    limit = 100
+  ): Promise<RawDetection[]> {
+    return apiClient.get<RawDetection[]>(
+      `/detections/user/${encodeURIComponent(userId)}`,
+      { params: { limit } }
+    );
   },
 
   /**

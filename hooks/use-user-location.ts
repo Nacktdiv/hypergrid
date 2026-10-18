@@ -15,16 +15,11 @@ export interface UserLocationState {
   errorMsg: string | null;
 }
 
-/**
- * Global cache lokasi terakhir perangkat (persistent antar pergantian tab/layar).
- * Menghilangkan delay 2–5 detik saat berpindah dari halaman utama ke ride mode.
- */
-let cachedLocation: {
-  coords: LatLng;
-  accuracy: number | null;
-  speedKmh: number;
-  timestampMs: number;
-} | null = null;
+import {
+  backgroundTrackingService,
+  getCachedLocation,
+  updateCachedLocation,
+} from "@/services/background-tracking";
 
 /**
  * Low-pass EMA filter untuk kecepatan GPS.
@@ -53,22 +48,23 @@ export function useUserLocation(
   options?: { speedEmaAlpha?: number; maxSpeedGlitch?: number }
 ) {
   // Inisialisasi langsung dari cache modul agar tidak ada delay awal (0 ms)
+  const initialCached = getCachedLocation();
   const [state, setState] = useState<UserLocationState>({
-    coords: cachedLocation ? cachedLocation.coords : null,
-    accuracy: cachedLocation ? cachedLocation.accuracy : null,
-    speedKmh: cachedLocation ? cachedLocation.speedKmh : 0,
-    rawSpeedKmh: cachedLocation ? cachedLocation.speedKmh : 0,
-    routeHistory: cachedLocation ? [cachedLocation.coords] : [],
+    coords: initialCached ? initialCached.coords : null,
+    accuracy: initialCached ? initialCached.accuracy : null,
+    speedKmh: initialCached ? initialCached.speedKmh : 0,
+    rawSpeedKmh: initialCached ? initialCached.speedKmh : 0,
+    routeHistory: initialCached ? [initialCached.coords] : [],
     isTracking: false,
-    permissionGranted: cachedLocation != null,
+    permissionGranted: initialCached != null,
     errorMsg: null,
   });
 
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
-  const emaSpeedRef = useRef<number>(cachedLocation?.speedKmh ?? 0);
+  const emaSpeedRef = useRef<number>(initialCached?.speedKmh ?? 0);
   const lastLocRef = useRef<{ coords: LatLng; timeMs: number } | null>(
-    cachedLocation
-      ? { coords: cachedLocation.coords, timeMs: cachedLocation.timestampMs }
+    initialCached
+      ? { coords: initialCached.coords, timeMs: initialCached.timestampMs }
       : null
   );
 
@@ -97,12 +93,12 @@ export function useUserLocation(
             ? lastKnown.coords.speed * 3.6
             : 0;
 
-        cachedLocation = {
+        updateCachedLocation({
           coords: fastCoords,
           accuracy: lastKnown.coords.accuracy,
           speedKmh: rawKmh,
           timestampMs: lastKnown.timestamp,
-        };
+        });
 
         setState((prev) => ({
           ...prev,
@@ -132,12 +128,12 @@ export function useUserLocation(
           ? loc.coords.speed * 3.6
           : 0;
 
-      cachedLocation = {
+      updateCachedLocation({
         coords,
         accuracy: loc.coords.accuracy,
         speedKmh: rawKmh,
         timestampMs: loc.timestamp,
-      };
+      });
 
       setState((prev) => ({
         ...prev,
@@ -176,19 +172,19 @@ export function useUserLocation(
       }
 
       // Pastikan ada posisi awal cepat sebelum watchPosition mengirim update pertama
-      if (!cachedLocation) {
+      if (!getCachedLocation()) {
         const quick = await Location.getLastKnownPositionAsync().catch(() => null);
         if (quick) {
           const qCoords: LatLng = {
             latitude: quick.coords.latitude,
             longitude: quick.coords.longitude,
           };
-          cachedLocation = {
+          updateCachedLocation({
             coords: qCoords,
             accuracy: quick.coords.accuracy,
             speedKmh: 0,
             timestampMs: quick.timestamp,
-          };
+          });
           setState((prev) => ({
             ...prev,
             coords: qCoords,
@@ -230,11 +226,21 @@ export function useUserLocation(
                 lastLocRef.current.coords,
                 currentCoords
               );
-              rawKmh = (distM / dt) * 3.6;
+              // Filter jitter GPS saat perangkat diam (< 2 meter)
+              if (distM < 2.0) {
+                rawKmh = 0;
+              } else {
+                rawKmh = (distM / dt) * 3.6;
+              }
             } else {
               rawKmh = 0;
             }
           } else if (rawKmh < 0) {
+            rawKmh = 0;
+          }
+
+          // Eliminasi noise drift satelit saat kendaraan stasioner (< 1.5 km/h)
+          if (rawKmh < 1.5) {
             rawKmh = 0;
           }
 
@@ -249,16 +255,17 @@ export function useUserLocation(
           emaSpeedRef.current =
             alpha * rawKmh + (1 - alpha) * emaSpeedRef.current;
 
-          const filteredKmh = Math.max(0, emaSpeedRef.current);
+          // Deadband: jika hasil filter di bawah 1.0 km/h, kunci ke 0 murni
+          const filteredKmh = emaSpeedRef.current < 1.0 ? 0 : emaSpeedRef.current;
 
           // Update lastLoc & global cache
           lastLocRef.current = { coords: currentCoords, timeMs: nowMs };
-          cachedLocation = {
+          updateCachedLocation({
             coords: currentCoords,
             accuracy: loc.coords.accuracy,
             speedKmh: filteredKmh,
             timestampMs: nowMs,
-          };
+          });
 
           setState((prev) => {
             const last = prev.routeHistory[prev.routeHistory.length - 1];
@@ -321,6 +328,35 @@ export function useUserLocation(
       }
     };
   }, [autoStartTracking, getImmediateLocation, startTracking]);
+
+  // Dengarkan update lokasi dari Background Service ketika aplikasi berada di background / foreground
+  useEffect(() => {
+    const unsubscribe = backgroundTrackingService.addLocationListener((bg) => {
+      setState((prev) => {
+        const isDifferent =
+          !prev.coords ||
+          Math.abs(prev.coords.latitude - bg.coords.latitude) > 0.00001 ||
+          Math.abs(prev.coords.longitude - bg.coords.longitude) > 0.00001;
+
+        if (!isDifferent && prev.speedKmh === bg.speedKmh) return prev;
+
+        return {
+          ...prev,
+          coords: bg.coords,
+          accuracy: bg.accuracy,
+          speedKmh: bg.speedKmh,
+          rawSpeedKmh: bg.speedKmh,
+          routeHistory: isDifferent
+            ? [...prev.routeHistory, bg.coords]
+            : prev.routeHistory,
+        };
+      });
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   return {
     ...state,

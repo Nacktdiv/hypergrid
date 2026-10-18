@@ -52,6 +52,25 @@ export function useDetections() {
   }, []);
 
   /**
+   * Mengambil riwayat deteksi khusus akun user
+   */
+  const fetchUserDetections = useCallback(async (userId: string, limit = 100) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await detectionsService.getUserDetections(userId, limit);
+      setDetections(data);
+      return data;
+    } catch (err: any) {
+      const msg = err.message || 'Gagal memuat riwayat deteksi pengguna';
+      setError(msg);
+      return [];
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  /**
    * Mengirim single detection
    */
   const submitDetection = async (dto: CreateDetectionDto) => {
@@ -89,6 +108,7 @@ export function useDetections() {
     queueCount,
     fetchDetections,
     fetchDeviceDetections,
+    fetchUserDetections,
     submitDetection,
     syncOfflineQueue,
   };

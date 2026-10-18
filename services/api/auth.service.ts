@@ -1,4 +1,3 @@
-import * as Linking from 'expo-linking';
 import { authClient } from './auth-client';
 import { tokenStorage } from './token-storage';
 import type {
@@ -80,11 +79,15 @@ export const authService = {
    * Masuk akun menggunakan Google OAuth via Better-Auth Expo SDK
    */
   async signInWithGoogle(): Promise<AuthResponse | null> {
-    const callbackURL = Linking.createURL('/auth/callback');
     try {
       const { data, error } = await authClient.signIn.social({
         provider: 'google',
-        callbackURL,
+        // PENTING: Gunakan relative path saja.
+        // Plugin @better-auth/expo/client akan OTOMATIS mengkonversi ini
+        // ke deep link sesuai scheme (hypergrid://auth/callback atau
+        // exp://... di Expo Go). Jangan pakai Linking.createURL() di sini
+        // karena hasilnya adalah full URL yang tidak bisa di-intercept plugin.
+        callbackURL: '/auth/callback',
       });
 
       if (error) {

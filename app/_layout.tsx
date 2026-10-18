@@ -19,6 +19,7 @@ import {
   JetBrainsMono_400Regular,
   JetBrainsMono_700Bold,
 } from "@expo-google-fonts/jetbrains-mono";
+import { backgroundTrackingService } from "@/services/background-tracking";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -30,6 +31,8 @@ function RootNavigation() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="ride" />
       <Stack.Screen name="(onboarding)" />
+      {/* Route handler untuk deep link callback OAuth (hypergrid://auth/callback) */}
+      <Stack.Screen name="auth/callback" />
     </Stack>
   );
 }
@@ -50,6 +53,13 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [loaded, error]);
+
+  // Inisialisasi background tracking pada kondisi idle saat aplikasi dibuka
+  useEffect(() => {
+    backgroundTrackingService.startBackgroundTracking('idle').catch((err) => {
+      console.warn('[RootLayout] Background tracking idle init warning:', err);
+    });
+  }, []);
 
   if (!loaded && !error) {
     return null;

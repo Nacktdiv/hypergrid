@@ -36,10 +36,14 @@ export interface VehicleSensorConfig {
   zShockThreshold: number;
   /** Pengali visualisasi vibrasi jalan m/s² */
   vibrationFactor: number;
+  /** Nilai vibrasi dasar saat kendaraan berhenti / stasioner (m/s²) */
+  idleVibration: number;
   /** Pengali visualisasi jarum/gauge guncangan HUD (0–100) */
   shockGaugeMultiplier: number;
   /** Nilai alpha (0–1) filter low-pass EMA untuk penghalusan kecepatan GPS */
   speedEmaAlpha: number;
+  /** Faktor kalibrasi tampilan speedometer (mengikuti regulasi deviasi speedometer pabrikan) */
+  speedDisplayFactor: number;
   /** Kecepatan minimum (km/h) untuk diklasifikasikan sebagai kendaraan bergerak */
   minMovingSpeed: number;
   /** Batas kecepatan maksimal realistis untuk eliminasi lonjakan GPS error (km/h) */
@@ -82,9 +86,11 @@ export const VEHICLE_PROFILES: Record<VehicleId, VehicleProfile> = {
     sensorConfig: {
       zShockThreshold: 1.10, // Dynamic vertical shock di atas 1G gravitasi (total ~2.10G)
       vibrationFactor: 1.0,
+      idleVibration: 8, // Getaran halus kabin mobil saat idle
       shockGaugeMultiplier: 55,
       speedEmaAlpha: 0.20,
-      minMovingSpeed: 10.0,
+      speedDisplayFactor: 1.03, // Standar deviasi speedometer mobil ~3%
+      minMovingSpeed: 4.0, // Di bawah 4 km/h dianggap diam (stop lamp / parkir)
       maxSpeedGlitch: 180,
       severityThresholds: {
         severe: 2.2,
@@ -102,16 +108,18 @@ export const VEHICLE_PROFILES: Record<VehicleId, VehicleProfile> = {
     image: require("@/assets/vehicles/vehicle-motor.png"),
     markerEmoji: "🏍️",
     sensorConfig: {
-      zShockThreshold: 1.50, // Stang motor bergetar lebih kuat, ambang shock dinamis >= 1.50G (total ~2.50G)
+      zShockThreshold: 1.45, // Stang motor bergetar lebih kuat, ambang shock dinamis >= 1.45G
       vibrationFactor: 1.35,
+      idleVibration: 22, // Getaran mesin 1-silinder skutik pada stang saat idle
       shockGaugeMultiplier: 35,
       speedEmaAlpha: 0.35,
-      minMovingSpeed: 10.0,
+      speedDisplayFactor: 1.05, // Standar deviasi speedometer skutik Jepang ~5%
+      minMovingSpeed: 3.5,
       maxSpeedGlitch: 140,
       severityThresholds: {
         severe: 2.8,
         high: 2.0,
-        medium: 1.50,
+        medium: 1.45,
       },
     },
   },
@@ -126,10 +134,12 @@ export const VEHICLE_PROFILES: Record<VehicleId, VehicleProfile> = {
     sensorConfig: {
       zShockThreshold: 1.15,
       vibrationFactor: 0.85,
+      idleVibration: 0, // Sepeda tanpa mesin, getaran 0 saat berhenti
       shockGaugeMultiplier: 45,
       speedEmaAlpha: 0.40,
-      minMovingSpeed: 5.0,
-      maxSpeedGlitch: 60,
+      speedDisplayFactor: 1.00, // Kecepatan sepeda murni ground speed GPS
+      minMovingSpeed: 2.5,
+      maxSpeedGlitch: 50,
       severityThresholds: {
         severe: 2.3,
         high: 1.7,

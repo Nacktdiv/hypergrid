@@ -29,7 +29,7 @@ export function LeafletMap({
 
   // Buat HTML Leaflet sekali dengan titik awal nyata
   const htmlContent = useMemo(() => {
-    const { camera, route, damagePoints, userLocation, vehiclePosition } =
+    const { camera, route, damagePoints, vehiclePosition } =
       initialData;
     const centerLat = camera.latitude;
     const centerLng = camera.longitude;
@@ -39,10 +39,6 @@ export function LeafletMap({
       route.coordinates.map((c) => [c.latitude, c.longitude])
     );
     const damageData = JSON.stringify(damagePoints);
-    const userCoord = JSON.stringify([
-      userLocation.latitude,
-      userLocation.longitude,
-    ]);
     const vehicleCoord = JSON.stringify([
       vehiclePosition.latitude,
       vehiclePosition.longitude,
@@ -91,17 +87,17 @@ export function LeafletMap({
     }
 
     .vehicle-marker {
-      width: 38px !important;
-      height: 38px !important;
+      width: 42px !important;
+      height: 42px !important;
       display: flex;
       align-items: center;
       justify-content: center;
       background: #0F172A;
-      color: #38BDF8;
       border-radius: 50%;
-      border: 2px solid #ffffff;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-      font-size: 18px;
+      border: 3px solid #009EFF;
+      box-shadow: 0 4px 14px rgba(0, 158, 255, 0.5);
+      font-size: 20px;
+      user-select: none;
     }
     .leaflet-control-attribution {
       font-size: 9px !important;
@@ -169,29 +165,33 @@ export function LeafletMap({
       };
       window.renderDamagePoints(${damageData});
 
-      // User Marker
-      var userIcon = L.divIcon({
-        className: '',
-        html: '<div class="user-marker"></div>',
-        iconSize: [20, 20],
-        iconAnchor: [10, 10]
-      });
-      window.userMarker = L.marker(${userCoord}, { icon: userIcon }).addTo(window.map);
-
-      // Vehicle Marker
+      // Unified User Vehicle Location Marker
       var vehicleEmoji = "${vehicleType === "motor" ? "🏍️" : vehicleType === "bicycle" ? "🚲" : "🚗"}";
       var vehicleIcon = L.divIcon({
         className: '',
         html: '<div class="vehicle-marker">' + vehicleEmoji + '</div>',
-        iconSize: [38, 38],
-        iconAnchor: [19, 19]
+        iconSize: [42, 42],
+        iconAnchor: [21, 21]
       });
       window.vehicleMarker = L.marker(${vehicleCoord}, { icon: vehicleIcon }).addTo(window.map);
+
+      // Helper untuk mengganti ikon emoji kendaraan secara real-time
+      window.setVehicleType = function(vType) {
+        var emoji = vType === "motor" ? "🏍️" : (vType === "bicycle" ? "🚲" : "🚗");
+        var newIcon = L.divIcon({
+          className: '',
+          html: '<div class="vehicle-marker">' + emoji + '</div>',
+          iconSize: [42, 42],
+          iconAnchor: [21, 21]
+        });
+        if (window.vehicleMarker) {
+          window.vehicleMarker.setIcon(newIcon);
+        }
+      };
 
       // Helper pembaruan real-time dinamis (tanpa me-reload seluruh halaman)
       window.updatePosition = function(lat, lng) {
         if (window.vehicleMarker) window.vehicleMarker.setLatLng([lat, lng]);
-        if (window.userMarker) window.userMarker.setLatLng([lat, lng]);
         if (window.map) window.map.panTo([lat, lng], { animate: true, duration: 0.6 });
       };
 
@@ -220,6 +220,16 @@ export function LeafletMap({
 </html>
     `;
   }, [initialData, interactive, vehicleType]);
+
+  // Pembaruan ikon kendaraan seketika saat user memilih jenis kendaraan baru di main page
+  useEffect(() => {
+    if (!isMapLoaded.current || !webViewRef.current) return;
+    const js = `
+      if (window.setVehicleType) window.setVehicleType('${vehicleType}');
+      true;
+    `;
+    webViewRef.current.injectJavaScript(js);
+  }, [vehicleType]);
 
   // Pembaruan posisi kendaraan & jejak rute via injectJavaScript (Ultra-smooth, no reload)
   useEffect(() => {

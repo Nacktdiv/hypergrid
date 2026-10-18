@@ -11,6 +11,7 @@ import { authEvents } from '@/services/api/auth-events';
 import type { AuthUser, SignInEmailDto, SignUpEmailDto, AuthResponse } from '@/types/api';
 
 import { tokenStorage } from '@/services/api/token-storage';
+import { defaultEdgeDetector } from '@/edge-ai/detector';
 
 export interface AuthContextType {
   user: AuthUser | null;
@@ -154,6 +155,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       unsubscribe();
     };
   }, [checkSession]);
+
+  // Sinkronkan ID pengguna terautentikasi ke Edge Detector (agar data deteksi melekat pada akun sendiri)
+  useEffect(() => {
+    defaultEdgeDetector.setUserId(user?.id ?? null);
+  }, [user]);
 
   const signIn = async (dto: SignInEmailDto) => {
     setIsLoading(true);

@@ -9,7 +9,6 @@ import {
 import {
   CheckCircle,
   Database,
-  Layers,
   MapPin,
   ShieldAlert,
   Wrench,
@@ -17,9 +16,7 @@ import {
 } from "lucide-react-native";
 
 import { LeafletMap } from "@/components/map/leaflet-map";
-import { StaticMapFallback } from "@/components/map/static-map-fallback";
 import {
-  MAIN_MAP_DATA,
   type DamagePoint,
   type MapData,
 } from "@/components/map/map-data";
@@ -27,16 +24,16 @@ import { Touchable } from "@/components/ui/touchable";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
 import { useUserLocation } from "@/hooks/use-user-location";
 import type { PotholeCluster, PotholeStatus } from "@/types/api";
-
-import { VEHICLE_IMAGES, type VehicleId } from "./mock-data";
+import { type VehicleId } from "@/contexts/vehicle-context";
 
 type FilterStatus = "all" | PotholeStatus;
 
 /**
- * Peta utama interaktif — Figma `Map` #114:1270.
+ * Peta utama interaktif — Leaflet + OpenStreetMap.
  *
  * Dilengkapi:
  *   - Live GPS Device tracking koordinat lokasi pengguna saat ini
+ *   - Ikon lokasi marker dinamis (Mobil / Motor / Sepeda)
  *   - Query spasial klaster PostGIS real-time di sekitar koordinat perangkat
  *   - Filter chip status klaster (Semua, Aktif, Terverifikasi, Selesai)
  *   - Modal detail interaktif saat marker kerusakan ditekan
@@ -55,7 +52,6 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
     null
   );
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-  const [useVectorMap, setUseVectorMap] = useState(false);
 
   // Ambil klaster di sekitar live koordinat pengguna saat ini jika tersedia
   useEffect(() => {
@@ -79,32 +75,26 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
   }, [clusters, activeFilter]);
 
   const mapData: MapData = useMemo(() => {
-    const baseCenter = liveCoords || MAIN_MAP_DATA.camera;
+    const baseCenter = liveCoords || { latitude: -6.2088, longitude: 106.8456 };
 
-    const liveDamagePoints: DamagePoint[] =
-      filteredClusters.length > 0
-        ? filteredClusters.map((c) => ({
-            id: c.id,
-            position: {
-              latitude: c.center_latitude,
-              longitude: c.center_longitude,
-            },
-            severity: c.severity === "severe" ? "high" : c.severity,
-            reportCount: c.detection_count,
-          }))
-        : liveCoords
-        ? []
-        : MAIN_MAP_DATA.damagePoints;
+    // Hanya render data riil dari PostGIS clusters (tanpa titik dummy)
+    const liveDamagePoints: DamagePoint[] = filteredClusters.map((c) => ({
+      id: c.id,
+      position: {
+        latitude: c.center_latitude,
+        longitude: c.center_longitude,
+      },
+      severity: c.severity === "severe" ? "high" : c.severity,
+      reportCount: c.detection_count,
+    }));
 
     return {
       camera: {
         latitude: baseCenter.latitude,
         longitude: baseCenter.longitude,
-        zoom: liveCoords ? 15 : MAIN_MAP_DATA.camera.zoom,
+        zoom: 15,
       },
-      route: liveCoords
-        ? { id: "user-route", coordinates: [] }
-        : MAIN_MAP_DATA.route,
+      route: { id: "user-route", coordinates: [] },
       damagePoints: liveDamagePoints,
       userLocation: baseCenter,
       vehiclePosition: baseCenter,
@@ -115,20 +105,6 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
     const found = clusters.find((c) => c.id === point.id);
     if (found) {
       setSelectedCluster(found);
-    } else {
-      // Mock cluster jika menekan titik default koridor
-      setSelectedCluster({
-        id: point.id,
-        center_latitude: point.position.latitude,
-        center_longitude: point.position.longitude,
-        severity: point.severity,
-        confidence_avg: 0.94,
-        detection_count: point.reportCount,
-        status: "active",
-        first_detected_at: new Date().toISOString(),
-        last_detected_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
     }
   };
 
@@ -193,18 +169,11 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
       className="flex-1 w-full overflow-hidden rounded-2xl border border-[#CAD5E2]"
       style={{ height: 340, width: "100%" }}
     >
-      {useVectorMap ? (
-        <StaticMapFallback
-          data={mapData}
-          onDamagePress={handleMarkerPress}
-          vehicleIcon={VEHICLE_IMAGES[vehicleId]}
-        />
-      ) : (
-        <LeafletMap
-          data={mapData}
-          onDamagePress={handleMarkerPress}
-        />
-      )}
+      <LeafletMap
+        data={mapData}
+        vehicleType={vehicleId}
+        onDamagePress={handleMarkerPress}
+      />
 
       {/* SWISS DESIGN GPS LIVE TELEMETRY BADGE */}
       <View className="absolute bottom-3 left-3 flex-row items-center gap-1.5 rounded-md border border-slate-900 bg-slate-950/90 px-2.5 py-1 shadow-md">
@@ -236,19 +205,9 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
             <Text className="font-mono text-[10px] text-slate-700">
               {clusters.length > 0
                 ? `PostGIS: ${filteredClusters.length} Clusters`
-                : "Active Map Corridor"}
+                : "No Clusters Nearby"}
             </Text>
           </View>
-
-          {/* Toggle Map Mode */}
-          <Touchable onPress={() => setUseVectorMap((prev) => !prev)}>
-            <View className="flex-row items-center gap-1.5 rounded-full border border-sky-300 bg-white/95 px-2.5 py-1 shadow-sm backdrop-blur-md">
-              <Layers size={11} color="#009EFF" />
-              <Text className="font-mono-bold text-[10px] text-sky-700">
-                {useVectorMap ? "Visual Map" : "OpenStreetMap"}
-              </Text>
-            </View>
-          </Touchable>
         </View>
 
         {/* Filter Chips Horizontal Bar */}

@@ -25,6 +25,7 @@ import {
 import type { HistoryEntry, Metric } from "@/components/history/mock-data";
 import type { DamagePoint, LatLng } from "@/components/map/map-data";
 import { Touchable } from "@/components/ui/touchable";
+import { useAuth } from "@/hooks/use-auth";
 import { useDetections } from "@/hooks/use-detections";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
 
@@ -36,10 +37,12 @@ import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
  *   - Tipografi sans-serif dominan (Chivo & JetBrains Mono)
  *   - Data-dense & bebas dari elemen dekorasi palsu (NO DUMMY MAPS)
  *   - Pemilihan 7 hari dinamis dari hari ini + Kalender Rentang Tanggal
+ *   - Setiap user hanya melihat data riwayat akunnya sendiri (Role User Driver, bukan Admin)
  *   - Jika tidak ada perjalanan pada tanggal itu: Tampilkan Swiss Empty State
  */
 export default function HistoryScreen() {
   const router = useRouter();
+  const { user } = useAuth();
 
   // Tanggal terpilih (format ISO: YYYY-MM-DD, default hari ini)
   const [selectedDate, setSelectedDate] = useState<string>(() =>
@@ -60,13 +63,13 @@ export default function HistoryScreen() {
   const loadData = useCallback(async () => {
     try {
       await Promise.allSettled([
-        fetchDetections({ limit: 100 }),
+        fetchDetections({ limit: 100, userId: user?.id }),
         fetchClusters({ limit: 100 }),
       ]);
     } catch (e) {
       console.warn("[HistoryScreen] Gagal memuat data telemetri:", e);
     }
-  }, [fetchDetections, fetchClusters]);
+  }, [fetchDetections, fetchClusters, user]);
 
   useEffect(() => {
     loadData();
@@ -79,12 +82,15 @@ export default function HistoryScreen() {
   };
 
   // 1. FILTER DATA DETEKSI TELEMETRI KHUSUS PADA TANGGAL YANG DIPILIH
+  // HANYA menampilkan riwayat akun sendiri (bukan akun admin / user lain)
   const detectionsOnDate = useMemo(() => {
     return detections.filter((d) => {
+      // Pastikan hanya data akun sendiri jika user terautentikasi
+      if (user?.id && d.userId && d.userId !== user.id) return false;
       if (!d.detectedAt) return false;
       return d.detectedAt.startsWith(selectedDate);
     });
-  }, [detections, selectedDate]);
+  }, [detections, selectedDate, user]);
 
   const hasTripOnDate = detectionsOnDate.length > 0;
 

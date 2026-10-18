@@ -109,6 +109,7 @@ export interface DetectionsQueryFilter {
   limit?: number;
   search?: string;
   deviceId?: string;
+  userId?: string;
 }
 
 /**

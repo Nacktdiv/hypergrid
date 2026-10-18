@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -19,10 +19,13 @@ import { Touchable } from "@/components/ui/touchable";
 import { useVehicle, type VehicleProfile } from "@/contexts/vehicle-context";
 import { EDGE_AI_CONFIG } from "@/edge-ai/model-config";
 import type { RawSensorSample } from "@/edge-ai/types";
+import { defaultEdgeDetector } from "@/edge-ai/detector";
+import { useAuth } from "@/hooks/use-auth";
 import { useEdgeAi } from "@/hooks/use-edge-ai";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
 import { useUserLocation } from "@/hooks/use-user-location";
 import { offlineQueue } from "@/services/api/offline-queue";
+import { backgroundTrackingService } from "@/services/background-tracking";
 import type { DamagePoint } from "@/components/map/map-data";
 
 /**
@@ -36,18 +39,36 @@ import type { DamagePoint } from "@/components/map/map-data";
  *  4. Ambang batas adaptif per kendaraan (Mobil MPV: 1.10G dinamis, Motor: 1.50G dinamis)
  *  5. Evaluasi multi-sampel Smart Window Heuristic / TFLite (mencegah false positive getaran mikro)
  *  6. PostGIS early warning radius 25 m via /nearby
+ *  7. Full Background Service & Foreground Service execution
  */
 export default function RideScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { vehicleProfile } = useVehicle();
   const [isPaused, setIsPaused] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
 
+  // Pastikan ID user terasosiasi ke detektor saat berkendara
+  useEffect(() => {
+    defaultEdgeDetector.setUserId(user?.id ?? null);
+  }, [user]);
+
+  // Kelola mode background tracking berkendara (High-Precision GPS + Foreground Service)
+  useEffect(() => {
+    backgroundTrackingService.startBackgroundTracking("driving").catch((err) => {
+      console.warn("[RideScreen] Gagal mengaktifkan background driving tracking:", err);
+    });
+
+    return () => {
+      // Saat keluar dari ride screen, kembalikan ke background standby idle
+      backgroundTrackingService.startBackgroundTracking("idle").catch(() => {});
+    };
+  }, []);
+
   // Status Telemetri Live
-  const [currentSpeed, setCurrentSpeed] = useState(45);
-  const [currentVibration, setCurrentVibration] = useState(100);
-  const [shockLevel, setShockLevel] = useState(35);
+  const [currentVibration, setCurrentVibration] = useState(0);
+  const [shockLevel, setShockLevel] = useState(15);
   const [anomalyBanner, setAnomalyBanner] = useState<string | null>(null);
   const [liveDetections, setLiveDetections] = useState<DamagePoint[]>([]);
 
@@ -87,6 +108,18 @@ export default function RideScreen() {
     maxSpeedGlitch: vehicleProfile.sensorConfig.maxSpeedGlitch,
   });
 
+  // Kecepatan spidometer terkalibrasi secara dinamis sesuai profil kendaraan
+  const currentSpeed = useMemo(() => {
+    if (isPaused || isFinished) return 0;
+    const minSpeed = vehicleProfile.sensorConfig.minMovingSpeed ?? 3.5;
+    const displayFactor = vehicleProfile.sensorConfig.speedDisplayFactor ?? 1.0;
+
+    if (gpsSpeed >= minSpeed) {
+      return Math.round(gpsSpeed * displayFactor);
+    }
+    return 0;
+  }, [gpsSpeed, isPaused, isFinished, vehicleProfile]);
+
   // Hook Edge AI dan PostGIS Early Warning
   const {
     detectedCount,
@@ -98,32 +131,18 @@ export default function RideScreen() {
 
   const { nearbyCluster, checkNearby } = usePotholeClusters();
 
-  // 1. Loop Telemetri Kecepatan Kendaraan & Early Warning PostGIS
+  // Loop Pemeriksaan Early Warning PostGIS Cluster di Sekitar Rute
   useEffect(() => {
-    if (isPaused || isFinished) return;
+    if (isPaused || isFinished || !liveCoords) return;
 
-    const telemetryTimer = setInterval(() => {
-      if (gpsSpeed > 0) {
-        setCurrentSpeed(Math.round(gpsSpeed));
-      } else {
-        const dynamicSpeed = Math.floor(40 + Math.random() * 8);
-        setCurrentSpeed(dynamicSpeed);
-      }
-
-      if (!sensorEnabled) {
-        const dynamicVibration = Math.floor(95 + Math.random() * 15);
-        setCurrentVibration(dynamicVibration);
-      }
-
-      if (liveCoords) {
-        checkNearby(liveCoords.latitude, liveCoords.longitude, 25);
-      }
+    const earlyWarningTimer = setInterval(() => {
+      checkNearby(liveCoords.latitude, liveCoords.longitude, 25);
     }, 2500);
 
-    return () => clearInterval(telemetryTimer);
-  }, [isPaused, isFinished, sensorEnabled, checkNearby, liveCoords, gpsSpeed]);
+    return () => clearInterval(earlyWarningTimer);
+  }, [isPaused, isFinished, checkNearby, liveCoords]);
 
-  // 2. Gyroscope Listener — simpan angular velocity terbaru
+  // 4. Gyroscope Listener — simpan angular velocity terbaru
   useEffect(() => {
     if (isPaused || isFinished || !sensorEnabled) return;
 
@@ -136,7 +155,7 @@ export default function RideScreen() {
     return () => subscription.remove();
   }, [isPaused, isFinished, sensorEnabled]);
 
-  // 3. Accelerometer Listener + Causal EMA Gravity Removal + Buffer Window
+  // 5. Accelerometer Listener + Causal EMA Gravity Removal + Buffer Window
   useEffect(() => {
     if (isPaused || isFinished || !sensorEnabled) return;
 
@@ -187,15 +206,21 @@ export default function RideScreen() {
       );
       setShockLevel(computedLevel);
 
-      // Vibrasi sasis dinamis (m/s²)
-      setCurrentVibration(
-        Math.round(
-          totalG *
-            9.81 *
-            10 *
+      // Vibrasi sasis dinamis (m/s²) sesuai standar kendaraan
+      const minSpeed = vehicleProfile.sensorConfig.minMovingSpeed ?? 3.5;
+      const isMoving = gpsSpeed >= minSpeed;
+      const idleVib = vehicleProfile.sensorConfig.idleVibration ?? 0;
+
+      if (!isMoving) {
+        setCurrentVibration(idleVib);
+      } else {
+        // Gabungan getaran dasar idle + respons getaran dinamis permukaan jalan
+        const dynamicVib = Math.round(
+          (dynamicVerticalG * 9.81 * 2.8 + idleVib) *
             vehicleProfile.sensorConfig.vibrationFactor
-        )
-      );
+        );
+        setCurrentVibration(Math.min(180, Math.max(idleVib, dynamicVib)));
+      }
 
       // 3. Tambahkan ke rolling window buffer Edge AI
       const sample: RawSensorSample = {
@@ -212,14 +237,10 @@ export default function RideScreen() {
 
       // 4. Pre-filter Trigger:
       // Hanya picu evaluasi mendalam jika:
-      // a. Kendaraan bergerak nyata (speed >= minMovingSpeed, misal >= 10 km/h)
+      // a. Kendaraan bergerak nyata (isMoving === true)
       // b. Guncangan vertikal dinamis melewati threshold adaptif kendaraan
       // c. Cooldown 3 detik sudah berlalu (mencegah duplicate dari 1 lubang)
       const now = Date.now();
-      const minSpeed =
-        vehicleProfile.sensorConfig.minMovingSpeed ??
-        EDGE_AI_CONFIG.minDetectionSpeedKmh;
-      const isMoving = gpsSpeed >= minSpeed;
       const shockThreshold = vehicleProfile.sensorConfig.zShockThreshold;
       const isCooldownPassed =
         now - lastDetectionTimeRef.current > EDGE_AI_CONFIG.detectionCooldownMs;
@@ -351,6 +372,7 @@ export default function RideScreen() {
   const handleStopDrive = async () => {
     setIsFinished(true);
     stopTracking();
+    await backgroundTrackingService.startBackgroundTracking("idle").catch(() => {});
     try {
       await offlineQueue.flush();
     } catch (err) {
@@ -411,8 +433,16 @@ export default function RideScreen() {
             {/* TOGGLE SENSOR HP */}
             <Touchable
               accessibilityLabel="Toggle phone accelerometer sensor"
-              accessibilityRole="button"
-              onPress={() => setSensorEnabled((prev) => !prev)}
+              onPress={() => {
+                setSensorEnabled((prev) => {
+                  const next = !prev;
+                  if (!next) {
+                    setCurrentVibration(0);
+                    setShockLevel(0);
+                  }
+                  return next;
+                });
+              }}
             >
               <View
                 className={`flex-row items-center gap-1.5 rounded-xl border px-3 py-1.5 shadow-sm ${
