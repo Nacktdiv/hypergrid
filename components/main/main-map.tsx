@@ -1,17 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Text,
   View,
 } from "react-native";
 import {
-  CheckCircle,
   Database,
   MapPin,
   ShieldAlert,
-  Wrench,
   X,
 } from "lucide-react-native";
 
@@ -34,13 +31,12 @@ type FilterStatus = "all" | PotholeStatus;
  * Dilengkapi:
  *   - Live GPS Device tracking koordinat lokasi pengguna saat ini
  *   - Ikon lokasi marker dinamis (Mobil / Motor / Sepeda)
- *   - Query spasial klaster PostGIS real-time di sekitar koordinat perangkat
+ *   - Menampilkan seluruh klaster PostGIS publik dari database (bukan hanya history user)
  *   - Filter chip status klaster (Semua, Aktif, Terverifikasi, Selesai)
- *   - Modal detail interaktif saat marker kerusakan ditekan
- *   - Aksi pembaruan status verifikasi PU langsung dari peta
+ *   - Modal detail informasi klaster (read-only untuk pengguna mobile)
  */
 export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
-  const { clusters, fetchClusters, updateStatus } = usePotholeClusters();
+  const { clusters, fetchClusters } = usePotholeClusters();
   const {
     coords: liveCoords,
     getImmediateLocation,
@@ -51,22 +47,11 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
   const [selectedCluster, setSelectedCluster] = useState<PotholeCluster | null>(
     null
   );
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
-  // Ambil klaster di sekitar live koordinat pengguna saat ini jika tersedia
+  // Ambil seluruh klaster lubang jalan nyata di database secara publik (seluruh titik kota)
   useEffect(() => {
-    if (liveCoords) {
-      fetchClusters({
-        minLat: liveCoords.latitude - 0.08,
-        minLon: liveCoords.longitude - 0.08,
-        maxLat: liveCoords.latitude + 0.08,
-        maxLon: liveCoords.longitude + 0.08,
-        limit: 100,
-      });
-    } else {
-      fetchClusters({ limit: 100 });
-    }
-  }, [fetchClusters, liveCoords]);
+    fetchClusters({ limit: 500 });
+  }, [fetchClusters]);
 
   // Filter klaster berdasarkan tab yang dipilih
   const filteredClusters = useMemo(() => {
@@ -105,26 +90,6 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
     const found = clusters.find((c) => c.id === point.id);
     if (found) {
       setSelectedCluster(found);
-    }
-  };
-
-  const handleUpdateStatus = async (newStatus: PotholeStatus) => {
-    if (!selectedCluster) return;
-    setIsUpdatingStatus(true);
-    try {
-      await updateStatus(selectedCluster.id, { status: newStatus });
-      setSelectedCluster((prev) => (prev ? { ...prev, status: newStatus } : null));
-      Alert.alert(
-        "Status Updated",
-        `Road cluster successfully marked as: ${newStatus.toUpperCase()}`
-      );
-    } catch (err: any) {
-      Alert.alert(
-        "Update Failed",
-        err.message || "Ensure server connection is available."
-      );
-    } finally {
-      setIsUpdatingStatus(false);
     }
   };
 
@@ -333,42 +298,17 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
                   </View>
                 </View>
 
-                {/* Field Officer Verification Actions */}
-                <View className="gap-2 pt-1">
-                  <Text className="font-quicksand-semibold text-xs text-slate-500">
-                    Field Verification Actions:
-                  </Text>
-                  <View className="flex-row gap-2">
-                    <Touchable
-                      className="flex-1"
-                      onPress={() => handleUpdateStatus("verified")}
-                    >
-                      <View className="flex-row items-center justify-center gap-2 rounded-xl bg-sky-600 py-3 shadow-sm">
-                        {isUpdatingStatus ? (
-                          <ActivityIndicator size="small" color="#FFFFFF" />
-                        ) : (
-                          <>
-                            <CheckCircle size={16} color="#FFFFFF" />
-                            <Text className="font-quicksand-bold text-xs text-white">
-                              Validate (Verified)
-                            </Text>
-                          </>
-                        )}
-                      </View>
-                    </Touchable>
-
-                    <Touchable
-                      className="flex-1"
-                      onPress={() => handleUpdateStatus("repaired")}
-                    >
-                      <View className="flex-row items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 shadow-sm">
-                        <Wrench size={16} color="#FFFFFF" />
-                        <Text className="font-quicksand-bold text-xs text-white">
-                          Mark Repaired
-                        </Text>
-                      </View>
-                    </Touchable>
+                {/* Official Public Works Status Notice (Read-only for Mobile Users) */}
+                <View className="rounded-xl border border-slate-200 bg-slate-50 p-3 mt-1">
+                  <View className="flex-row items-center gap-1.5">
+                    <ShieldAlert size={14} color="#64748B" />
+                    <Text className="font-quicksand-bold text-[11px] text-slate-700">
+                      Public Road Hazard Data
+                    </Text>
                   </View>
+                  <Text className="mt-1 font-quicksand text-[11px] leading-relaxed text-slate-500">
+                    Verification, work orders, and road repairs are managed exclusively by the Public Works Department (Dinas PU) via the Web Admin Dashboard.
+                  </Text>
                 </View>
               </View>
             ) : null}
