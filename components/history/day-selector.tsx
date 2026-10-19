@@ -76,12 +76,12 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
             className={cn(
               "h-[58px] w-[58px] items-center justify-center rounded-2xl border-2 shadow-sm",
               isCustomDateSelected
-                ? "border-custom-black bg-custom-black"
-                : "border-custom-borderDisabled bg-white"
+                ? "border-brand bg-brand"
+                : "border-slate-200/80 bg-white"
             )}
           >
             <CalendarIcon
-              size={24}
+              size={22}
               color={isCustomDateSelected ? "#FFFFFF" : "#0F172A"}
             />
           </View>
@@ -273,14 +273,14 @@ function DayPill({ day, isActive, onPress }: DayPillProps) {
         className={cn(
           "w-[56px] items-center justify-center gap-0.5 rounded-2xl border-2 py-2 shadow-sm",
           isActive
-            ? "border-custom-black bg-custom-black"
-            : "border-custom-borderDisabled bg-white"
+            ? "border-brand bg-brand"
+            : "border-slate-200/80 bg-white"
         )}
       >
         <Text
           className={cn(
             "font-mono text-[10px] font-bold uppercase",
-            isActive ? "text-slate-300" : "text-slate-500"
+            isActive ? "text-white" : "text-slate-700"
           )}
         >
           {day.short}

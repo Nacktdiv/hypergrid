@@ -1,43 +1,57 @@
+import React from "react";
 import { Text, View } from "react-native";
-import { ChevronLeft } from "lucide-react-native";
+import { ChevronLeft, HelpCircle } from "lucide-react-native";
 
-import { Touchable } from "@/components/ui/touchable";
+import { AppButton } from "@/components/ui/app-button";
+import { TopFloatingHeader } from "@/components/ui/top-floating-header";
+import { TOKENS } from "@/lib/theme/tokens";
 
-/**
- * Top floating bar — Figma `Header` #114:1396 / #114:1443.
- *
- * Row: tombol back bulat putih (radius 100px, shadow lembut) + kartu
- * rute "Drive Mode" (Chivo 600 20, isi Black C #121212, radius 16).
- * Overlay semi-transparan agar map tetap terlihat di belakangnya.
- */
-export function TopFloatingBar({ onBack }: { onBack?: () => void }) {
+export interface TopFloatingBarProps {
+  onBack?: () => void;
+  onHelp?: () => void;
+  title?: string;
+}
+
+export function TopFloatingBar({
+  onBack,
+  onHelp,
+  title = "Ride in progress",
+}: TopFloatingBarProps) {
   return (
-    <View className="flex-row items-center gap-4">
-      {/* Back button — Figma `back button` #114:1397 */}
-      <Touchable
-        accessibilityLabel="Back"
-        accessibilityRole="button"
-        onPress={onBack}
-      >
+    <TopFloatingHeader
+      left={
+        <AppButton
+          variant="circle"
+          size="sm"
+          onPress={onBack}
+          iconLeft={
+            <ChevronLeft size={22} color={TOKENS.colors.slate[800]} />
+          }
+          accessibilityLabel="Back to start screen"
+        />
+      }
+      center={
         <View
-          className="h-12 w-12 items-center justify-center rounded-full bg-white"
-          style={{
-            shadowColor: "#000000",
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.25,
-            shadowRadius: 6,
-          }}
+          className="flex-row items-center gap-2 px-4 py-2 rounded-full bg-slate-900/90 border border-slate-800"
+          style={TOKENS.shadows.card}
         >
-          <ChevronLeft size={24} color="#121212" />
+          <View className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+          <Text className="font-chivo-bold text-sm text-white tracking-wide">
+            {title}
+          </Text>
         </View>
-      </Touchable>
-
-      {/* Kartu rute — Figma `Title` #114:1398 */}
-      <View className="h-12 flex-1 flex-row items-center justify-center rounded-2xl bg-black/85 px-6">
-        <Text className="font-chivo-bold text-xl text-white">
-          Drive Mode
-        </Text>
-      </View>
-    </View>
-  )
+      }
+      right={
+        <AppButton
+          variant="circle"
+          size="sm"
+          onPress={onHelp}
+          iconLeft={
+            <HelpCircle size={20} color={TOKENS.colors.slate[800]} />
+          }
+          accessibilityLabel="Ride instructions and telemetry help"
+        />
+      }
+    />
+  );
 }

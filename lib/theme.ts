@@ -1,4 +1,7 @@
 import { DarkTheme, DefaultTheme, type Theme } from '@react-navigation/native';
+import { TOKENS } from './theme/tokens';
+
+export { TOKENS };
  
 export const THEME = {
   light: {

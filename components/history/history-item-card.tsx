@@ -33,7 +33,7 @@ export function HistoryItemCard({ entry }: { entry: HistoryEntry }) {
           </View>
 
           <View className="items-end gap-1">
-            <Text className="font-mono text-[11px] text-slate-500">
+            <Text className="font-mono text-[11px] text-slate-700 font-semibold">
               {entry.date}
             </Text>
             <Text className="font-mono-bold text-sm text-custom-black">
@@ -44,7 +44,7 @@ export function HistoryItemCard({ entry }: { entry: HistoryEntry }) {
       </Touchable>
 
       <View className="mt-4 flex-row items-center justify-between border-t border-slate-100 pt-4">
-        <Text className="text-sm text-slate-500">{entry.time}</Text>
+        <Text className="text-sm font-medium text-slate-700">{entry.time}</Text>
 
         <View className="flex-row items-center gap-2">
           <View
@@ -55,12 +55,12 @@ export function HistoryItemCard({ entry }: { entry: HistoryEntry }) {
           >
             <TriangleAlert
               size={12}
-              color={hasGuncangan ? "#EF4444" : "#94A3B8"}
+              color={hasGuncangan ? "#EF4444" : "#64748B"}
             />
             <Text
               className={cn(
                 "font-mono text-[11px]",
-                hasGuncangan ? "text-custom-danger" : "text-slate-500"
+                hasGuncangan ? "text-custom-danger font-bold" : "text-slate-700 font-semibold"
               )}
             >
               {entry.guncangan} {entry.guncangan === 1 ? "shock" : "shocks"}
@@ -69,7 +69,7 @@ export function HistoryItemCard({ entry }: { entry: HistoryEntry }) {
 
           <ChevronDown
             size={16}
-            color="#94A3B8"
+            color="#64748B"
             style={{
               transform: [{ rotate: open ? "180deg" : "0deg" }],
             }}
@@ -79,7 +79,7 @@ export function HistoryItemCard({ entry }: { entry: HistoryEntry }) {
 
       {open ? (
         <View className="mt-3 rounded-2xl bg-slate-50 p-3">
-          <Text className="text-xs leading-5 text-slate-600">{entry.note}</Text>
+          <Text className="text-xs leading-5 text-slate-700">{entry.note}</Text>
         </View>
       ) : null}
     </View>
@@ -93,14 +93,14 @@ function Stop({ label, name, last }: { label: string; name: string; last?: boole
         <View
           className={cn(
             "h-2.5 w-2.5 rounded-full",
-            last ? "bg-custom-primary" : "bg-slate-300"
+            last ? "bg-custom-primary" : "bg-slate-400"
           )}
         />
-        {!last ? <View className="h-4 w-px bg-slate-200" /> : null}
+        {!last ? <View className="h-4 w-px bg-slate-300" /> : null}
       </View>
 
       <View className="flex-1 flex-row items-baseline gap-2">
-        <Text className="text-[10px] uppercase text-slate-400">{label}</Text>
+        <Text className="text-[10px] font-mono-bold uppercase text-slate-700">{label}</Text>
         <Text className="flex-1 text-sm text-custom-black" numberOfLines={1}>
           {name}
         </Text>

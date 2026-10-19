@@ -14,6 +14,7 @@ import { LogoutButton } from "@/components/profile/logout-button";
 import { PersonalInfoList } from "@/components/profile/personal-info-list";
 import { ProfileHeader } from "@/components/profile/profile-header";
 import { SelectedVehicleCard } from "@/components/profile/selected-vehicle-card";
+import { AppButton } from "@/components/ui/app-button";
 import { Touchable } from "@/components/ui/touchable";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -88,10 +89,10 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-custom-white" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-surface-canvas" edges={["top"]}>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-4 pt-4 pb-8"
+        contentContainerClassName="gap-5 px-4 pt-2 pb-8"
         showsVerticalScrollIndicator={false}
       >
         <ProfileHeader
@@ -104,8 +105,8 @@ export default function ProfileScreen() {
           }
         />
 
-        {/* Info Cards Container — Figma #114:1319 */}
-        <View className="gap-4 px-1 pt-2">
+        {/* Info Cards Container */}
+        <View className="gap-3.5 pt-1">
           <SelectedVehicleCard />
           <PersonalInfoList
             onEdit={handleOpenEdit}
@@ -123,15 +124,19 @@ export default function ProfileScreen() {
         onRequestClose={() => setEditModalVisible(false)}
       >
         <View className="flex-1 justify-end bg-black/40">
-          <View className="rounded-t-[32px] bg-white p-6 shadow-2xl">
-            <View className="mb-4 flex-row items-center justify-between">
+          <View className="rounded-t-sheet bg-white p-6 border-t border-slate-200/80 shadow-lg">
+            <View className="mb-4 flex-row items-center justify-between pb-2 border-b border-slate-100">
               <View className="flex-row items-center gap-2">
                 <Edit3 size={20} color="#009EFF" />
-                <Text className="font-chivo-bold text-xl text-[#0F172A]">
+                <Text className="font-chivo-bold text-xl text-slate-900">
                   Edit Personal Information
                 </Text>
               </View>
-              <Touchable onPress={() => setEditModalVisible(false)}>
+              <Touchable
+                onPress={() => setEditModalVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close edit modal"
+              >
                 <View className="rounded-full bg-slate-100 p-1.5">
                   <X size={18} color="#64748B" />
                 </View>
@@ -145,7 +150,7 @@ export default function ProfileScreen() {
                 </Text>
                 <TextInput
                   autoCapitalize="words"
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-quicksand text-sm text-[#0F172A]"
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-quicksand text-sm text-slate-900"
                   placeholder="Full Name"
                   value={nameInput}
                   onChangeText={setNameInput}
@@ -154,12 +159,12 @@ export default function ProfileScreen() {
 
               <View className="gap-1.5">
                 <Text className="font-quicksand-semibold text-xs text-slate-500">
-                  Phone Number / WhatsApp
+                  Phone Number
                 </Text>
                 <TextInput
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-quicksand text-sm text-[#0F172A]"
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-quicksand text-sm text-slate-900"
                   keyboardType="phone-pad"
-                  placeholder="+1 (555) 000-0000"
+                  placeholder="+62 812-3456-7890"
                   value={phoneInput}
                   onChangeText={setPhoneInput}
                 />
@@ -176,14 +181,17 @@ export default function ProfileScreen() {
                 </View>
               </View>
 
-              <Touchable onPress={handleSaveProfile}>
-                <View className="mt-2 flex-row items-center justify-center gap-2 rounded-xl bg-custom-primary py-3.5 shadow-md">
-                  <Check size={18} color="#FFFFFF" />
-                  <Text className="font-quicksand-bold text-base text-white">
-                    {isSaving ? "Saving..." : "Save Changes"}
-                  </Text>
-                </View>
-              </Touchable>
+              <View className="mt-2">
+                <AppButton
+                  variant="primary"
+                  size="md"
+                  label="Save Profile Changes"
+                  loading={isSaving}
+                  iconLeft={<Check size={18} color="#FFFFFF" />}
+                  onPress={handleSaveProfile}
+                  accessibilityLabel="Save Profile Changes"
+                />
+              </View>
             </View>
           </View>
         </View>

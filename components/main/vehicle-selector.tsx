@@ -1,85 +1,132 @@
+import React from "react";
 import { Image } from "expo-image";
 import { Text, View } from "react-native";
+import { Activity, Zap } from "lucide-react-native";
 
-import { cn } from "@/lib/utils";
 import { Touchable } from "@/components/ui/touchable";
+import {
+  VEHICLE_PROFILES,
+  type VehicleId,
+  type VehicleProfile,
+} from "@/contexts/vehicle-context";
+import { TOKENS } from "@/lib/theme/tokens";
+import { cn } from "@/lib/utils";
 
-import { VEHICLE_OPTIONS, type VehicleId } from "./mock-data";
+import { VEHICLE_OPTIONS } from "./mock-data";
 
-/**
- * Selector kendaraan — Figma `Vechile` #114:1280.
- *
- * Tinggi 64, radius 16, tiga opsi equal.
- * Aktif: isi custom.active (#BAD3F5) + border 2px custom.primary (#009EFF).
- * Non-aktif: isi custom.disabled (#E9EAEC) + border 2px custom.borderDisabled.
- *
- * State terpilih dimiliki screen; komponen ini murni presentasi.
- */
+export interface VehicleSelectorProps {
+  selected: VehicleId;
+  onSelect: (id: VehicleId) => void;
+  className?: string;
+}
+
 export function VehicleSelector({
   selected,
   onSelect,
-}: {
-  selected: VehicleId
-  onSelect: (id: VehicleId) => void
-}) {
-  return (
-    <View className="flex-row justify-center items-center gap-2.5">
-      {VEHICLE_OPTIONS.map((option) => (
-        <VehicleCard
-          key={option.id}
-          id={option.id}
-          image={option.image}
-          isActive={selected === option.id}
-          label={option.label}
-          onSelect={onSelect}
-        />
-      ))}
-    </View>
-  )
-}
+  className,
+}: VehicleSelectorProps) {
+  const activeProfile: VehicleProfile =
+    VEHICLE_PROFILES[selected] ?? VEHICLE_PROFILES.car;
 
-type VehicleCardProps = {
-  id: VehicleId
-  label: string
-  image: number
-  isActive: boolean
-  onSelect: (id: VehicleId) => void
-}
-
-function VehicleCard({ id, label, image, isActive, onSelect }: VehicleCardProps) {
   return (
-    <Touchable
-      className="flex-1"
-      onPress={() => onSelect(id)}
-      scaleTo={0.94}
-      accessibilityLabel={label}
-      accessibilityRole="radio"
-      accessibilityState={{ selected: isActive }}
-    >
-      <View
-        className={cn(
-          "w-full rounded-2xl border-2 items-center justify-center py-3 px-2 overflow-hidden flex-col gap-1",
-          isActive
-            ? "border-custom-primary bg-custom-active"
-            : "border-custom-borderDisabled bg-custom-disabled"
-        )}
-      >
-        <Image
-          source={image}
-          style={{ height: 28, width: 48 }}
-          contentFit="contain"
-          transition={200}
-        />
-        <Text
-          className={cn(
-            "font-chivo-bold text-sm text-center",
-            isActive ? "text-custom-primary" : "text-slate-500"
-          )}
-          numberOfLines={1}
-        >
-          {label}
-        </Text>
+    <View className={cn("gap-3", className)}>
+      {/* VEHICLE INFO ROW */}
+      <View className="flex-row items-center justify-between">
+        <View className="flex-1 mr-3">
+          <Text className="font-quicksand-bold text-[11px] tracking-wider uppercase text-brand">
+            {activeProfile.standardCategory}
+          </Text>
+          <Text
+            numberOfLines={1}
+            className="font-chivo-bold text-xl text-slate-900 mt-0.5"
+          >
+            {activeProfile.name}
+          </Text>
+          <Text className="font-quicksand text-xs text-slate-500 mt-0.5">
+            Plate: {activeProfile.plate}
+          </Text>
+        </View>
+
+        <View className="h-14 w-20 items-center justify-center">
+          <Image
+            source={activeProfile.image}
+            style={{ width: "100%", height: "100%" }}
+            contentFit="contain"
+            transition={200}
+          />
+        </View>
       </View>
-    </Touchable>
+
+      {/* SPEC METRIC PILLS (CLEAN SANS TYPOGRAPHY, SYNCHRONIZED BRAND COLOR) */}
+      <View className="flex-row items-center gap-2">
+        <View className="flex-1 flex-row items-center gap-2 rounded-xl bg-slate-100/80 px-3 py-2 border border-slate-200/60">
+          <Zap size={14} color={TOKENS.colors.brand.DEFAULT} />
+          <View>
+            <Text className="font-quicksand text-[11px] text-slate-500">
+              Shock Thresh
+            </Text>
+            <Text className="font-quicksand-bold text-xs text-slate-900">
+              {activeProfile.sensorConfig.zShockThreshold}G
+            </Text>
+          </View>
+        </View>
+
+        <View className="flex-1 flex-row items-center gap-2 rounded-xl bg-slate-100/80 px-3 py-2 border border-slate-200/60">
+          <Activity size={14} color={TOKENS.colors.brand.DEFAULT} />
+          <View>
+            <Text className="font-quicksand text-[11px] text-slate-500">
+              Speed Gate
+            </Text>
+            <Text className="font-quicksand-bold text-xs text-slate-900">
+              &gt; {activeProfile.sensorConfig.minMovingSpeed} km/h
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* VEHICLE SWITCHER PILLS */}
+      <View className="flex-row items-center justify-between gap-2 mt-1">
+        {VEHICLE_OPTIONS.map((option) => {
+          const isActive = selected === option.id;
+          return (
+            <Touchable
+              key={option.id}
+              className="flex-1"
+              onPress={() => onSelect(option.id)}
+              scaleTo={0.96}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: isActive }}
+              accessibilityLabel={`Select vehicle ${option.label}`}
+            >
+              <View
+                className={cn(
+                  "flex-row items-center justify-center gap-2 py-2 px-2 rounded-pill border",
+                  isActive
+                    ? "bg-sky-50 border-brand"
+                    : "bg-slate-100 border-slate-200/70"
+                )}
+              >
+                <Text className="text-base">
+                  {option.id === "car"
+                    ? "🚗"
+                    : option.id === "motor"
+                    ? "🏍️"
+                    : "🚲"}
+                </Text>
+                <Text
+                  className={cn(
+                    "font-quicksand-bold text-xs",
+                    isActive ? "text-brand" : "text-slate-600"
+                  )}
+                  numberOfLines={1}
+                >
+                  {option.label}
+                </Text>
+              </View>
+            </Touchable>
+          );
+        })}
+      </View>
+    </View>
   );
 }

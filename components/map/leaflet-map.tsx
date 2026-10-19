@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useEffect, useState } from "react";
 import { StyleSheet, View, ActivityIndicator } from "react-native";
 import { WebView } from "react-native-webview";
 import type { DamagePoint, MapData } from "./map-data";
+import { VEHICLE_MARKER_IMAGES } from "./vehicle-assets-base64";
 
 export type LeafletMapProps = {
   data: MapData;
@@ -86,18 +87,20 @@ export function LeafletMap({
       box-shadow: 0 2px 6px rgba(0,0,0,0.35);
     }
 
-    .vehicle-marker {
-      width: 42px !important;
-      height: 42px !important;
+    .vehicle-marker-wrapper {
+      width: 48px !important;
+      height: 48px !important;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #0F172A;
-      border-radius: 50%;
-      border: 3px solid #009EFF;
-      box-shadow: 0 4px 14px rgba(0, 158, 255, 0.5);
-      font-size: 20px;
       user-select: none;
+    }
+
+    .vehicle-marker-img {
+      width: 46px;
+      height: 46px;
+      object-fit: contain;
+      filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.4));
     }
     .leaflet-control-attribution {
       font-size: 9px !important;
@@ -112,7 +115,7 @@ export function LeafletMap({
       window.map = L.map('map', {
         center: [${centerLat}, ${centerLng}],
         zoom: ${zoomLevel},
-        zoomControl: ${interactive ? "true" : "false"},
+        zoomControl: false,
         dragging: ${interactive ? "true" : "false"},
         touchZoom: ${interactive ? "true" : "false"},
         doubleClickZoom: ${interactive ? "true" : "false"},
@@ -165,24 +168,25 @@ export function LeafletMap({
       };
       window.renderDamagePoints(${damageData});
 
-      // Unified User Vehicle Location Marker
-      var vehicleEmoji = "${vehicleType === "motor" ? "🏍️" : vehicleType === "bicycle" ? "🚲" : "🚗"}";
+      // Vehicle graphic markers
+      var vehicleImages = ${JSON.stringify(VEHICLE_MARKER_IMAGES)};
+      var initialImg = vehicleImages["${vehicleType}"] || vehicleImages["car"];
       var vehicleIcon = L.divIcon({
         className: '',
-        html: '<div class="vehicle-marker">' + vehicleEmoji + '</div>',
-        iconSize: [42, 42],
-        iconAnchor: [21, 21]
+        html: '<div class="vehicle-marker-wrapper"><img class="vehicle-marker-img" src="' + initialImg + '" alt="vehicle" /></div>',
+        iconSize: [48, 48],
+        iconAnchor: [24, 24]
       });
       window.vehicleMarker = L.marker(${vehicleCoord}, { icon: vehicleIcon }).addTo(window.map);
 
-      // Helper untuk mengganti ikon emoji kendaraan secara real-time
+      // Helper untuk mengganti ikon gambar kendaraan secara real-time
       window.setVehicleType = function(vType) {
-        var emoji = vType === "motor" ? "🏍️" : (vType === "bicycle" ? "🚲" : "🚗");
+        var imgSrc = vehicleImages[vType] || vehicleImages["car"];
         var newIcon = L.divIcon({
           className: '',
-          html: '<div class="vehicle-marker">' + emoji + '</div>',
-          iconSize: [42, 42],
-          iconAnchor: [21, 21]
+          html: '<div class="vehicle-marker-wrapper"><img class="vehicle-marker-img" src="' + imgSrc + '" alt="vehicle" /></div>',
+          iconSize: [48, 48],
+          iconAnchor: [24, 24]
         });
         if (window.vehicleMarker) {
           window.vehicleMarker.setIcon(newIcon);

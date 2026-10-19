@@ -1,21 +1,19 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { Text, View } from "react-native";
+import { Alert, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Accelerometer, Gyroscope } from "expo-sensors";
 import {
-  Activity,
   AlertTriangle,
-  Cpu,
   Sparkles,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomHud } from "@/components/ride/bottom-hud";
-import { DriveActions } from "@/components/ride/drive-actions";
 import { LiveMap } from "@/components/ride/live-map";
 import { TopFloatingBar } from "@/components/ride/top-floating-bar";
-import { Touchable } from "@/components/ui/touchable";
+import { AppButton } from "@/components/ui/app-button";
+import { AppCard } from "@/components/ui/app-card";
 import { useVehicle, type VehicleProfile } from "@/contexts/vehicle-context";
 import { EDGE_AI_CONFIG } from "@/edge-ai/model-config";
 import type { RawSensorSample } from "@/edge-ai/types";
@@ -71,6 +69,16 @@ export default function RideScreen() {
   const [shockLevel, setShockLevel] = useState(15);
   const [anomalyBanner, setAnomalyBanner] = useState<string | null>(null);
   const [liveDetections, setLiveDetections] = useState<DamagePoint[]>([]);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  // Timer durasi berkendara
+  useEffect(() => {
+    if (isPaused || isFinished) return;
+    const interval = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isPaused, isFinished]);
 
   // Status Sensor Akselerometer & Giroskop HP
   const [sensorEnabled, setSensorEnabled] = useState(true);
@@ -391,23 +399,35 @@ export default function RideScreen() {
       />
 
       <View className="absolute inset-0">
-        <View className="px-4" style={{ paddingTop: insets.top + 12 }}>
-          <TopFloatingBar onBack={() => router.back()} />
+        <TopFloatingBar
+          onBack={() => router.back()}
+          title="Ride in progress"
+          onHelp={() =>
+            Alert.alert(
+              "Driving Mode Telemetry",
+              "HyperGrid monitors 3D vertical road vibrations in real time at 20 Hz, discarding static gravity with causal EMA filters."
+            )
+          }
+        />
 
-          {/* EARLY WARNING BANNER (POSTGIS NEARBY) */}
+        <View className="px-4" style={{ paddingTop: insets.top + 56 }}>
+          {/* EARLY WARNING BANNER (MATCHING REFERENCE SCREEN 3) */}
           {nearbyCluster ? (
-            <View className="mt-3 flex-row items-center gap-2.5 rounded-2xl border-2 border-amber-500 bg-amber-500/90 px-4 py-2.5 shadow-lg backdrop-blur-md">
-              <AlertTriangle size={18} color="#FFFFFF" />
+            <View className="mt-2 flex-row items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 shadow-md">
+              <View className="h-10 w-10 rounded-full bg-amber-500 items-center justify-center">
+                <AlertTriangle size={20} color="#FFFFFF" />
+              </View>
               <View className="flex-1">
-                <Text className="font-quicksand-bold text-xs text-white">
-                  WARNING: POTHOLE AHEAD!
-                </Text>
-                <Text className="font-mono text-[10px] text-amber-100">
-                  Distance:{" "}
+                <Text className="font-quicksand-bold text-xs text-amber-900">
+                  ROAD HAZARD AHEAD (
                   {nearbyCluster.distance_meters
-                    ? `${nearbyCluster.distance_meters.toFixed(1)} meters`
-                    : "15 meters"}{" "}
-                  • Severity: {nearbyCluster.severity.toUpperCase()}
+                    ? `${nearbyCluster.distance_meters.toFixed(0)}m`
+                    : "25m"}
+                  )
+                </Text>
+                <Text className="font-quicksand text-[11px] text-amber-700 mt-0.5">
+                  Verified Pothole Cluster • Severity:{" "}
+                  {nearbyCluster.severity.toUpperCase()}
                 </Text>
               </View>
             </View>
@@ -415,101 +435,55 @@ export default function RideScreen() {
 
           {/* EDGE AI DETECTION TOAST */}
           {anomalyBanner ? (
-            <View className="mt-2 flex-row items-center gap-2 rounded-2xl border border-sky-400 bg-sky-950/90 px-4 py-2 shadow-md">
-              <Sparkles size={16} color="#38BDF8" />
-              <Text className="flex-1 font-quicksand-semibold text-xs text-sky-200">
+            <View className="mt-2 flex-row items-center gap-2 rounded-xl border border-sky-300 bg-sky-50 px-3.5 py-2 shadow-sm">
+              <Sparkles size={16} color="#009EFF" />
+              <Text className="flex-1 font-quicksand-bold text-xs text-sky-900">
                 {anomalyBanner}
               </Text>
             </View>
           ) : null}
         </View>
 
-        <View
-          className="absolute inset-x-0 bottom-0 gap-3"
-          style={{ paddingBottom: insets.bottom + 16 }}
-        >
-          {/* BAR KONTROL SENSOR HP & SIMULASI */}
-          <View className="flex-row items-center justify-between px-4">
-            {/* TOGGLE SENSOR HP */}
-            <Touchable
-              accessibilityLabel="Toggle phone accelerometer sensor"
-              onPress={() => {
-                setSensorEnabled((prev) => {
-                  const next = !prev;
-                  if (!next) {
-                    setCurrentVibration(0);
-                    setShockLevel(0);
-                  }
-                  return next;
-                });
-              }}
-            >
-              <View
-                className={`flex-row items-center gap-1.5 rounded-xl border px-3 py-1.5 shadow-sm ${
-                  sensorEnabled
-                    ? "border-emerald-500/50 bg-emerald-950/80"
-                    : "border-slate-700 bg-slate-900/80"
-                }`}
-              >
-                <Activity
-                  size={13}
-                  color={sensorEnabled ? "#34D399" : "#94A3B8"}
-                />
-                <Text
-                  className={`font-mono text-[11px] ${
-                    sensorEnabled ? "text-emerald-300" : "text-slate-400"
-                  }`}
-                >
-                  {sensorEnabled
-                    ? `${liveGForce}G • ${vehicleProfile.type}`
-                    : "Sensor Off"}
-                </Text>
-              </View>
-            </Touchable>
-
-            {/* TOMBOL TEST TRIGGER MANUAL */}
-            <Touchable
-              accessibilityLabel="Simulate Edge AI shock detection"
-              accessibilityRole="button"
-              onPress={handleTriggerAnomaly}
-            >
-              <View className="flex-row items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-950/80 px-3 py-1.5 shadow-sm">
-                <Cpu size={13} color="#38BDF8" />
-                <Text className="font-mono text-[11px] text-sky-200">
-                  Simulation ({detectedCount})
-                </Text>
-              </View>
-            </Touchable>
-          </View>
-
-          <View className="px-4">
-            <BottomHud
-              shockLevel={shockLevel}
-              speed={currentSpeed}
-              vibration={currentVibration}
-            />
-          </View>
-
-          <View className="px-4">
-            <DriveActions
-              isPaused={isPaused}
-              onStop={handleStopDrive}
-              onTogglePause={() => setIsPaused((value) => !value)}
-            />
-          </View>
-
-          {isFinished ? (
-            <FinishBanner
-              detectedCount={detectedCount}
-              lastResult={lastResult}
-              vehicleProfile={vehicleProfile}
-              onDismiss={() => {
-                setIsFinished(false);
-                router.replace("/(tabs)/history");
-              }}
-            />
-          ) : null}
+        {/* FLOATING BOTTOM HUD SHEET (MATCHING REFERENCE SCREEN 3) */}
+        <View className="absolute inset-x-0 bottom-0 z-20">
+          <BottomHud
+            vehicleName={vehicleProfile.name}
+            plate={vehicleProfile.plate}
+            speed={currentSpeed}
+            vibration={currentVibration}
+            shockLevel={shockLevel}
+            gForce={liveGForce}
+            anomalyCount={detectedCount}
+            elapsedSeconds={elapsedSeconds}
+            isPaused={isPaused}
+            onTogglePause={() => setIsPaused((value) => !value)}
+            onStop={handleStopDrive}
+            sensorEnabled={sensorEnabled}
+            onToggleSensor={() => {
+              setSensorEnabled((prev) => {
+                const next = !prev;
+                if (!next) {
+                  setCurrentVibration(0);
+                  setShockLevel(0);
+                }
+                return next;
+              });
+            }}
+            onSimulateAnomaly={handleTriggerAnomaly}
+          />
         </View>
+
+        {isFinished ? (
+          <FinishBanner
+            detectedCount={detectedCount}
+            lastResult={lastResult}
+            vehicleProfile={vehicleProfile}
+            onDismiss={() => {
+              setIsFinished(false);
+              router.replace("/(tabs)/history");
+            }}
+          />
+        ) : null}
       </View>
     </View>
   );
@@ -538,26 +512,26 @@ function FinishBanner({
     : 94;
 
   return (
-    <View className="mx-4">
-      <View className="rounded-2xl border-2 border-custom-primary bg-custom-black p-5 shadow-2xl">
-        <Text className="font-quicksand-bold text-base text-white">
+    <View className="absolute inset-x-4 top-[30%] z-50">
+      <AppCard variant="dark" className="p-5 shadow-2xl border-2 border-brand">
+        <Text className="font-chivo-bold text-lg text-white">
           Trip Completed
         </Text>
-        <Text className="mt-1 font-quicksand text-xs text-slate-400">
-          All telemetry logs have been synchronized to HyperGrid PostGIS server.
+        <Text className="mt-1 font-quicksand text-xs text-slate-300">
+          Telemetry logs have been synchronized to HyperGrid PostGIS server.
         </Text>
 
-        <View className="my-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+        <View className="my-3 rounded-xl border border-slate-800 bg-slate-950/80 p-3">
           {vehicleProfile && (
             <View className="flex-row justify-between py-1">
               <Text className="text-xs text-slate-400">Vehicle</Text>
-              <Text className="font-mono text-xs text-custom-primary">
+              <Text className="font-mono text-xs text-brand">
                 {vehicleProfile.name} ({vehicleProfile.type})
               </Text>
             </View>
           )}
           <View className="flex-row justify-between py-1">
-            <Text className="text-xs text-slate-400">Total Road Anomalies</Text>
+            <Text className="text-xs text-slate-400">Road Anomalies</Text>
             <Text className="font-mono-bold text-xs text-white">
               {detectedCount} Points
             </Text>
@@ -573,7 +547,7 @@ function FinishBanner({
             </Text>
           </View>
           <View className="flex-row justify-between py-1">
-            <Text className="text-xs text-slate-400">Detection Confidence</Text>
+            <Text className="text-xs text-slate-400">Confidence</Text>
             <Text className="font-mono-bold text-xs text-emerald-400">
               {confPercent}% ({lastResult?.confidenceTier ?? "HIGH"})
             </Text>
@@ -586,18 +560,14 @@ function FinishBanner({
           </View>
         </View>
 
-        <Touchable
-          accessibilityLabel="Open trip history"
-          className="self-start"
+        <AppButton
+          variant="primary"
+          size="md"
+          label="View Trip History"
           onPress={onDismiss}
-        >
-          <View className="rounded-full bg-custom-primary px-5 py-2">
-            <Text className="font-quicksand-bold text-xs text-white">
-              View Trip History
-            </Text>
-          </View>
-        </Touchable>
-      </View>
+          accessibilityLabel="Open trip history"
+        />
+      </AppCard>
     </View>
   );
 }

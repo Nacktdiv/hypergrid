@@ -24,7 +24,8 @@ import {
 } from "@/components/history/date-utils";
 import type { HistoryEntry, Metric } from "@/components/history/mock-data";
 import type { DamagePoint, LatLng } from "@/components/map/map-data";
-import { Touchable } from "@/components/ui/touchable";
+import { AppButton } from "@/components/ui/app-button";
+import { AppCard } from "@/components/ui/app-card";
 import { useAuth } from "@/hooks/use-auth";
 import { useDetections } from "@/hooks/use-detections";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
@@ -132,21 +133,21 @@ export default function HistoryScreen() {
           label: "Anomaly Points",
           value: "0",
           unit: "locations",
-          accent: "#0F172A",
+          accent: "#38BDF8",
         },
         {
           id: "confidence",
           label: "Avg AI Confidence",
           value: "0%",
           unit: "AI",
-          accent: "#64748B",
+          accent: "#009EFF",
         },
         {
           id: "peak",
           label: "G-Force Peak",
           value: "0.0",
           unit: "G",
-          accent: "#94A3B8",
+          accent: "#1D4ED8",
         },
       ];
     }
@@ -169,21 +170,21 @@ export default function HistoryScreen() {
         label: "Anomaly Points",
         value: String(count),
         unit: "locations",
-        accent: "#E11D48",
+        accent: "#38BDF8",
       },
       {
         id: "confidence",
         label: "Avg AI Confidence",
         value: `${avgConfidence}%`,
         unit: "Score",
-        accent: "#0052FF",
+        accent: "#009EFF",
       },
       {
         id: "peak",
         label: "G-Force Peak",
         value: `${maxPeak}G`,
         unit: "Z-Peak",
-        accent: "#F59E0B",
+        accent: "#1D4ED8",
       },
     ];
   }, [hasTripOnDate, detectionsOnDate]);
@@ -220,37 +221,47 @@ export default function HistoryScreen() {
   }, [detectionsOnDate, selectedDate]);
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-surface-canvas" edges={["top"]}>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-4 pt-4 pb-8"
+        contentContainerClassName="gap-5 px-4 pt-2 pb-8"
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={["#0F172A"]}
-            tintColor="#0F172A"
+            colors={["#009EFF"]}
+            tintColor="#009EFF"
           />
         }
       >
-        <Text className="font-chivo-bold text-xl text-black">History</Text>
-        {/* SWISS DESIGN HEADER */}
+        {/* HEADER */}
+        <View className="flex-row items-center justify-between">
+          <View>
+            <Text className="font-chivo-bold text-2xl text-slate-900">History</Text>
+            <Text className="font-quicksand text-xs text-slate-600 mt-0.5">
+              Driving telemetry and detected road anomalies
+            </Text>
+          </View>
+          <AppButton
+            variant="circle"
+            size="sm"
+            onPress={handleRefresh}
+            loading={isRefreshing}
+            iconLeft={<RefreshCw size={18} color="#334155" />}
+            accessibilityLabel="Synchronize telemetry data"
+          />
+        </View>
 
         {/* PEMILIH HARI INTUITIF (7 HARI TERAKHIR + TOMBOL KALENDER) */}
-        <View className="gap-1.5">
+        <View className="gap-2">
           <View className="flex-row items-center justify-between">
-            <Text className="font-mono text-xs font-bold uppercase tracking-wider text-slate-500">
+            <Text className="font-mono text-xs font-bold uppercase tracking-wider text-slate-700">
               Select Date: 
             </Text>
-            <Touchable onPress={handleRefresh}>
-              <View className="flex-row items-center gap-1">
-                <RefreshCw size={11} color="#64748B" />
-                <Text className="font-mono text-[10px] text-slate-500">
-                  Synchronize
-                </Text>
-              </View>
-            </Touchable>
+            <Text className="font-mono text-[11px] text-brand">
+              {formatIsoToLongLabel(selectedDate)}
+            </Text>
           </View>
 
           <DaySelector
@@ -269,7 +280,7 @@ export default function HistoryScreen() {
               <Text className="font-mono text-xs font-bold uppercase tracking-wider text-slate-900">
                 Route Preview
               </Text>
-              <Text className="font-mono text-xs text-slate-500">
+              <Text className="font-mono text-xs text-slate-600">
                 {realRouteCoordinates.length} Coordinates
               </Text>
             </View>
@@ -280,13 +291,13 @@ export default function HistoryScreen() {
             />
           </View>
         ) : (
-          /* SWISS DESIGN EMPTY STATE: TIDAK ADA PERJALANAN PADA HARI INI */
-          <View className="rounded-3xl border-2 border-slate-900 bg-white p-6 shadow-sm">
-            <View className="gap-2">
-              <Text className="font-chivo-bold text-xl uppercase tracking-tight text-slate-950">
+          /* EMPTY STATE BERBASIS DESIGN SYSTEM */
+          <AppCard variant="default" className="p-5 gap-3">
+            <View className="gap-1">
+              <Text className="font-chivo-bold text-lg text-slate-900">
                 No Driving Activity Detected
               </Text>
-              <Text className="font-quicksand text-xs leading-relaxed text-slate-600">
+              <Text className="font-quicksand text-xs leading-relaxed text-slate-700">
                 No driving activity or road shock anomaly detections recorded on{" "}
                 <Text className="font-mono-bold text-slate-900">
                   {formatIsoToLongLabel(selectedDate)}
@@ -295,46 +306,46 @@ export default function HistoryScreen() {
               </Text>
             </View>
 
-            {/* Swiss Grid Info */}
-            <View className="flex-row divide-x divide-slate-200 rounded-2xl border border-slate-200 bg-slate-50 p-3 mt-5">
+            {/* Metric Preview Row */}
+            <View className="flex-row divide-x divide-slate-200 rounded-2xl border border-slate-200 bg-slate-50 p-3 mt-2">
               <View className="flex-1 items-center gap-0.5">
-                <Text className="font-mono text-[9px] uppercase text-slate-400">
+                <Text className="font-mono text-[9px] uppercase font-bold text-slate-600">
                   Anomaly Points
                 </Text>
-                <Text className="font-mono-bold text-sm text-slate-800">
+                <Text className="font-mono-bold text-sm text-slate-900">
                   0
                 </Text>
               </View>
               <View className="flex-1 items-center gap-0.5">
-                <Text className="font-mono text-[9px] uppercase text-slate-400">
+                <Text className="font-mono text-[9px] uppercase font-bold text-slate-600">
                   Distance
                 </Text>
-                <Text className="font-mono-bold text-sm text-slate-800">
+                <Text className="font-mono-bold text-sm text-slate-900">
                   0.0 KM
                 </Text>
               </View>
               <View className="flex-1 items-center gap-0.5">
-                <Text className="font-mono text-[9px] uppercase text-slate-400">
+                <Text className="font-mono text-[9px] uppercase font-bold text-slate-600">
                   Sensor Status
                 </Text>
-                <Text className="font-mono-bold text-sm text-slate-800">
+                <Text className="font-mono-bold text-sm text-slate-900">
                   IDLE
                 </Text>
               </View>
             </View>
 
-            {/* Call To Action Swiss Design */}
-            <View className="mt-5">
-              <Touchable onPress={() => router.push("/ride")}>
-                <View className="flex-row items-center justify-center gap-2 rounded-2xl border-2 border-slate-900 bg-slate-900 py-3.5 shadow-md">
-                  <Navigation size={16} color="#FFFFFF" />
-                  <Text className="font-chivo-bold text-xs uppercase tracking-wider text-white">
-                    Start Drive Mode Now
-                  </Text>
-                </View>
-              </Touchable>
+            {/* Call To Action */}
+            <View className="mt-2">
+              <AppButton
+                variant="primary"
+                size="md"
+                label="Start Drive Mode Now"
+                iconLeft={<Navigation size={16} color="#FFFFFF" />}
+                onPress={() => router.push("/ride")}
+                accessibilityLabel="Start drive mode"
+              />
             </View>
-          </View>
+          </AppCard>
         )}
 
         {/* DAFTAR LOG DETAIL PERJALANAN */}
@@ -344,7 +355,7 @@ export default function HistoryScreen() {
               <Text className="font-chivo-bold text-lg uppercase tracking-tight text-slate-900">
                 Telemetry Log Entries
               </Text>
-              <Text className="font-mono text-[11px] text-slate-500">
+              <Text className="font-mono text-[11px] text-slate-600 font-semibold">
                 {hasTripOnDate
                   ? `${historyEntries.length} points`
                   : "0 entries"}
@@ -363,8 +374,8 @@ export default function HistoryScreen() {
             ))
           ) : (
             <View className="items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white py-8">
-              <Compass size={24} color="#94A3B8" />
-              <Text className="mt-2 font-mono text-xs text-slate-500">
+              <Compass size={24} color="#64748B" />
+              <Text className="mt-2 font-quicksand-semibold text-xs text-slate-700">
                 No telemetry logs recorded for this date.
               </Text>
             </View>

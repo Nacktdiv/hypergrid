@@ -18,6 +18,7 @@ import {
   type MapData,
 } from "@/components/map/map-data";
 import { Touchable } from "@/components/ui/touchable";
+import { ClusterRadialCard } from "./cluster-radial-card";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
 import { useUserLocation } from "@/hooks/use-user-location";
 import type { PotholeCluster, PotholeStatus } from "@/types/api";
@@ -35,7 +36,19 @@ type FilterStatus = "all" | PotholeStatus;
  *   - Filter chip status klaster (Semua, Aktif, Terverifikasi, Selesai)
  *   - Modal detail informasi klaster (read-only untuk pengguna mobile)
  */
-export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
+export type MainMapProps = {
+  vehicleId: VehicleId;
+  fullBleed?: boolean;
+  showOverlayControls?: boolean;
+  onOpenClusterDetail?: (cluster: PotholeCluster) => void;
+};
+
+export function MainMap({
+  vehicleId,
+  fullBleed = false,
+  showOverlayControls = true,
+  onOpenClusterDetail,
+}: MainMapProps) {
   const { clusters, fetchClusters } = usePotholeClusters();
   const {
     coords: liveCoords,
@@ -96,8 +109,12 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
   if (!liveCoords) {
     return (
       <View
-        className="flex-1 w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-800 bg-[#0B0F19] p-4"
-        style={{ height: 340, width: "100%" }}
+        className={
+          fullBleed
+            ? "flex-1 w-full h-full items-center justify-center bg-[#0B0F19] p-4"
+            : "flex-1 w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-800 bg-[#0B0F19] p-4"
+        }
+        style={fullBleed ? { width: "100%", height: "100%" } : { height: 340, width: "100%" }}
       >
         {errorMsg ? (
           <View className="items-center gap-2">
@@ -131,8 +148,12 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
 
   return (
     <View
-      className="flex-1 w-full overflow-hidden rounded-2xl border border-[#CAD5E2]"
-      style={{ height: 340, width: "100%" }}
+      className={
+        fullBleed
+          ? "flex-1 w-full h-full overflow-hidden"
+          : "flex-1 w-full overflow-hidden rounded-2xl border border-[#CAD5E2]"
+      }
+      style={fullBleed ? { width: "100%", height: "100%" } : { height: 340, width: "100%" }}
     >
       <LeafletMap
         data={mapData}
@@ -140,65 +161,71 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
         onDamagePress={handleMarkerPress}
       />
 
-      {/* SWISS DESIGN GPS LIVE TELEMETRY BADGE */}
-      <View className="absolute bottom-3 left-3 flex-row items-center gap-1.5 rounded-md border border-slate-900 bg-slate-950/90 px-2.5 py-1 shadow-md">
-        <View className={`h-2 w-2 rounded-full ${liveCoords ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
-        <Text className="font-mono text-[9px] font-bold uppercase tracking-wider text-white">
-          GPS {liveCoords ? `${liveCoords.latitude.toFixed(4)}, ${liveCoords.longitude.toFixed(4)}` : "SEARCHING COORDINATES..."}
-        </Text>
-      </View>
-
-      {/* RE-CENTER GPS BUTTON */}
-      <Touchable
-        className="absolute bottom-3 right-3"
-        onPress={() => getImmediateLocation()}
-      >
-        <View className="flex-row items-center gap-1 rounded-md border border-slate-900 bg-white/95 px-2 py-1 shadow-md">
-          <MapPin size={11} color="#0F172A" />
-          <Text className="font-mono-bold text-[9px] uppercase tracking-wider text-slate-900">
-            My Location
-          </Text>
-        </View>
-      </Touchable>
-
-      {/* FLOATING STATUS BADGE POSTGIS & FILTER CHIPS */}
-      <View className="absolute inset-x-3 top-3 gap-2">
-        <View className="flex-row items-center justify-between">
-          {/* Status Badge */}
-          <View className="self-start flex-row items-center gap-1.5 rounded-full border border-slate-200/90 bg-white/95 px-2.5 py-1 shadow-sm backdrop-blur-md">
-            <Database size={12} color="#009EFF" />
-            <Text className="font-mono text-[10px] text-slate-700">
-              {clusters.length > 0
-                ? `PostGIS: ${filteredClusters.length} Clusters`
-                : "No Clusters Nearby"}
+      {showOverlayControls ? (
+        <>
+          {/* SWISS DESIGN GPS LIVE TELEMETRY BADGE */}
+          <View className="absolute bottom-3 left-3 flex-row items-center gap-1.5 rounded-md border border-slate-900 bg-slate-950/90 px-2.5 py-1 shadow-md">
+            <View className={`h-2 w-2 rounded-full ${liveCoords ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+            <Text className="font-mono text-[9px] font-bold uppercase tracking-wider text-white">
+              GPS {liveCoords ? `${liveCoords.latitude.toFixed(4)}, ${liveCoords.longitude.toFixed(4)}` : "SEARCHING COORDINATES..."}
             </Text>
           </View>
-        </View>
 
-        {/* Filter Chips Horizontal Bar */}
-        <View className="flex-row gap-1.5">
-          <FilterChip
-            active={activeFilter === "all"}
-            label="All"
-            onPress={() => setActiveFilter("all")}
-          />
-          <FilterChip
-            active={activeFilter === "active"}
-            label="Active"
-            onPress={() => setActiveFilter("active")}
-          />
-          <FilterChip
-            active={activeFilter === "verified"}
-            label="Verified"
-            onPress={() => setActiveFilter("verified")}
-          />
-          <FilterChip
-            active={activeFilter === "repaired"}
-            label="Repaired"
-            onPress={() => setActiveFilter("repaired")}
-          />
+          {/* RE-CENTER GPS BUTTON */}
+          <Touchable
+            className="absolute bottom-3 right-3"
+            onPress={() => getImmediateLocation()}
+          >
+            <View className="flex-row items-center gap-1 rounded-md border border-slate-900 bg-white/95 px-2 py-1 shadow-md">
+              <MapPin size={11} color="#0F172A" />
+              <Text className="font-mono-bold text-[9px] uppercase tracking-wider text-slate-900">
+                My Location
+              </Text>
+            </View>
+          </Touchable>
+        </>
+      ) : null}
+
+      {showOverlayControls ? (
+        /* FLOATING STATUS BADGE POSTGIS & FILTER CHIPS */
+        <View className="absolute inset-x-3 top-3 gap-2">
+          <View className="flex-row items-center justify-between">
+            {/* Status Badge */}
+            <View className="self-start flex-row items-center gap-1.5 rounded-full border border-slate-200/90 bg-white/95 px-2.5 py-1 shadow-sm backdrop-blur-md">
+              <Database size={12} color="#009EFF" />
+              <Text className="font-mono text-[10px] text-slate-700">
+                {clusters.length > 0
+                  ? `PostGIS: ${filteredClusters.length} Clusters`
+                  : "No Clusters Nearby"}
+              </Text>
+            </View>
+          </View>
+
+          {/* Filter Chips Horizontal Bar */}
+          <View className="flex-row gap-1.5">
+            <FilterChip
+              active={activeFilter === "all"}
+              label="All"
+              onPress={() => setActiveFilter("all")}
+            />
+            <FilterChip
+              active={activeFilter === "active"}
+              label="Active"
+              onPress={() => setActiveFilter("active")}
+            />
+            <FilterChip
+              active={activeFilter === "verified"}
+              label="Verified"
+              onPress={() => setActiveFilter("verified")}
+            />
+            <FilterChip
+              active={activeFilter === "repaired"}
+              label="Repaired"
+              onPress={() => setActiveFilter("repaired")}
+            />
+          </View>
         </View>
-      </View>
+      ) : null}
 
       {/* ROAD DAMAGE CLUSTER DETAIL MODAL */}
       <Modal
@@ -208,105 +235,40 @@ export function MainMap({ vehicleId }: { vehicleId: VehicleId }) {
         onRequestClose={() => setSelectedCluster(null)}
       >
         <View className="flex-1 justify-end bg-black/40">
-          <View className="rounded-t-[32px] bg-white p-6 shadow-2xl">
+          <View className="rounded-t-[32px] bg-white p-6 border-t border-slate-200/80 shadow-lg">
             {selectedCluster ? (
-              <View className="gap-4">
+              <View className="gap-3.5">
                 {/* Header */}
-                <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center justify-between pb-1">
                   <View className="flex-row items-center gap-2">
                     <ShieldAlert size={22} color="#EF4444" />
                     <Text className="font-chivo-bold text-lg text-slate-900">
                       Road Damage Details
                     </Text>
                   </View>
-                  <Touchable onPress={() => setSelectedCluster(null)}>
+                  <Touchable
+                    onPress={() => setSelectedCluster(null)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close road damage details"
+                  >
                     <View className="rounded-full bg-slate-100 p-1.5">
                       <X size={18} color="#64748B" />
                     </View>
                   </Touchable>
                 </View>
 
-                {/* Info Card Grid */}
-                <View className="rounded-2xl border border-slate-200 bg-slate-50 p-4 gap-3">
-                  <View className="flex-row items-center justify-between border-b border-slate-200/60 pb-2">
-                    <View className="flex-row items-center gap-1.5">
-                      <MapPin size={14} color="#64748B" />
-                      <Text className="font-quicksand-semibold text-xs text-slate-500">
-                        PostGIS Coordinates
-                      </Text>
-                    </View>
-                    <Text className="font-mono text-xs text-slate-800">
-                      {selectedCluster.center_latitude.toFixed(4)},{" "}
-                      {selectedCluster.center_longitude.toFixed(4)}
-                    </Text>
-                  </View>
-
-                  <View className="flex-row items-center justify-between border-b border-slate-200/60 pb-2">
-                    <Text className="font-quicksand-semibold text-xs text-slate-500">
-                      Severity Level
-                    </Text>
-                    <View
-                      className={`rounded-full px-2.5 py-0.5 ${
-                        selectedCluster.severity === "high" ||
-                        selectedCluster.severity === "severe"
-                          ? "bg-rose-100"
-                          : selectedCluster.severity === "medium"
-                          ? "bg-amber-100"
-                          : "bg-yellow-100"
-                      }`}
-                    >
-                      <Text
-                        className={`font-mono-bold text-[11px] ${
-                          selectedCluster.severity === "high" ||
-                          selectedCluster.severity === "severe"
-                            ? "text-rose-700"
-                            : selectedCluster.severity === "medium"
-                            ? "text-amber-700"
-                            : "text-yellow-800"
-                        }`}
-                      >
-                        {selectedCluster.severity.toUpperCase()}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View className="flex-row items-center justify-between border-b border-slate-200/60 pb-2">
-                    <Text className="font-quicksand-semibold text-xs text-slate-500">
-                      Reports / Detections
-                    </Text>
-                    <Text className="font-mono-bold text-xs text-slate-800">
-                      {selectedCluster.detection_count} Reports
-                    </Text>
-                  </View>
-
-                  <View className="flex-row items-center justify-between border-b border-slate-200/60 pb-2">
-                    <Text className="font-quicksand-semibold text-xs text-slate-500">
-                      Average AI Confidence
-                    </Text>
-                    <Text className="font-mono-bold text-xs text-emerald-600">
-                      {Math.round(selectedCluster.confidence_avg * 100)}%
-                    </Text>
-                  </View>
-
-                  <View className="flex-row items-center justify-between">
-                    <Text className="font-quicksand-semibold text-xs text-slate-500">
-                      Remediation Status
-                    </Text>
-                    <Text className="font-mono-bold text-xs text-sky-600">
-                      {selectedCluster.status.toUpperCase()}
-                    </Text>
-                  </View>
-                </View>
+                {/* Radial Assessment Card */}
+                <ClusterRadialCard cluster={selectedCluster} />
 
                 {/* Official Public Works Status Notice (Read-only for Mobile Users) */}
-                <View className="rounded-xl border border-slate-200 bg-slate-50 p-3 mt-1">
+                <View className="rounded-xl border border-slate-200/90 bg-slate-50 p-3 mt-0.5">
                   <View className="flex-row items-center gap-1.5">
                     <ShieldAlert size={14} color="#64748B" />
-                    <Text className="font-quicksand-bold text-[11px] text-slate-700">
+                    <Text className="font-quicksand-bold text-[11px] text-slate-800">
                       Public Road Hazard Data
                     </Text>
                   </View>
-                  <Text className="mt-1 font-quicksand text-[11px] leading-relaxed text-slate-500">
+                  <Text className="mt-1 font-quicksand text-[11px] leading-relaxed text-slate-600">
                     Verification, work orders, and road repairs are managed exclusively by the Public Works Department (Dinas PU) via the Web Admin Dashboard.
                   </Text>
                 </View>

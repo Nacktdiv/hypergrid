@@ -1,6 +1,8 @@
+import React from "react";
 import { Text, View } from "react-native";
 import { IdCard, Mail, Phone, Radio, type LucideIcon } from "lucide-react-native";
 
+import { AppCard } from "@/components/ui/app-card";
 import { Touchable } from "@/components/ui/touchable";
 import type { AuthUser } from "@/types/api";
 
@@ -18,10 +20,6 @@ export type ExtendedUserProfile = AuthUser & {
   vehiclePlate?: string;
 };
 
-/**
- * Personal Info List — group list card.
- * Menampilkan data profil petugas dari Better-Auth saat tersedia.
- */
 export function PersonalInfoList({
   user,
   onEdit,
@@ -48,32 +46,32 @@ export function PersonalInfoList({
   });
 
   return (
-    <View className="gap-5 rounded-3xl border border-[#E2E2E2] bg-white p-5">
-      <View className="flex-row items-center justify-between">
-        <Text className="font-quicksand-bold text-lg text-[#1C1C1E]">
-          Personal info
+    <AppCard variant="default" className="gap-4 p-4">
+      <View className="flex-row items-center justify-between pb-2 border-b border-slate-100">
+        <Text className="font-quicksand-bold text-base text-slate-900">
+          Personal Information
         </Text>
 
         <Touchable
-          accessibilityLabel="Edit informasi pribadi"
+          accessibilityLabel="Edit personal information"
           accessibilityRole="button"
           onPress={onEdit}
-          scaleTo={0.9}
+          scaleTo={0.92}
         >
-          <View className="rounded-full bg-slate-100 px-3.5 py-1.5">
-            <Text className="font-quicksand-bold text-xs text-custom-primary">
+          <View className="rounded-full bg-sky-50 px-3 py-1">
+            <Text className="font-quicksand-bold text-xs text-brand">
               Edit
             </Text>
           </View>
         </Touchable>
       </View>
 
-      <View className="gap-5">
+      <View className="gap-3.5">
         {displayFields.map((field) => (
           <InfoRow key={field.id} field={field} />
         ))}
       </View>
-    </View>
+    </AppCard>
   );
 }
 
@@ -81,14 +79,16 @@ function InfoRow({ field }: { field: PersonalInfoField }) {
   const Icon = ICONS[field.icon];
 
   return (
-    <View className="flex-row items-center gap-4">
-      <Icon size={20} color="#64748B" />
+    <View className="flex-row items-center gap-3.5">
+      <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-50 border border-slate-200/70">
+        <Icon size={18} color="#64748B" />
+      </View>
 
-      <View className="flex-1 gap-0.5">
-        <Text className="font-quicksand-semibold text-xs text-[#64748B]">
+      <View className="flex-1">
+        <Text className="font-quicksand-semibold text-xs text-slate-600">
           {field.label}
         </Text>
-        <Text className="font-quicksand-semibold text-sm text-custom-black">
+        <Text className="font-quicksand-bold text-sm text-slate-900 mt-0.5">
           {field.value}
         </Text>
       </View>
