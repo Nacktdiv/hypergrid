@@ -9,11 +9,55 @@ import * as SecureStore from 'expo-secure-store';
 
 const TOKEN_KEY = 'hypergrid_auth_token';
 const USER_KEY = 'hypergrid_auth_user';
+const DEVICE_ID_KEY = 'hypergrid_persistent_device_id';
 
 let inMemoryToken: string | null = null;
 let inMemoryUser: string | null = null;
+let inMemoryDeviceId: string | null = null;
+let tokenPromise: Promise<string | null> | null = null;
 
 export const tokenStorage = {
+  /**
+   * Mengambil Unique Device ID yang persisten lintas sesi dan restart app.
+   */
+  async getDeviceId(): Promise<string> {
+    if (inMemoryDeviceId) return inMemoryDeviceId;
+
+    try {
+      let id: string | null = null;
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          id = window.localStorage.getItem(DEVICE_ID_KEY);
+        }
+      } else {
+        id = await SecureStore.getItemAsync(DEVICE_ID_KEY);
+      }
+
+      if (id && id.trim().length > 0) {
+        inMemoryDeviceId = id;
+        return id;
+      }
+
+      const newId = `hg-dev-${Math.random().toString(36).substring(2, 9)}-${Date.now().toString(36)}`;
+      inMemoryDeviceId = newId;
+
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(DEVICE_ID_KEY, newId);
+        }
+      } else {
+        await SecureStore.setItemAsync(DEVICE_ID_KEY, newId);
+      }
+
+      return newId;
+    } catch (err) {
+      console.warn('[TokenStorage] Gagal mengelola device ID:', err);
+      const fallback = `hg-dev-${Date.now().toString(36)}`;
+      inMemoryDeviceId = fallback;
+      return fallback;
+    }
+  },
+
   /**
    * Menyimpan Bearer Token secara terenkripsi di SecureStore
    */
@@ -33,27 +77,33 @@ export const tokenStorage = {
   },
 
   /**
-   * Mengambil Bearer Token aktif
+   * Mengambil Bearer Token aktif dengan deduplikasi pembacaan konkurensi
    */
   async getToken(): Promise<string | null> {
     if (inMemoryToken) return inMemoryToken;
+    if (tokenPromise) return tokenPromise;
 
-    try {
-      if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          inMemoryToken = window.localStorage.getItem(TOKEN_KEY);
-          return inMemoryToken;
+    tokenPromise = (async () => {
+      try {
+        if (Platform.OS === 'web') {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            inMemoryToken = window.localStorage.getItem(TOKEN_KEY);
+            return inMemoryToken;
+          }
+        } else {
+          const token = await SecureStore.getItemAsync(TOKEN_KEY);
+          inMemoryToken = token;
+          return token;
         }
-      } else {
-        const token = await SecureStore.getItemAsync(TOKEN_KEY);
-        inMemoryToken = token;
-        return token;
+      } catch (error) {
+        console.warn('[TokenStorage] Gagal mengambil token dari SecureStore:', error);
+      } finally {
+        tokenPromise = null;
       }
-    } catch (error) {
-      console.warn('[TokenStorage] Gagal mengambil token dari SecureStore:', error);
-    }
+      return inMemoryToken;
+    })();
 
-    return inMemoryToken;
+    return tokenPromise;
   },
 
   /**

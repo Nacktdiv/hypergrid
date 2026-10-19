@@ -133,8 +133,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
       }
     } catch (err: any) {
-      console.warn('[AuthProvider] Pemeriksaan sesi gagal:', err);
-      setUser(null);
+      console.warn('[AuthProvider] Pemeriksaan sesi gagal (jaringan/server offline):', err);
+      // Jika error terjadi karena jaringan offline / server timeout, pertahankan user dari cache lokal
+      const stored = await authService.getStoredUser<AuthUser>().catch(() => null);
+      if (!stored) {
+        setUser(null);
+      }
     } finally {
       setIsLoading(false);
     }

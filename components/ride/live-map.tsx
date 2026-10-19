@@ -20,7 +20,7 @@ export interface LiveMapProps {
  * Menerima koordinat live perangkat dan jejak rute perjalanan nyata pengguna.
  * Tidak pernah menggunakan fallback Jakarta (mencegah lompatan peta dari 'lokasi anta berantah').
  */
-export function LiveMap({
+export const LiveMap = React.memo(function LiveMap({
   isPaused = false,
   vehicleType = "car",
   currentCoords,
@@ -83,4 +83,4 @@ export function LiveMap({
       />
     </View>
   );
-}
+});

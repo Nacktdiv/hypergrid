@@ -24,6 +24,8 @@ import type { CreateDetectionDto } from '@/types/api';
  *  C) Calibrated Legacy Fallback (SensorFrame) — Ambang batas guncangan dinamis
  *     dengan validasi kecepatan minimum
  */
+import { tokenStorage } from '@/services/api/token-storage';
+
 export class EdgeRoadDamageDetector {
   private deviceId: string;
   private userId: string | null = null;
@@ -32,6 +34,11 @@ export class EdgeRoadDamageDetector {
     this.deviceId =
       deviceId || `${EDGE_AI_CONFIG.deviceIdPrefix}${Math.random().toString(36).substring(2, 9)}`;
     this.userId = userId || null;
+
+    // Sinkronkan ke deviceId persisten
+    tokenStorage.getDeviceId().then((id) => {
+      this.deviceId = id;
+    }).catch(() => {});
   }
 
   public setDeviceId(deviceId: string): void { this.deviceId = deviceId; }

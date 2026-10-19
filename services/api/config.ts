@@ -78,4 +78,23 @@ export const getAuthBaseUrl = (): string => {
   return `${base}/auth`;
 };
 
-export const API_TIMEOUT_MS = 20000;
+export const API_TIMEOUT_MS = 45000;
+
+/**
+ * Mengirim request ringan ke root API untuk membangunkan instance cloud server
+ * (menangani Render.com free-tier spin-down cold-start secara proaktif saat app dibuka).
+ */
+export const warmupServer = async (): Promise<void> => {
+  try {
+    const base = getApiBaseUrl();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    await fetch(`${base}/pothole-clusters?limit=1`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
+  } catch {
+    // Abaikan background warmup jika gagal
+  }
+};

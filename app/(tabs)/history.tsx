@@ -29,6 +29,7 @@ import { AppCard } from "@/components/ui/app-card";
 import { useAuth } from "@/hooks/use-auth";
 import { useDetections } from "@/hooks/use-detections";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
+import { tokenStorage } from "@/services/api/token-storage";
 
 /**
  * Screen 7 — Riwayat Perjalanan (Swiss Design & Data Riil Server).
@@ -63,8 +64,13 @@ export default function HistoryScreen() {
 
   const loadData = useCallback(async () => {
     try {
+      const deviceId = await tokenStorage.getDeviceId();
       await Promise.allSettled([
-        fetchDetections({ limit: 100, userId: user?.id }),
+        fetchDetections({
+          limit: 100,
+          userId: user?.id,
+          deviceId: !user?.id ? deviceId : undefined,
+        }),
         fetchClusters({ limit: 100 }),
       ]);
     } catch (e) {
@@ -83,13 +89,17 @@ export default function HistoryScreen() {
   };
 
   // 1. FILTER DATA DETEKSI TELEMETRI KHUSUS PADA TANGGAL YANG DIPILIH
-  // HANYA menampilkan riwayat akun sendiri (bukan akun admin / user lain)
+  // Menampilkan riwayat akun sendiri dan memformat tanggal berbasis timezone lokal (bukan string UTC murni)
   const detectionsOnDate = useMemo(() => {
     return detections.filter((d) => {
-      // Pastikan hanya data akun sendiri jika user terautentikasi
+      // Pastikan hanya data akun sendiri jika user terautentikasi dan data memiliki userId
       if (user?.id && d.userId && d.userId !== user.id) return false;
       if (!d.detectedAt) return false;
-      return d.detectedAt.startsWith(selectedDate);
+
+      // Konversi timestamp ISO server (UTC) ke tanggal lokal perangkat (YYYY-MM-DD)
+      const dateObj = new Date(d.detectedAt);
+      if (isNaN(dateObj.getTime())) return false;
+      return formatToIsoDate(dateObj) === selectedDate;
     });
   }, [detections, selectedDate, user]);
 

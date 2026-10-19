@@ -1,0 +1,22 @@
+diff --git a/src/private/devsupport/rndevtools/setUpFuseboxReactDevToolsDispatcher.js b/src/private/devsupport/rndevtools/setUpFuseboxReactDevToolsDispatcher.js
+index 79f7f4d7688ae0a4b70bb25fdfe766680faaab54..3386724ad830f4901c41508809042305cbd49c57 100644
+--- a/src/private/devsupport/rndevtools/setUpFuseboxReactDevToolsDispatcher.js
++++ b/src/private/devsupport/rndevtools/setUpFuseboxReactDevToolsDispatcher.js
+@@ -105,9 +105,11 @@ class FuseboxReactDevToolsDispatcher {
+   }
+ }
+ 
+-Object.defineProperty(global, '__FUSEBOX_REACT_DEVTOOLS_DISPATCHER__', {
+-  value: FuseboxReactDevToolsDispatcher,
+-  configurable: false,
+-  enumerable: false,
+-  writable: false,
+-});
++if (!Object.prototype.hasOwnProperty.call(global, '__FUSEBOX_REACT_DEVTOOLS_DISPATCHER__')) {
++  Object.defineProperty(global, '__FUSEBOX_REACT_DEVTOOLS_DISPATCHER__', {
++    value: FuseboxReactDevToolsDispatcher,
++    configurable: true,
++    enumerable: false,
++    writable: true,
++  });
++}

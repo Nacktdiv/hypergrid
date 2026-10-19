@@ -15,6 +15,7 @@ import {
 import { LeafletMap } from "@/components/map/leaflet-map";
 import {
   type DamagePoint,
+  type LatLng,
   type MapData,
 } from "@/components/map/map-data";
 import { Touchable } from "@/components/ui/touchable";
@@ -41,6 +42,7 @@ export type MainMapProps = {
   fullBleed?: boolean;
   showOverlayControls?: boolean;
   onOpenClusterDetail?: (cluster: PotholeCluster) => void;
+  currentCoords?: LatLng | null;
 };
 
 export function MainMap({
@@ -48,13 +50,17 @@ export function MainMap({
   fullBleed = false,
   showOverlayControls = true,
   onOpenClusterDetail,
+  currentCoords: externalCoords,
 }: MainMapProps) {
   const { clusters, fetchClusters } = usePotholeClusters();
+  const hasExternalCoords = externalCoords !== undefined;
   const {
-    coords: liveCoords,
+    coords: internalCoords,
     getImmediateLocation,
     errorMsg,
-  } = useUserLocation();
+  } = useUserLocation(false, { enabled: !hasExternalCoords });
+
+  const liveCoords = hasExternalCoords ? externalCoords : internalCoords;
 
   const [activeFilter, setActiveFilter] = useState<FilterStatus>("all");
   const [selectedCluster, setSelectedCluster] = useState<PotholeCluster | null>(

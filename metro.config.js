@@ -20,4 +20,33 @@ if (!hasFastTflite) {
   };
 }
 
+// Deduplicate react and react-native for pnpm symlink resolution
+const defaultResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (
+    moduleName === 'react-native' ||
+    moduleName.startsWith('react-native/') ||
+    moduleName === 'react' ||
+    moduleName.startsWith('react/')
+  ) {
+    try {
+      return context.resolveRequest(
+        {
+          ...context,
+          originModulePath: path.join(__dirname, 'package.json'),
+        },
+        moduleName,
+        platform
+      );
+    } catch {
+      // Fallback to default resolution
+    }
+  }
+
+  if (defaultResolveRequest) {
+    return defaultResolveRequest(context, moduleName, platform);
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 module.exports = withNativeWind(config, { input: './global.css', inlineRem: 16 });

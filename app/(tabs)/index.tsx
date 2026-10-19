@@ -145,6 +145,7 @@ export default function StartScreen() {
           vehicleId={vehicleId}
           fullBleed
           showOverlayControls={false}
+          currentCoords={liveCoords}
         />
       </View>
 

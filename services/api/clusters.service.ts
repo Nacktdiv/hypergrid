@@ -11,14 +11,34 @@ import type {
  * Mengelola hasil agregasi spasial PostGIS untuk visualisasi peta
  * dan early warning driver.
  */
+interface CachedClusters {
+  data: PotholeCluster[];
+  timestamp: number;
+  filterKey: string;
+}
+
+let clustersCache: CachedClusters | null = null;
+const CLUSTERS_CACHE_TTL_MS = 15_000; // 15 detik
+
 export const clustersService = {
   /**
    * Mengambil klaster lubang jalan dalam jendela koordinat peta (Bounding Box)
-   * atau filter status / tingkat keparahan.
+   * atau filter status / tingkat keparahan dengan TTL caching 15 detik.
    * GET /api/pothole-clusters
    */
   async getClusters(filter?: BoundingBoxFilter): Promise<PotholeCluster[]> {
-    return apiClient.get<PotholeCluster[]>('/pothole-clusters', {
+    const filterKey = JSON.stringify(filter || {});
+    const now = Date.now();
+
+    if (
+      clustersCache &&
+      clustersCache.filterKey === filterKey &&
+      now - clustersCache.timestamp < CLUSTERS_CACHE_TTL_MS
+    ) {
+      return clustersCache.data;
+    }
+
+    const data = await apiClient.get<PotholeCluster[]>('/pothole-clusters', {
       params: {
         minLat: filter?.minLat,
         minLon: filter?.minLon,
@@ -29,6 +49,9 @@ export const clustersService = {
         limit: filter?.limit,
       },
     });
+
+    clustersCache = { data: data || [], timestamp: now, filterKey };
+    return data || [];
   },
 
   /**

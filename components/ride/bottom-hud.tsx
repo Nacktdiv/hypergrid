@@ -1,13 +1,12 @@
 import React from "react";
 import { Text, View } from "react-native";
 import {
-  Activity,
   AlertOctagon,
   Clock,
   Pause,
   Play,
   ShieldAlert,
-  Sparkles,
+  X,
   Zap,
 } from "lucide-react-native";
 
@@ -16,6 +15,14 @@ import { AppCard } from "@/components/ui/app-card";
 import { MetricPill } from "@/components/ui/metric-pill";
 import { Touchable } from "@/components/ui/touchable";
 import { TOKENS } from "@/lib/theme/tokens";
+
+export interface ShockAlert {
+  id?: string;
+  title: string;
+  subtitle: string;
+  gForce?: number;
+  severity?: "warning" | "danger" | "info";
+}
 
 export interface BottomHudProps {
   vehicleName?: string;
@@ -29,12 +36,14 @@ export interface BottomHudProps {
   isPaused?: boolean;
   onTogglePause?: () => void;
   onStop?: () => void;
+  shockAlert?: ShockAlert | null;
+  onDismissShockAlert?: () => void;
   sensorEnabled?: boolean;
   onToggleSensor?: () => void;
   onSimulateAnomaly?: () => void;
 }
 
-export function BottomHud({
+export const BottomHud = React.memo(function BottomHud({
   vehicleName = "Vehicle",
   plate,
   speed = 0,
@@ -46,9 +55,8 @@ export function BottomHud({
   isPaused = false,
   onTogglePause,
   onStop,
-  sensorEnabled = true,
-  onToggleSensor,
-  onSimulateAnomaly,
+  shockAlert,
+  onDismissShockAlert,
 }: BottomHudProps) {
   // Format MM:SS for ride timer
   const minutes = Math.floor(elapsedSeconds / 60);
@@ -90,7 +98,7 @@ export function BottomHud({
         </View>
       </View>
 
-      {/* 2. THREE METRIC PILLS (MATCHING REFERENCE UI SCREEN 3) */}
+      {/* 2. THREE METRIC PILLS */}
       <View className="flex-row items-center justify-between gap-2">
         <MetricPill
           icon={<Clock size={16} color={TOKENS.colors.brand.DEFAULT} />}
@@ -112,49 +120,60 @@ export function BottomHud({
         />
       </View>
 
-      {/* 3. SENSOR & SIMULATION QUICK CONTROL BAR */}
-      <View className="flex-row items-center justify-between gap-2">
-        <Touchable
-          onPress={onToggleSensor}
-          className="flex-1"
-          accessibilityRole="button"
-          accessibilityLabel="Toggle phone motion sensor"
+      {/* 3. SHOCK / ANOMALY NOTIFICATION CARD (DISMISSIBLE) */}
+      {shockAlert ? (
+        <View
+          className={`flex-row items-center justify-between p-3 rounded-2xl border ${
+            shockAlert.severity === "danger"
+              ? "bg-rose-50 border-rose-200"
+              : "bg-amber-50 border-amber-200"
+          }`}
         >
-          <View
-            className={`flex-row items-center justify-center gap-1.5 py-2 px-3 rounded-pill border ${
-              sensorEnabled
-                ? "bg-emerald-50 border-emerald-200"
-                : "bg-slate-100 border-slate-200"
-            }`}
-          >
-            <Activity
-              size={13}
-              color={sensorEnabled ? TOKENS.colors.status.success : "#94A3B8"}
-            />
-            <Text
-              className={`font-quicksand-bold text-xs ${
-                sensorEnabled ? "text-emerald-700" : "text-slate-500"
+          <View className="flex-row items-center gap-2.5 flex-1 pr-2">
+            <View
+              className={`w-8 h-8 rounded-full items-center justify-center ${
+                shockAlert.severity === "danger"
+                  ? "bg-rose-500"
+                  : "bg-amber-500"
               }`}
             >
-              {sensorEnabled ? "IMU 20Hz Active" : "Sensor Paused"}
-            </Text>
+              <Zap size={16} color="#FFFFFF" />
+            </View>
+            <View className="flex-1">
+              <Text
+                className={`font-quicksand-bold text-xs ${
+                  shockAlert.severity === "danger"
+                    ? "text-rose-950"
+                    : "text-amber-950"
+                }`}
+                numberOfLines={1}
+              >
+                {shockAlert.title}
+              </Text>
+              <Text
+                className={`font-quicksand text-[11px] ${
+                  shockAlert.severity === "danger"
+                    ? "text-rose-800"
+                    : "text-amber-800"
+                }`}
+                numberOfLines={1}
+              >
+                {shockAlert.subtitle}
+              </Text>
+            </View>
           </View>
-        </Touchable>
 
-        <Touchable
-          onPress={onSimulateAnomaly}
-          className="flex-1"
-          accessibilityRole="button"
-          accessibilityLabel="Simulate pothole detection"
-        >
-          <View className="flex-row items-center justify-center gap-1.5 py-2 px-3 rounded-pill bg-sky-50 border border-sky-200">
-            <Sparkles size={13} color={TOKENS.colors.brand.DEFAULT} />
-            <Text className="font-quicksand-bold text-xs text-brand">
-              Simulate Shock
-            </Text>
-          </View>
-        </Touchable>
-      </View>
+          <Touchable
+            onPress={onDismissShockAlert}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            className="w-7 h-7 rounded-full items-center justify-center bg-white/90 border border-slate-200"
+            accessibilityRole="button"
+            accessibilityLabel="Close notification"
+          >
+            <X size={14} color={TOKENS.colors.slate[600]} />
+          </Touchable>
+        </View>
+      ) : null}
 
       {/* 4. DUAL ACTIONS: CIRCULAR PAUSE BUTTON + WIDE END RIDE PILL BUTTON */}
       <View className="flex-row items-center gap-3 mt-1">
@@ -188,4 +207,4 @@ export function BottomHud({
       </View>
     </AppCard>
   );
-}
+});

@@ -40,7 +40,18 @@ export function usePotholeClusters() {
   const checkNearby = useCallback(async (lat: number, lon: number, radiusMeters = 20) => {
     try {
       const data = await clustersService.checkNearby(lat, lon, radiusMeters);
-      setNearbyCluster(data);
+      setNearbyCluster((prev) => {
+        if (!prev && !data) return null;
+        if (
+          prev &&
+          data &&
+          prev.id === data.id &&
+          Math.abs((prev.distance_meters ?? 0) - (data.distance_meters ?? 0)) < 2
+        ) {
+          return prev;
+        }
+        return data;
+      });
       return data;
     } catch (err: any) {
       console.warn('[usePotholeClusters] Gagal cek nearby:', err);

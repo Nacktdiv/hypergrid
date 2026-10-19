@@ -15,7 +15,7 @@ export type LeafletMapProps = {
 
 const WebViewComponent = WebView as any;
 
-export function LeafletMap({
+export const LeafletMap = React.memo(function LeafletMap({
   data,
   vehicleType = "car",
   interactive = true,
@@ -24,6 +24,8 @@ export function LeafletMap({
   const webViewRef = useRef<any>(null);
   const isMapLoaded = useRef<boolean>(false);
   const lastInjectedPos = useRef<{ lat: number; lng: number } | null>(null);
+  const lastRouteLengthRef = useRef<number>(0);
+  const lastDamageJsonRef = useRef<string>("");
 
   // Simpan data awal saat pertama kali mount
   const [initialData] = useState<MapData>(data);
@@ -235,7 +237,7 @@ export function LeafletMap({
     webViewRef.current.injectJavaScript(js);
   }, [vehicleType]);
 
-  // Pembaruan posisi kendaraan & jejak rute via injectJavaScript (Ultra-smooth, no reload)
+  // 1. Pembaruan posisi kendaraan via injectJavaScript (Ultra-smooth, no reload, O(1) string)
   useEffect(() => {
     if (!isMapLoaded.current || !webViewRef.current) return;
 
@@ -251,24 +253,49 @@ export function LeafletMap({
     }
     lastInjectedPos.current = { lat, lng };
 
-    const routeJson = JSON.stringify(
-      data.route.coordinates.map((c) => [c.latitude, c.longitude])
-    );
-    const damageJson = JSON.stringify(data.damagePoints);
-
     const js = `
       if (window.updatePosition) window.updatePosition(${lat}, ${lng});
+      true;
+    `;
+    webViewRef.current.injectJavaScript(js);
+  }, [data.vehiclePosition.latitude, data.vehiclePosition.longitude]);
+
+  // 2. Pembaruan jejak rute perjalanan (hanya dieksekusi saat titik rute bertambah)
+  useEffect(() => {
+    if (!isMapLoaded.current || !webViewRef.current) return;
+
+    const coords = data.route.coordinates;
+    if (coords.length === lastRouteLengthRef.current && coords.length > 0) {
+      return;
+    }
+    lastRouteLengthRef.current = coords.length;
+
+    const routeJson = JSON.stringify(
+      coords.map((c) => [c.latitude, c.longitude])
+    );
+    const js = `
       if (window.updateRoute) window.updateRoute(${routeJson});
+      true;
+    `;
+    webViewRef.current.injectJavaScript(js);
+  }, [data.route.coordinates]);
+
+  // 3. Pembaruan titik klaster kerusakan jalan (HANYA saat data kerusakan berubah)
+  useEffect(() => {
+    if (!isMapLoaded.current || !webViewRef.current) return;
+
+    const damageJson = JSON.stringify(data.damagePoints);
+    if (damageJson === lastDamageJsonRef.current) {
+      return;
+    }
+    lastDamageJsonRef.current = damageJson;
+
+    const js = `
       if (window.renderDamagePoints) window.renderDamagePoints(${damageJson});
       true;
     `;
     webViewRef.current.injectJavaScript(js);
-  }, [
-    data.vehiclePosition.latitude,
-    data.vehiclePosition.longitude,
-    data.route.coordinates,
-    data.damagePoints,
-  ]);
+  }, [data.damagePoints]);
 
   const handleMessage = (event: any) => {
     try {
@@ -313,7 +340,7 @@ export function LeafletMap({
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

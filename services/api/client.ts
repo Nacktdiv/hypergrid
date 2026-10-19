@@ -95,8 +95,10 @@ class HttpClient {
       const responseData = isJson ? await response.json() : await response.text();
 
       if (!response.ok) {
+        const hadAuthHeader = Boolean(requestHeaders['Authorization'] || requestHeaders['Cookie']);
         if (
           response.status === 401 &&
+          hadAuthHeader &&
           !endpoint.includes('/sign-in') &&
           !endpoint.includes('/sign-up')
         ) {

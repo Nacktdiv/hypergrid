@@ -20,6 +20,7 @@ import {
   JetBrainsMono_700Bold,
 } from "@expo-google-fonts/jetbrains-mono";
 import { backgroundTrackingService } from "@/services/background-tracking";
+import { warmupServer } from "@/services/api/config";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -54,8 +55,9 @@ export default function RootLayout() {
     }
   }, [loaded, error]);
 
-  // Inisialisasi background tracking pada kondisi idle saat aplikasi dibuka
+  // Inisialisasi background tracking pada kondisi idle & bangunkan server cloud saat aplikasi dibuka
   useEffect(() => {
+    warmupServer();
     backgroundTrackingService.startBackgroundTracking('idle').catch((err) => {
       console.warn('[RootLayout] Background tracking idle init warning:', err);
     });

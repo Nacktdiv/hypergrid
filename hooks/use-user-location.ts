@@ -26,6 +26,12 @@ import {
  */
 const SPEED_EMA_ALPHA = 0.25;
 
+/** Jarak minimum perpindahan untuk mencatat titik rute baru (meter) */
+const MIN_ROUTE_DISTANCE_METERS = 5;
+
+/** Kapasitas maksimum titik rute aktif untuk mencegah kebocoran memori (O(1) bounded memory) */
+const MAX_ROUTE_POINTS = 800;
+
 /**
  * Haversine distance antara dua koordinat (meter).
  */
@@ -45,8 +51,14 @@ function haversineMeters(a: LatLng, b: LatLng): number {
 
 export function useUserLocation(
   autoStartTracking = false,
-  options?: { speedEmaAlpha?: number; maxSpeedGlitch?: number }
+  options?: {
+    speedEmaAlpha?: number;
+    maxSpeedGlitch?: number;
+    enabled?: boolean;
+  }
 ) {
+  const isEnabled = options?.enabled !== false;
+
   // Inisialisasi langsung dari cache modul agar tidak ada delay awal (0 ms)
   const initialCached = getCachedLocation();
   const [state, setState] = useState<UserLocationState>({
@@ -269,10 +281,17 @@ export function useUserLocation(
 
           setState((prev) => {
             const last = prev.routeHistory[prev.routeHistory.length - 1];
-            const isDifferent =
+            const isFarEnough =
               !last ||
-              Math.abs(last.latitude - currentCoords.latitude) > 0.00002 ||
-              Math.abs(last.longitude - currentCoords.longitude) > 0.00002;
+              haversineMeters(last, currentCoords) >= MIN_ROUTE_DISTANCE_METERS;
+
+            let nextRoute = prev.routeHistory;
+            if (isFarEnough) {
+              nextRoute =
+                prev.routeHistory.length >= MAX_ROUTE_POINTS
+                  ? [...prev.routeHistory.slice(1), currentCoords]
+                  : [...prev.routeHistory, currentCoords];
+            }
 
             return {
               ...prev,
@@ -282,9 +301,7 @@ export function useUserLocation(
               speedKmh: Math.round(filteredKmh * 10) / 10,
               isTracking: true,
               permissionGranted: true,
-              routeHistory: isDifferent
-                ? [...prev.routeHistory, currentCoords]
-                : prev.routeHistory,
+              routeHistory: nextRoute,
             };
           });
         }
@@ -320,6 +337,7 @@ export function useUserLocation(
   }, []);
 
   useEffect(() => {
+    if (!isEnabled) return;
     getImmediateLocation();
     if (autoStartTracking) startTracking();
     return () => {
@@ -327,18 +345,38 @@ export function useUserLocation(
         locationSubscription.current.remove();
       }
     };
-  }, [autoStartTracking, getImmediateLocation, startTracking]);
+  }, [autoStartTracking, getImmediateLocation, startTracking, isEnabled]);
 
   // Dengarkan update lokasi dari Background Service ketika aplikasi berada di background / foreground
   useEffect(() => {
+    if (!isEnabled) return;
     const unsubscribe = backgroundTrackingService.addLocationListener((bg) => {
       setState((prev) => {
-        const isDifferent =
+        const last = prev.routeHistory[prev.routeHistory.length - 1];
+        const isFarEnough =
+          !last ||
+          haversineMeters(last, bg.coords) >= MIN_ROUTE_DISTANCE_METERS;
+
+        let nextRoute = prev.routeHistory;
+        if (isFarEnough) {
+          nextRoute =
+            prev.routeHistory.length >= MAX_ROUTE_POINTS
+              ? [...prev.routeHistory.slice(1), bg.coords]
+              : [...prev.routeHistory, bg.coords];
+        }
+
+        const isCoordMoved =
           !prev.coords ||
           Math.abs(prev.coords.latitude - bg.coords.latitude) > 0.00001 ||
           Math.abs(prev.coords.longitude - bg.coords.longitude) > 0.00001;
 
-        if (!isDifferent && prev.speedKmh === bg.speedKmh) return prev;
+        if (
+          !isCoordMoved &&
+          prev.speedKmh === bg.speedKmh &&
+          nextRoute === prev.routeHistory
+        ) {
+          return prev;
+        }
 
         return {
           ...prev,
@@ -346,9 +384,7 @@ export function useUserLocation(
           accuracy: bg.accuracy,
           speedKmh: bg.speedKmh,
           rawSpeedKmh: bg.speedKmh,
-          routeHistory: isDifferent
-            ? [...prev.routeHistory, bg.coords]
-            : prev.routeHistory,
+          routeHistory: nextRoute,
         };
       });
     });
@@ -356,7 +392,7 @@ export function useUserLocation(
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [isEnabled]);
 
   return {
     ...state,
