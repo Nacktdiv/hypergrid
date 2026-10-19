@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
+  InteractionManager,
   Modal,
   Text,
   View,
@@ -18,6 +18,7 @@ import {
   type LatLng,
   type MapData,
 } from "@/components/map/map-data";
+import { MapCanvasSkeleton } from "@/components/ui/skeleton";
 import { Touchable } from "@/components/ui/touchable";
 import { ClusterRadialCard } from "./cluster-radial-card";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
@@ -31,7 +32,7 @@ type FilterStatus = "all" | PotholeStatus;
  * Peta utama interaktif — Leaflet + OpenStreetMap.
  *
  * Dilengkapi:
- *   - Live GPS Device tracking koordinat lokasi pengguna saat ini
+ *   - Transisi masuk instan dengan Skeleton Loader saat memuat data klaster & GPS
  *   - Ikon lokasi marker dinamis (Mobil / Motor / Sepeda)
  *   - Menampilkan seluruh klaster PostGIS publik dari database (bukan hanya history user)
  *   - Filter chip status klaster (Semua, Aktif, Terverifikasi, Selesai)
@@ -52,7 +53,7 @@ export function MainMap({
   onOpenClusterDetail,
   currentCoords: externalCoords,
 }: MainMapProps) {
-  const { clusters, fetchClusters } = usePotholeClusters();
+  const { clusters, isLoading: isClustersLoading, fetchClusters } = usePotholeClusters();
   const hasExternalCoords = externalCoords !== undefined;
   const {
     coords: internalCoords,
@@ -66,11 +67,25 @@ export function MainMap({
   const [selectedCluster, setSelectedCluster] = useState<PotholeCluster | null>(
     null
   );
+  const [hasFetchedInitial, setHasFetchedInitial] = useState(
+    () => clusters.length > 0 || !isClustersLoading
+  );
 
-  // Ambil seluruh klaster lubang jalan nyata di database secara publik (seluruh titik kota)
-  useEffect(() => {
-    fetchClusters({ limit: 500 });
+  const loadInitialClusters = useCallback(async () => {
+    try {
+      await fetchClusters({ limit: 500 });
+    } finally {
+      setHasFetchedInitial(true);
+    }
   }, [fetchClusters]);
+
+  // Ambil seluruh klaster lubang jalan nyata di database setelah transisi halaman selesai
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      loadInitialClusters();
+    });
+    return () => task.cancel();
+  }, [loadInitialClusters]);
 
   // Filter klaster berdasarkan tab yang dipilih
   const filteredClusters = useMemo(() => {
@@ -112,20 +127,20 @@ export function MainMap({
     }
   };
 
-  if (!liveCoords) {
+  if (!liveCoords || (!hasFetchedInitial && isClustersLoading)) {
     return (
       <View
         className={
           fullBleed
-            ? "flex-1 w-full h-full items-center justify-center bg-[#0B0F19] p-4"
-            : "flex-1 w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-800 bg-[#0B0F19] p-4"
+            ? "flex-1 w-full h-full items-center justify-center bg-slate-100"
+            : "flex-1 w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100"
         }
         style={fullBleed ? { width: "100%", height: "100%" } : { height: 340, width: "100%" }}
       >
         {errorMsg ? (
-          <View className="items-center gap-2">
+          <View className="items-center gap-2 p-4">
             <ShieldAlert size={28} color="#F59E0B" />
-            <Text className="text-center font-quicksand-bold text-xs text-white">
+            <Text className="text-center font-quicksand-bold text-xs text-slate-800">
               {errorMsg}
             </Text>
             <Touchable
@@ -138,15 +153,7 @@ export function MainMap({
             </Touchable>
           </View>
         ) : (
-          <View className="items-center gap-2">
-            <ActivityIndicator size="small" color="#009EFF" />
-            <Text className="mt-2 font-quicksand-bold text-xs text-white">
-              Menghubungkan GPS...
-            </Text>
-            <Text className="text-center font-quicksand text-[11px] text-slate-400">
-              Mengunci posisi satelit perangkat Anda
-            </Text>
-          </View>
+          <MapCanvasSkeleton />
         )}
       </View>
     );

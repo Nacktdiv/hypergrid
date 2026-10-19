@@ -11,8 +11,9 @@ import type {
   SensorFrame,
 } from './types';
 import { detectionsService } from '@/services/api/detections.service';
+import { historyStorage } from '@/services/api/history-storage';
 import { offlineQueue } from '@/services/api/offline-queue';
-import type { CreateDetectionDto } from '@/types/api';
+import type { CreateDetectionDto, RawDetection } from '@/types/api';
 
 /**
  * Edge AI Road Damage Detector v2.
@@ -94,10 +95,10 @@ export class EdgeRoadDamageDetector {
         isAnomalyDetected: false,
         anomalyType: 'normal',
         estimatedSeverity: 'low',
-        probability,
-        confidence,
-        confidenceTier,
-        zAccelPeak: maxVertDyn,
+        probability: 0,
+        confidence: 0,
+        confidenceTier: 'LOW',
+        zAccelPeak: 0,
         modelVersion: EDGE_AI_CONFIG.modelVersion,
       };
     }
@@ -190,10 +191,10 @@ export class EdgeRoadDamageDetector {
         isAnomalyDetected: false,
         anomalyType: 'normal',
         estimatedSeverity: 'low',
-        probability: 0.15,
-        confidence: 0.85,
-        confidenceTier: 'HIGH',
-        zAccelPeak: maxVertDyn,
+        probability: 0,
+        confidence: 0,
+        confidenceTier: 'LOW',
+        zAccelPeak: 0,
         modelVersion: `${EDGE_AI_CONFIG.modelVersion}-heuristic`,
       };
     }
@@ -302,23 +303,43 @@ export class EdgeRoadDamageDetector {
     };
   }
 
-  /** Proses dan kirim hasil deteksi ke backend atau offline queue */
+  /** Proses dan kirim hasil deteksi ke backend atau offline queue + simpan ke historyStorage */
   public async processAndIngest(
     result: EdgeDetectionResult,
     options?: { offlineOnly?: boolean }
   ): Promise<void> {
     if (!result.isAnomalyDetected || !result.detectionDto) return;
 
+    const dto = result.detectionDto;
+    const localRecord: RawDetection = {
+      id: `local_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      deviceId: dto.deviceId,
+      userId: dto.userId ?? this.userId ?? null,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+      confidence: dto.confidence,
+      speedKmh: dto.speedKmh ?? null,
+      zAccelPeak: dto.zAccelPeak ?? null,
+      modelVersion: dto.modelVersion ?? EDGE_AI_CONFIG.modelVersion,
+      detectedAt: dto.detectedAt || new Date().toISOString(),
+    };
+
+    // Simpan instan ke RAM + AsyncStorage agar langsung tersedia di History
+    historyStorage.addSingleDetection(localRecord).catch(() => {});
+
     if (options?.offlineOnly) {
-      offlineQueue.enqueue(result.detectionDto);
+      offlineQueue.enqueue(dto);
       return;
     }
 
     try {
-      await detectionsService.createDetection(result.detectionDto);
+      const created = await detectionsService.createDetection(dto);
+      if (created && created.id) {
+        historyStorage.addSingleDetection(created).catch(() => {});
+      }
     } catch (error) {
       console.warn('[EdgeAI] Gagal kirim ke server, masuk offline queue:', error);
-      offlineQueue.enqueue(result.detectionDto);
+      offlineQueue.enqueue(dto);
     }
   }
 
@@ -333,9 +354,9 @@ export class EdgeRoadDamageDetector {
       isAnomalyDetected: false,
       anomalyType: 'normal',
       estimatedSeverity: 'low',
-      probability: 0.05,
-      confidence: 0.95,
-      confidenceTier: 'HIGH',
+      probability: 0,
+      confidence: 0,
+      confidenceTier: 'LOW',
       zAccelPeak: 0,
       modelVersion: EDGE_AI_CONFIG.modelVersion,
     };

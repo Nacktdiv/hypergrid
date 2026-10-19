@@ -1,10 +1,11 @@
 import React, { useMemo } from "react";
-import { View, Text, ActivityIndicator } from "react-native";
+import { View, Text } from "react-native";
 import { Navigation } from "lucide-react-native";
 
 import { cn } from "@/lib/utils";
 import { LeafletMap } from "@/components/map/leaflet-map";
 import type { DamagePoint, LatLng, MapData } from "@/components/map/map-data";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export interface LiveMapProps {
   isPaused?: boolean;
@@ -12,13 +13,15 @@ export interface LiveMapProps {
   currentCoords?: LatLng | null;
   routeHistory?: LatLng[];
   liveDetections?: DamagePoint[];
+  isLoadingHazards?: boolean;
+  onDamagePress?: (point: DamagePoint) => void;
 }
 
 /**
  * Peta live full-screen untuk Drive Mode (Leaflet + OpenStreetMap).
  *
- * Menerima koordinat live perangkat dan jejak rute perjalanan nyata pengguna.
- * Tidak pernah menggunakan fallback Jakarta (mencegah lompatan peta dari 'lokasi anta berantah').
+ * Menampilkan koordinat live perangkat, jejak rute perjalanan nyata, serta
+ * seluruh titik history dan klaster lubang jalan yang telah terekam di sekitar area jalan.
  */
 export const LiveMap = React.memo(function LiveMap({
   isPaused = false,
@@ -26,6 +29,7 @@ export const LiveMap = React.memo(function LiveMap({
   currentCoords,
   routeHistory = [],
   liveDetections = [],
+  onDamagePress,
 }: LiveMapProps) {
   // Koordinat aktif pengguna (real-time atau titik terakhir jejak rute)
   const activeCoord: LatLng | null = useMemo(() => {
@@ -53,21 +57,22 @@ export const LiveMap = React.memo(function LiveMap({
     };
   }, [activeCoord, routeHistory, liveDetections]);
 
-  // Jika GPS belum mendapatkan sinyal sama sekali, tampilkan status pencarian satelit
-  // dan jangan pernah me-render koordinat Jakarta secara tiba-tiba.
+  // Tampilkan Skeleton saat GPS & data peta sedang dimuat
   if (!mapData || !activeCoord) {
     return (
-      <View className="flex-1 items-center justify-center bg-[#0B0F19]">
-        <View className="items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/90 px-6 py-5 shadow-2xl">
+      <View className="flex-1 items-center justify-center bg-[#0B0F19] px-6">
+        <View className="w-full max-w-xs items-center gap-3.5 rounded-2xl border border-slate-800 bg-slate-900/90 px-6 py-6 shadow-2xl">
           <View className="rounded-full bg-sky-500/10 p-3">
-            <Navigation size={28} color="#009EFF" />
+            <Navigation size={26} color="#009EFF" />
           </View>
-          <ActivityIndicator size="small" color="#009EFF" />
-          <Text className="font-quicksand-bold text-sm text-white">
-            Menghubungkan GPS...
-          </Text>
-          <Text className="text-center font-quicksand text-xs text-slate-400">
-            Mengunci posisi satelit perangkat Anda
+          <Skeleton dark className="h-4 w-40 rounded-lg" />
+          <Skeleton dark className="h-3 w-52 rounded-md" />
+          <View className="w-full flex-row gap-2 pt-2">
+            <Skeleton dark className="flex-1 h-8 rounded-xl" />
+            <Skeleton dark className="flex-1 h-8 rounded-xl" />
+          </View>
+          <Text className="mt-1 text-center font-quicksand text-[11px] text-slate-400">
+            Menyiapkan peta & memuat titik klaster jalan...
           </Text>
         </View>
       </View>
@@ -80,6 +85,7 @@ export const LiveMap = React.memo(function LiveMap({
         data={mapData}
         vehicleType={vehicleType}
         interactive={!isPaused}
+        onDamagePress={onDamagePress}
       />
     </View>
   );

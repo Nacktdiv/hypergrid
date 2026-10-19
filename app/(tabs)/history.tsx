@@ -1,13 +1,13 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import {
-  ActivityIndicator,
+  InteractionManager,
   RefreshControl,
   ScrollView,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
   Compass,
   Navigation,
@@ -26,21 +26,19 @@ import type { HistoryEntry, Metric } from "@/components/history/mock-data";
 import type { DamagePoint, LatLng } from "@/components/map/map-data";
 import { AppButton } from "@/components/ui/app-button";
 import { AppCard } from "@/components/ui/app-card";
+import { HistoryContentSkeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { useDetections } from "@/hooks/use-detections";
-import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
+import { historyStorage } from "@/services/api/history-storage";
 import { tokenStorage } from "@/services/api/token-storage";
 
 /**
  * Screen 7 — Riwayat Perjalanan (Swiss Design & Data Riil Server).
  *
- * Mengusung gaya International Typographic Style (Swiss Design):
- *   - Grid asimetris fungsional, kontras hitam-putih tegas
- *   - Tipografi sans-serif dominan (Chivo & JetBrains Mono)
- *   - Data-dense & bebas dari elemen dekorasi palsu (NO DUMMY MAPS)
- *   - Pemilihan 7 hari dinamis dari hari ini + Kalender Rentang Tanggal
- *   - Setiap user hanya melihat data riwayat akunnya sendiri (Role User Driver, bukan Admin)
- *   - Jika tidak ada perjalanan pada tanggal itu: Tampilkan Swiss Empty State
+ * Arsitektur Transisi Instan + In-Memory useState / Storage Cache:
+ *   - Menggunakan data yang sudah ada di memori (`historyStorage.getMemoryCache()` / `useState`)
+ *     agar perpindahan antar tab (`Start` <-> `History` <-> `Profile`) instan (0 ms) dan hemat resource.
+ *   - Menampilkan Skeleton Loader hanya jika cache belum tersedia atau saat berpindah tanggal.
  */
 export default function HistoryScreen() {
   const router = useRouter();
@@ -51,6 +49,11 @@ export default function HistoryScreen() {
     formatToIsoDate(new Date())
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSkeletonVisible, setIsSkeletonVisible] = useState<boolean>(
+    () => historyStorage.getMemoryCache() === null
+  );
+  const fetchRequestIdRef = useRef(0);
+  const dateSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     detections,
@@ -58,54 +61,131 @@ export default function HistoryScreen() {
     fetchDetections,
   } = useDetections();
 
-  const {
-    fetchClusters,
-  } = usePotholeClusters();
-
-  const loadData = useCallback(async () => {
-    try {
-      const deviceId = await tokenStorage.getDeviceId();
-      await Promise.allSettled([
-        fetchDetections({
+  const loadDataFromBackend = useCallback(
+    async (showSkeleton = false) => {
+      const requestId = ++fetchRequestIdRef.current;
+      if (showSkeleton) {
+        setIsSkeletonVisible(true);
+      }
+      try {
+        const deviceId = await tokenStorage.getDeviceId();
+        await fetchDetections({
           limit: 100,
           userId: user?.id,
           deviceId: !user?.id ? deviceId : undefined,
-        }),
-        fetchClusters({ limit: 100 }),
-      ]);
-    } catch (e) {
-      console.warn("[HistoryScreen] Gagal memuat data telemetri:", e);
-    }
-  }, [fetchDetections, fetchClusters, user]);
+        });
+      } catch (e) {
+        console.warn("[HistoryScreen] Gagal memuat data telemetri:", e);
+      } finally {
+        if (fetchRequestIdRef.current === requestId) {
+          setIsSkeletonVisible(false);
+        }
+      }
+    },
+    [fetchDetections, user]
+  );
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  // Saat masuk ke halaman History:
+  // Jika data sudah ada di memoryCache / useState, tampilkan langsung (0ms) tanpa skeleton berat.
+  // Sinkronisasi background hanya dijalankan jika cache belum pernah di-sync dalam 25 detik terakhir.
+  useFocusEffect(
+    useCallback(() => {
+      const hasMemoryCache = historyStorage.getMemoryCache() !== null;
+      const isCacheFresh =
+        hasMemoryCache && Date.now() - historyStorage.getLastSyncedAt() < 25_000;
+
+      if (!hasMemoryCache) {
+        setIsSkeletonVisible(true);
+      } else {
+        setIsSkeletonVisible(false);
+      }
+
+      const task = InteractionManager.runAfterInteractions(() => {
+        if (!isCacheFresh) {
+          loadDataFromBackend(!hasMemoryCache);
+        }
+      });
+
+      return () => {
+        task.cancel();
+        if (dateSwitchTimerRef.current) {
+          clearTimeout(dateSwitchTimerRef.current);
+          dateSwitchTimerRef.current = null;
+        }
+      };
+    }, [loadDataFromBackend])
+  );
+
+  // Saat user memilih tanggal baru: langsung ubah tanggal aktif & tampilkan skeleton singkat,
+  // lalu gunakan data di useState/storage (atau revalidate jika cache belum pernah di-sync)
+  const handleSelectDate = useCallback(
+    (newDate: string) => {
+      if (newDate === selectedDate && !isSkeletonVisible) return;
+      setSelectedDate(newDate);
+      setIsSkeletonVisible(true);
+
+      if (dateSwitchTimerRef.current) {
+        clearTimeout(dateSwitchTimerRef.current);
+      }
+
+      const isCacheFresh =
+        historyStorage.getMemoryCache() !== null &&
+        Date.now() - historyStorage.getLastSyncedAt() < 30_000;
+
+      if (isCacheFresh) {
+        dateSwitchTimerRef.current = setTimeout(() => {
+          setIsSkeletonVisible(false);
+        }, 140);
+        return;
+      }
+
+      const requestId = ++fetchRequestIdRef.current;
+      InteractionManager.runAfterInteractions(async () => {
+        try {
+          const deviceId = await tokenStorage.getDeviceId();
+          await fetchDetections({
+            limit: 100,
+            userId: user?.id,
+            deviceId: !user?.id ? deviceId : undefined,
+          });
+        } catch (e) {
+          console.warn("[HistoryScreen] Gagal memuat data tanggal:", e);
+        } finally {
+          if (fetchRequestIdRef.current === requestId) {
+            setIsSkeletonVisible(false);
+          }
+        }
+      });
+    },
+    [selectedDate, isSkeletonVisible, fetchDetections, user]
+  );
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadData();
+    await loadDataFromBackend(true);
     setIsRefreshing(false);
   };
 
-  // 1. FILTER DATA DETEKSI TELEMETRI KHUSUS PADA TANGGAL YANG DIPILIH
-  // Menampilkan riwayat akun sendiri dan memformat tanggal berbasis timezone lokal (bukan string UTC murni)
+  // 1. FILTER DATA DETEKSI ANOMALI NYATA KHUSUS PADA TANGGAL YANG DIPILIH
   const detectionsOnDate = useMemo(() => {
+    if (isSkeletonVisible) return [];
     return detections.filter((d) => {
-      // Pastikan hanya data akun sendiri jika user terautentikasi dan data memiliki userId
       if (user?.id && d.userId && d.userId !== user.id) return false;
       if (!d.detectedAt) return false;
+      if (String(d.id).startsWith("ride_")) return false;
+      if (typeof d.confidence === "number" && d.confidence <= 0) return false;
+      if (typeof d.speedKmh === "number" && d.speedKmh < 3.5) return false;
+      if (typeof d.zAccelPeak === "number" && d.zAccelPeak < 0.6) return false;
 
-      // Konversi timestamp ISO server (UTC) ke tanggal lokal perangkat (YYYY-MM-DD)
       const dateObj = new Date(d.detectedAt);
       if (isNaN(dateObj.getTime())) return false;
       return formatToIsoDate(dateObj) === selectedDate;
     });
-  }, [detections, selectedDate, user]);
+  }, [detections, selectedDate, user, isSkeletonVisible]);
 
   const hasTripOnDate = detectionsOnDate.length > 0;
 
-  // 2. SUSUN RUTE & TITIK KERUSAKAN NYATA UNTUK PETA (BUKAN DUMMY!)
+  // 2. SUSUN RUTE & TITIK KERUSAKAN NYATA UNTUK PETA
   const { realRouteCoordinates, realDamagePoints } = useMemo(() => {
     if (!hasTripOnDate) {
       return { realRouteCoordinates: [], realDamagePoints: [] };
@@ -230,6 +310,8 @@ export default function HistoryScreen() {
     });
   }, [detectionsOnDate, selectedDate]);
 
+  const showSkeleton = isSkeletonVisible || isDetectionsLoading;
+
   return (
     <SafeAreaView className="flex-1 bg-surface-canvas" edges={["top"]}>
       <ScrollView
@@ -267,7 +349,7 @@ export default function HistoryScreen() {
         <View className="gap-2">
           <View className="flex-row items-center justify-between">
             <Text className="font-mono text-xs font-bold uppercase tracking-wider text-slate-700">
-              Select Date: 
+              Select Date:
             </Text>
             <Text className="font-mono text-[11px] text-brand">
               {formatIsoToLongLabel(selectedDate)}
@@ -275,122 +357,125 @@ export default function HistoryScreen() {
           </View>
 
           <DaySelector
-            onSelect={setSelectedDate}
+            onSelect={handleSelectDate}
             selectedId={selectedDate}
           />
         </View>
 
-        {/* RINGKASAN METRIK TELEMETRI */}
-        <MetricsSummary metrics={dynamicMetrics} />
-
-        {/* TAMPILAN PETA RIWAYAT: HANYA TAMPIL JIKA ADA DATA PERJALANAN NYATA */}
-        {hasTripOnDate ? (
-          <View className="gap-2">
-            <View className="flex-row items-center justify-between">
-              <Text className="font-mono text-xs font-bold uppercase tracking-wider text-slate-900">
-                Route Preview
-              </Text>
-              <Text className="font-mono text-xs text-slate-600">
-                {realRouteCoordinates.length} Coordinates
-              </Text>
-            </View>
-
-            <RouteMapPreview
-              routeCoordinates={realRouteCoordinates}
-              damagePoints={realDamagePoints}
-            />
-          </View>
+        {/* TAMPILKAN SKELETON SAAT PINDAH HALAMAN ATAU GANTI TANGGAL & SEDANG FETCH */}
+        {showSkeleton ? (
+          <HistoryContentSkeleton />
         ) : (
-          /* EMPTY STATE BERBASIS DESIGN SYSTEM */
-          <AppCard variant="default" className="p-5 gap-3">
-            <View className="gap-1">
-              <Text className="font-chivo-bold text-lg text-slate-900">
-                No Driving Activity Detected
-              </Text>
-              <Text className="font-quicksand text-xs leading-relaxed text-slate-700">
-                No driving activity or road shock anomaly detections recorded on{" "}
-                <Text className="font-mono-bold text-slate-900">
-                  {formatIsoToLongLabel(selectedDate)}
-                </Text>
-                . Map preview is hidden as no GPS telemetry routes were logged.
-              </Text>
-            </View>
+          <>
+            {/* RINGKASAN METRIK TELEMETRI */}
+            <MetricsSummary metrics={dynamicMetrics} />
 
-            {/* Metric Preview Row */}
-            <View className="flex-row divide-x divide-slate-200 rounded-2xl border border-slate-200 bg-slate-50 p-3 mt-2">
-              <View className="flex-1 items-center gap-0.5">
-                <Text className="font-mono text-[9px] uppercase font-bold text-slate-600">
-                  Anomaly Points
-                </Text>
-                <Text className="font-mono-bold text-sm text-slate-900">
-                  0
-                </Text>
-              </View>
-              <View className="flex-1 items-center gap-0.5">
-                <Text className="font-mono text-[9px] uppercase font-bold text-slate-600">
-                  Distance
-                </Text>
-                <Text className="font-mono-bold text-sm text-slate-900">
-                  0.0 KM
-                </Text>
-              </View>
-              <View className="flex-1 items-center gap-0.5">
-                <Text className="font-mono text-[9px] uppercase font-bold text-slate-600">
-                  Sensor Status
-                </Text>
-                <Text className="font-mono-bold text-sm text-slate-900">
-                  IDLE
-                </Text>
-              </View>
-            </View>
+            {/* TAMPILAN PETA RIWAYAT: HANYA TAMPIL JIKA ADA DATA PERJALANAN NYATA */}
+            {hasTripOnDate ? (
+              <View className="gap-2">
+                <View className="flex-row items-center justify-between">
+                  <Text className="font-mono text-xs font-bold uppercase tracking-wider text-slate-900">
+                    Route Preview
+                  </Text>
+                  <Text className="font-mono text-xs text-slate-600">
+                    {realRouteCoordinates.length} Coordinates
+                  </Text>
+                </View>
 
-            {/* Call To Action */}
-            <View className="mt-2">
-              <AppButton
-                variant="primary"
-                size="md"
-                label="Start Drive Mode Now"
-                iconLeft={<Navigation size={16} color="#FFFFFF" />}
-                onPress={() => router.push("/ride")}
-                accessibilityLabel="Start drive mode"
-              />
+                <RouteMapPreview
+                  routeCoordinates={realRouteCoordinates}
+                  damagePoints={realDamagePoints}
+                />
+              </View>
+            ) : (
+              /* EMPTY STATE BERBASIS DESIGN SYSTEM */
+              <AppCard variant="default" className="p-5 gap-3">
+                <View className="gap-1">
+                  <Text className="font-chivo-bold text-lg text-slate-900">
+                    No Driving Activity Detected
+                  </Text>
+                  <Text className="font-quicksand text-xs leading-relaxed text-slate-700">
+                    No driving activity or road shock anomaly detections recorded on{" "}
+                    <Text className="font-mono-bold text-slate-900">
+                      {formatIsoToLongLabel(selectedDate)}
+                    </Text>
+                    . Map preview is hidden as no GPS telemetry routes were logged.
+                  </Text>
+                </View>
+
+                {/* Metric Preview Row */}
+                <View className="flex-row divide-x divide-slate-200 rounded-2xl border border-slate-200 bg-slate-50 p-3 mt-2">
+                  <View className="flex-1 items-center gap-0.5">
+                    <Text className="font-mono text-[9px] uppercase font-bold text-slate-600">
+                      Anomaly Points
+                    </Text>
+                    <Text className="font-mono-bold text-sm text-slate-900">
+                      0
+                    </Text>
+                  </View>
+                  <View className="flex-1 items-center gap-0.5">
+                    <Text className="font-mono text-[9px] uppercase font-bold text-slate-600">
+                      Distance
+                    </Text>
+                    <Text className="font-mono-bold text-sm text-slate-900">
+                      0.0 KM
+                    </Text>
+                  </View>
+                  <View className="flex-1 items-center gap-0.5">
+                    <Text className="font-mono text-[9px] uppercase font-bold text-slate-600">
+                      Sensor Status
+                    </Text>
+                    <Text className="font-mono-bold text-sm text-slate-900">
+                      IDLE
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Call To Action */}
+                <View className="mt-2">
+                  <AppButton
+                    variant="primary"
+                    size="md"
+                    label="Start Drive Mode Now"
+                    iconLeft={<Navigation size={16} color="#FFFFFF" />}
+                    onPress={() => router.push("/ride")}
+                    accessibilityLabel="Start drive mode"
+                  />
+                </View>
+              </AppCard>
+            )}
+
+            {/* DAFTAR LOG DETAIL PERJALANAN */}
+            <View className="gap-3">
+              <View className="flex-row items-center justify-between">
+                <View className="flex-1 flex-row items-baseline gap-2">
+                  <Text className="font-chivo-bold text-lg uppercase tracking-tight text-slate-900">
+                    Telemetry Log Entries
+                  </Text>
+                  <Text className="font-mono text-[11px] text-slate-600 font-semibold">
+                    {hasTripOnDate
+                      ? `${historyEntries.length} points`
+                      : "0 entries"}
+                  </Text>
+                </View>
+              </View>
+
+              {/* List Log Items */}
+              {historyEntries.length > 0 ? (
+                historyEntries.map((entry) => (
+                  <HistoryItemCard key={entry.id} entry={entry} />
+                ))
+              ) : (
+                <View className="items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white py-8">
+                  <Compass size={24} color="#64748B" />
+                  <Text className="mt-2 font-quicksand-semibold text-xs text-slate-700">
+                    No telemetry logs recorded for this date.
+                  </Text>
+                </View>
+              )}
             </View>
-          </AppCard>
+          </>
         )}
-
-        {/* DAFTAR LOG DETAIL PERJALANAN */}
-        <View className="gap-3">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1 flex-row items-baseline gap-2">
-              <Text className="font-chivo-bold text-lg uppercase tracking-tight text-slate-900">
-                Telemetry Log Entries
-              </Text>
-              <Text className="font-mono text-[11px] text-slate-600 font-semibold">
-                {hasTripOnDate
-                  ? `${historyEntries.length} points`
-                  : "0 entries"}
-              </Text>
-            </View>
-
-            {isDetectionsLoading ? (
-              <ActivityIndicator size="small" color="#0F172A" />
-            ) : null}
-          </View>
-
-          {/* List Log Items */}
-          {historyEntries.length > 0 ? (
-            historyEntries.map((entry) => (
-              <HistoryItemCard key={entry.id} entry={entry} />
-            ))
-          ) : (
-            <View className="items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white py-8">
-              <Compass size={24} color="#64748B" />
-              <Text className="mt-2 font-quicksand-semibold text-xs text-slate-700">
-                No telemetry logs recorded for this date.
-              </Text>
-            </View>
-          )}
-        </View>
       </ScrollView>
     </SafeAreaView>
   );

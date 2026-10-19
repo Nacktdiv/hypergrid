@@ -143,6 +143,11 @@ export const LeafletMap = React.memo(function LeafletMap({
         }).addTo(window.map);
       }
 
+      // Dedicated top pane so the user vehicle icon is ALWAYS above all cluster/damage markers
+      window.map.createPane('vehicleTopPane');
+      window.map.getPane('vehicleTopPane').style.zIndex = '999';
+      window.map.getPane('vehicleTopPane').style.pointerEvents = 'none';
+
       // Damage Clusters Layer
       window.damageLayer = L.layerGroup().addTo(window.map);
       window.renderDamagePoints = function(points) {
@@ -156,7 +161,10 @@ export const LeafletMap = React.memo(function LeafletMap({
             iconSize: [34, 34],
             iconAnchor: [17, 17]
           });
-          var marker = L.marker([pt.position.latitude, pt.position.longitude], { icon: icon });
+          var marker = L.marker([pt.position.latitude, pt.position.longitude], {
+            icon: icon,
+            zIndexOffset: 100
+          });
           marker.on('click', function() {
             if (window.ReactNativeWebView) {
               window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -170,7 +178,7 @@ export const LeafletMap = React.memo(function LeafletMap({
       };
       window.renderDamagePoints(${damageData});
 
-      // Vehicle graphic markers
+      // Vehicle graphic markers (placed in vehicleTopPane & highest zIndexOffset so never covered by clusters)
       var vehicleImages = ${JSON.stringify(VEHICLE_MARKER_IMAGES)};
       var initialImg = vehicleImages["${vehicleType}"] || vehicleImages["car"];
       var vehicleIcon = L.divIcon({
@@ -179,7 +187,11 @@ export const LeafletMap = React.memo(function LeafletMap({
         iconSize: [48, 48],
         iconAnchor: [24, 24]
       });
-      window.vehicleMarker = L.marker(${vehicleCoord}, { icon: vehicleIcon }).addTo(window.map);
+      window.vehicleMarker = L.marker(${vehicleCoord}, {
+        icon: vehicleIcon,
+        pane: 'vehicleTopPane',
+        zIndexOffset: 10000
+      }).addTo(window.map);
 
       // Helper untuk mengganti ikon gambar kendaraan secara real-time
       window.setVehicleType = function(vType) {
@@ -192,6 +204,9 @@ export const LeafletMap = React.memo(function LeafletMap({
         });
         if (window.vehicleMarker) {
           window.vehicleMarker.setIcon(newIcon);
+          if (window.vehicleMarker.setZIndexOffset) {
+            window.vehicleMarker.setZIndexOffset(10000);
+          }
         }
       };
 

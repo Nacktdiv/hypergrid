@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { View } from "react-native";
+import { BackHandler, InteractionManager, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Accelerometer, Gyroscope } from "expo-sensors";
@@ -13,10 +13,12 @@ import { EDGE_AI_CONFIG } from "@/edge-ai/model-config";
 import type { RawSensorSample } from "@/edge-ai/types";
 import { defaultEdgeDetector } from "@/edge-ai/detector";
 import { useAuth } from "@/hooks/use-auth";
+import { useDetections } from "@/hooks/use-detections";
 import { useEdgeAi } from "@/hooks/use-edge-ai";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
 import { useUserLocation } from "@/hooks/use-user-location";
 import { offlineQueue } from "@/services/api/offline-queue";
+import { tokenStorage } from "@/services/api/token-storage";
 import { backgroundTrackingService } from "@/services/background-tracking";
 import type { DamagePoint, LatLng } from "@/components/map/map-data";
 
@@ -49,23 +51,26 @@ export default function RideScreen() {
   }, [user]);
 
   useEffect(() => {
-    backgroundTrackingService.startBackgroundTracking("driving").catch((err) => {
-      console.warn("[RideScreen] Gagal mengaktifkan background driving tracking:", err);
+    const task = InteractionManager.runAfterInteractions(() => {
+      backgroundTrackingService.startBackgroundTracking("driving").catch((err) => {
+        console.warn("[RideScreen] Gagal mengaktifkan background driving tracking:", err);
+      });
     });
 
     return () => {
+      task.cancel();
       backgroundTrackingService.startBackgroundTracking("idle").catch(() => {});
     };
   }, []);
 
   // Status Telemetri Live
   const [currentVibration, setCurrentVibration] = useState(0);
-  const [shockLevel, setShockLevel] = useState(15);
+  const [shockLevel, setShockLevel] = useState(0);
   const [activeShockAlert, setActiveShockAlert] = useState<ShockAlert | null>(null);
   const shockAlertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [liveDetections, setLiveDetections] = useState<DamagePoint[]>([]);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [maxGForce, setMaxGForce] = useState<number>(1.0);
+  const [maxGForce, setMaxGForce] = useState<number>(0);
 
   const triggerShockAlert = useCallback(
     (alert: ShockAlert, autoDismissMs = 6000) => {
@@ -108,7 +113,7 @@ export default function RideScreen() {
 
   // Status Sensor Akselerometer & Giroskop HP
   const [sensorEnabled] = useState(true);
-  const [liveGForce, setLiveGForce] = useState<number>(1.0);
+  const [liveGForce, setLiveGForce] = useState<number>(0);
   const lastDetectionTimeRef = useRef<number>(0);
 
   // Ref penampung data Giroskop real-time
@@ -175,7 +180,7 @@ export default function RideScreen() {
     return dist;
   }, [routeHistory]);
 
-  // Hook Edge AI dan PostGIS Early Warning
+  // Hook Edge AI, Klaster PostGIS, dan Deteksi History
   const {
     detectedCount,
     lastResult,
@@ -185,13 +190,111 @@ export default function RideScreen() {
 
   const runInferenceRef = useRef(runInference);
   const addSampleRef = useRef(addSample);
+  const maxGForceRef = useRef(maxGForce);
+  const liveGForceRef = useRef(liveGForce);
+  const detectedCountRef = useRef(detectedCount);
+  const lastResultRef = useRef(lastResult);
+  const hasSavedSessionRef = useRef(false);
 
   useEffect(() => {
     runInferenceRef.current = runInference;
     addSampleRef.current = addSample;
-  }, [runInference, addSample]);
+    maxGForceRef.current = maxGForce;
+    liveGForceRef.current = liveGForce;
+    detectedCountRef.current = detectedCount;
+    lastResultRef.current = lastResult;
+  }, [runInference, addSample, maxGForce, liveGForce, detectedCount, lastResult]);
 
-  const { nearbyCluster, checkNearby } = usePotholeClusters();
+  const { clusters, nearbyCluster, fetchClusters, checkNearby } =
+    usePotholeClusters();
+  const { detections: recordedDetections, fetchDetections } = useDetections();
+
+  // Muat seluruh klaster jalan dan titik history setelah animasi transisi masuk selesai
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(async () => {
+      try {
+        const deviceId = await tokenStorage.getDeviceId();
+        await Promise.allSettled([
+          fetchClusters({ limit: 500 }),
+          fetchDetections({
+            limit: 150,
+            userId: user?.id,
+            deviceId: !user?.id ? deviceId : undefined,
+          }),
+        ]);
+      } catch (err) {
+        console.warn("[RideScreen] Gagal memuat klaster & history jalan:", err);
+      }
+    });
+    return () => task.cancel();
+  }, [fetchClusters, fetchDetections, user]);
+
+  // Gabungkan titik klaster PostGIS, titik history yang terekam, dan deteksi baru saat live ride
+  const allRoadHazards: DamagePoint[] = useMemo(() => {
+    const pointsMap = new Map<string, DamagePoint>();
+
+    // 1. Klaster lubang jalan di sekitar area jalan dari database PostGIS
+    for (const c of clusters) {
+      if (c.status === "repaired" || c.status === "false_positive") continue;
+      if (
+        typeof c.center_latitude !== "number" ||
+        typeof c.center_longitude !== "number"
+      ) {
+        continue;
+      }
+      pointsMap.set(`cluster_${c.id}`, {
+        id: c.id,
+        position: {
+          latitude: c.center_latitude,
+          longitude: c.center_longitude,
+        },
+        severity: c.severity === "severe" ? "high" : c.severity,
+        reportCount: c.detection_count || 1,
+      });
+    }
+
+    // 2. Titik-titik history deteksi anomali nyata yang telah terekam
+    for (const d of recordedDetections) {
+      if (typeof d.latitude !== "number" || typeof d.longitude !== "number") {
+        continue;
+      }
+      if (user?.id && d.userId && d.userId !== user.id) continue;
+      if (String(d.id).startsWith("ride_")) continue;
+      if (typeof d.confidence === "number" && d.confidence <= 0) continue;
+      if (typeof d.speedKmh === "number" && d.speedKmh < 3.5) continue;
+      if (typeof d.zAccelPeak === "number" && d.zAccelPeak < 0.6) continue;
+
+      const pos = { latitude: d.latitude, longitude: d.longitude };
+      let alreadyCovered = false;
+      for (const existing of pointsMap.values()) {
+        if (haversineMeters(existing.position, pos) <= 12) {
+          alreadyCovered = true;
+          break;
+        }
+      }
+
+      if (!alreadyCovered) {
+        pointsMap.set(`hist_${d.id}`, {
+          id: d.id,
+          position: pos,
+          severity:
+            d.zAccelPeak && d.zAccelPeak >= 2.2
+              ? "high"
+              : d.zAccelPeak && d.zAccelPeak >= 1.7
+              ? "medium"
+              : "low",
+          reportCount: 1,
+        });
+      }
+    }
+
+    // 3. Titik deteksi baru dari sesi live ride saat ini
+    for (const pt of liveDetections) {
+      pointsMap.set(pt.id, pt);
+    }
+
+    return Array.from(pointsMap.values());
+  }, [clusters, recordedDetections, liveDetections, user]);
 
   // Loop Pemeriksaan Early Warning PostGIS Cluster di Sekitar Rute
   useEffect(() => {
@@ -257,26 +360,27 @@ export default function RideScreen() {
 
       const currentProfile = vehicleProfileRef.current;
       const currentGpsSpeed = gpsSpeedRef.current;
-
-      // Shock gauge visual (0–100) berbasis guncangan vertikal murni
-      const computedLevel = Math.min(
-        100,
-        Math.max(
-          8,
-          Math.round(
-            dynamicVerticalG *
-              currentProfile.sensorConfig.shockGaugeMultiplier +
-              10
-          )
-        )
-      );
-
-      // Vibrasi sasis dinamis (m/s²) sesuai standar kendaraan
       const minSpeed = currentProfile.sensorConfig.minMovingSpeed ?? 3.5;
       const isMoving = currentGpsSpeed >= minSpeed;
-      const idleVib = currentProfile.sensorConfig.idleVibration ?? 0;
 
-      let dynamicVib = idleVib;
+      // Shock gauge visual (0–100) & G-Force hanya aktif saat kendaraan bergerak
+      const computedLevel = isMoving
+        ? Math.min(
+            100,
+            Math.max(
+              8,
+              Math.round(
+                dynamicVerticalG *
+                  currentProfile.sensorConfig.shockGaugeMultiplier +
+                  10
+              )
+            )
+          )
+        : 0;
+
+      // Vibrasi sasis dinamis (m/s²) sesuai standar kendaraan (0 saat diam)
+      const idleVib = currentProfile.sensorConfig.idleVibration ?? 0;
+      let dynamicVib = 0;
       if (isMoving) {
         dynamicVib = Math.round(
           (dynamicVerticalG * 9.81 * 2.8 + idleVib) *
@@ -285,12 +389,16 @@ export default function RideScreen() {
         dynamicVib = Math.min(180, Math.max(idleVib, dynamicVib));
       }
 
+      const activeG = isMoving ? roundedG : 0;
+
       // Throttle pembaruan state React UI ke ~5 Hz (setiap 200ms) untuk mencegah re-render banjir bridge
       const now = Date.now();
       if (now - lastUiUpdateRef.current >= 200) {
         lastUiUpdateRef.current = now;
-        setLiveGForce(roundedG);
-        setMaxGForce((prev) => Math.max(prev, roundedG));
+        setLiveGForce(activeG);
+        if (isMoving) {
+          setMaxGForce((prev) => Math.max(prev, roundedG));
+        }
         setShockLevel(computedLevel);
         setCurrentVibration(dynamicVib);
       }
@@ -308,7 +416,7 @@ export default function RideScreen() {
       };
       addSampleRef.current(sample);
 
-      // Pre-filter Trigger evaluasi Edge AI
+      // Pre-filter Trigger evaluasi Edge AI (hanya saat kendaraan bergerak nyata)
       const shockThreshold = currentProfile.sensorConfig.zShockThreshold;
       const isCooldownPassed =
         now - lastDetectionTimeRef.current > EDGE_AI_CONFIG.detectionCooldownMs;
@@ -415,40 +523,98 @@ export default function RideScreen() {
     }
   }, [nearbyCluster, triggerShockAlert]);
 
-  // Selesai Perjalanan (Stop Drive & Flush Offline Queue)
+  // Sinkronisasi antrean deteksi nyata ke Backend (TIDAK membuat titik palsu jika tidak ada deteksi)
+  const saveRideSessionTelemetry = useCallback(() => {
+    if (hasSavedSessionRef.current) return;
+    hasSavedSessionRef.current = true;
+
+    offlineQueue.flush().catch((err) => {
+      console.warn("[RideScreen] Gagal flush antrean:", err);
+    });
+  }, []);
+
+  // Selesai Perjalanan via tombol End Ride (Tampilkan ringkasan Trip Completed)
   const handleStopDrive = async () => {
     setIsFinished(true);
     stopTracking();
+    saveRideSessionTelemetry();
     await backgroundTrackingService.startBackgroundTracking("idle").catch(() => {});
-    try {
-      await offlineQueue.flush();
-    } catch (err) {
-      console.warn("[RideScreen] Gagal flush antrean:", err);
-    }
   };
 
+  // Kembali ke Main Page via tombol Back pojok kiri atas:
+  // Menjalankan proses penghentian & flush data deteksi nyata yang sama seperti End Ride,
+  // namun tanpa menampilkan modal 'Trip Completed' dan langsung ke Main Page.
+  const handleBackToMain = useCallback(() => {
+    setIsPaused(true);
+    stopTracking();
+    saveRideSessionTelemetry();
+    backgroundTrackingService.startBackgroundTracking("idle").catch(() => {});
+
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/(tabs)");
+    }
+  }, [router, stopTracking, saveRideSessionTelemetry]);
+
+  // Tangani tombol hardware Back Android agar konsisten menyimpan data & langsung ke Main Page
+  useEffect(() => {
+    if (isFinished) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      handleBackToMain();
+      return true;
+    });
+    return () => sub.remove();
+  }, [isFinished, handleBackToMain]);
+
+  const handleHazardPress = useCallback(
+    (point: DamagePoint) => {
+      const dist =
+        liveCoordsRef.current
+          ? `${Math.round(haversineMeters(liveCoordsRef.current, point.position))}m away`
+          : `Reports: ${point.reportCount}`;
+      triggerShockAlert(
+        {
+          id: `inspect_${point.id}`,
+          title: `Recorded Road Hazard (${dist})`,
+          subtitle: `Severity: ${point.severity.toUpperCase()} • ${point.reportCount} report(s) in area`,
+          severity: point.severity === "high" ? "danger" : "warning",
+        },
+        4500
+      );
+    },
+    [triggerShockAlert]
+  );
+
   if (isFinished) {
-    const isTflite =
-      lastResult &&
-      !lastResult.modelVersion?.includes("fallback") &&
-      !lastResult.modelVersion?.includes("heuristic");
-    const confPercent = lastResult
-      ? Math.round(lastResult.confidence * 100)
-      : 94;
+    const hasRealDetection =
+      detectedCount > 0 && Boolean(lastResult?.isAnomalyDetected);
+    const isTflite = Boolean(
+      hasRealDetection &&
+        lastResult &&
+        !lastResult.modelVersion?.includes("fallback") &&
+        !lastResult.modelVersion?.includes("heuristic")
+    );
+    const confPercent =
+      hasRealDetection && lastResult
+        ? Math.round(lastResult.confidence * 100)
+        : 0;
+    const confTier =
+      hasRealDetection && lastResult ? lastResult.confidenceTier : "NONE";
 
     return (
       <TripCompletedView
         data={{
           elapsedSeconds,
           detectedCount,
-          maxGForce,
+          maxGForce: detectedCount > 0 || totalDistanceMeters >= 5 ? maxGForce : 0,
           distanceMeters: totalDistanceMeters,
           vehicleName: vehicleProfile.name,
           vehiclePlate: vehicleProfile.plate,
           vehicleType: vehicleProfile.type,
           isTflite,
           confidencePercent: confPercent,
-          confidenceTier: lastResult?.confidenceTier ?? "HIGH",
+          confidenceTier: confTier,
         }}
         onViewHistory={() => {
           setIsFinished(false);
@@ -468,12 +634,13 @@ export default function RideScreen() {
         isPaused={isPaused}
         currentCoords={liveCoords}
         routeHistory={routeHistory}
-        liveDetections={liveDetections}
+        liveDetections={allRoadHazards}
         vehicleType={vehicleProfile.id}
+        onDamagePress={handleHazardPress}
       />
 
       <View className="absolute inset-0">
-        <TopFloatingBar onBack={() => router.back()} />
+        <TopFloatingBar onBack={handleBackToMain} />
 
         {/* FLOATING BOTTOM HUD SHEET */}
         <View className="absolute inset-x-0 bottom-0 z-20">

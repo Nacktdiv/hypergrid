@@ -15,19 +15,20 @@ import { PersonalInfoList } from "@/components/profile/personal-info-list";
 import { ProfileHeader } from "@/components/profile/profile-header";
 import { SelectedVehicleCard } from "@/components/profile/selected-vehicle-card";
 import { AppButton } from "@/components/ui/app-button";
+import { ProfileContentSkeleton } from "@/components/ui/skeleton";
 import { Touchable } from "@/components/ui/touchable";
 import { useAuth } from "@/hooks/use-auth";
 
 /**
  * Screen 9 — Profile (Terintegrasi Penuh dengan Better-Auth & Fitur Edit Info).
  *
- * Mendukung:
- *   - Edit informasi profil pribadi (Nama, Telepon, ID Petugas)
- *   - Persistensi data profil lokal via TokenStorage
- *   - Sign out terenkripsi dari sesi Better-Auth
+ * Arsitektur Transisi Instan Berbasis useState & Storage Cache:
+ *   - Langsung berpindah dan merender halaman Profile (0 ms) menggunakan state
+ *     `user` dari AuthContext dan `vehicleProfile` dari VehicleContext yang sudah
+ *     tersimpan di memori/storage tanpa memicu request jaringan baru saat ganti tab.
  */
 export default function ProfileScreen() {
-  const { user, signOut, updateProfile } = useAuth();
+  const { user, isLoading: isAuthLoading, signOut, updateProfile } = useAuth();
 
   // State Modal Edit Profil
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -88,6 +89,8 @@ export default function ProfileScreen() {
     );
   };
 
+  const showSkeleton = !user && isAuthLoading;
+
   return (
     <SafeAreaView className="flex-1 bg-surface-canvas" edges={["top"]}>
       <ScrollView
@@ -95,25 +98,31 @@ export default function ProfileScreen() {
         contentContainerClassName="gap-5 px-4 pt-2 pb-8"
         showsVerticalScrollIndicator={false}
       >
-        <ProfileHeader
-          userName={user?.name}
-          onEditPhoto={() =>
-            Alert.alert(
-              "Profile Photo",
-              "Active avatar is linked to your account."
-            )
-          }
-        />
+        {showSkeleton ? (
+          <ProfileContentSkeleton />
+        ) : (
+          <>
+            <ProfileHeader
+              userName={user?.name}
+              onEditPhoto={() =>
+                Alert.alert(
+                  "Profile Photo",
+                  "Active avatar is linked to your account."
+                )
+              }
+            />
 
-        {/* Info Cards Container */}
-        <View className="gap-3.5 pt-1">
-          <SelectedVehicleCard />
-          <PersonalInfoList
-            onEdit={handleOpenEdit}
-            user={user as any}
-          />
-          <LogoutButton onPress={handleLogout} />
-        </View>
+            {/* Info Cards Container */}
+            <View className="gap-3.5 pt-1">
+              <SelectedVehicleCard />
+              <PersonalInfoList
+                onEdit={handleOpenEdit}
+                user={user as any}
+              />
+              <LogoutButton onPress={handleLogout} />
+            </View>
+          </>
+        )}
       </ScrollView>
 
       {/* MODAL EDIT PERSONAL INFO */}

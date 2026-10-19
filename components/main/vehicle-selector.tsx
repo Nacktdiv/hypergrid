@@ -106,13 +106,11 @@ export function VehicleSelector({
                     : "bg-slate-100 border-slate-200/70"
                 )}
               >
-                <Text className="text-base">
-                  {option.id === "car"
-                    ? "🚗"
-                    : option.id === "motor"
-                    ? "🏍️"
-                    : "🚲"}
-                </Text>
+                <Image
+                  source={option.image}
+                  style={{ width: 22, height: 18 }}
+                  contentFit="contain"
+                />
                 <Text
                   className={cn(
                     "font-quicksand-bold text-xs",

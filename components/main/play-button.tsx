@@ -1,9 +1,16 @@
-import React from "react";
-import { useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
 import { SlideCommit } from "@/components/ui/slide-commit";
 
 export function PlayButton() {
   const router = useRouter();
+  const [sliderKey, setSliderKey] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      setSliderKey((prev) => prev + 1);
+    }, [])
+  );
 
   const handleConfirm = async () => {
     // Memberikan jeda singkat 200ms untuk feedback getaran & sensor sync
@@ -16,6 +23,7 @@ export function PlayButton() {
 
   return (
     <SlideCommit
+      key={sliderKey}
       label="Slide to Start Ride"
       doneLabel="Starting Ride..."
       errorLabel="Cannot start ride"

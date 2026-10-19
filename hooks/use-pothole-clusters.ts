@@ -6,29 +6,47 @@ import type {
   UpdateClusterStatusDto,
 } from '@/types/api';
 
+let memoryClustersCache: PotholeCluster[] | null = null;
+let lastClustersFetchMs = 0;
+
 /**
  * Hook Manajemen Klaster Lubang Jalan & Early Warning PostGIS.
+ * Menyimpan cache klaster di memori agar perpindahan antar tab berlangsung instan (0 ms).
  */
 export function usePotholeClusters() {
-  const [clusters, setClusters] = useState<PotholeCluster[]>([]);
+  const [clusters, setClusters] = useState<PotholeCluster[]>(
+    () => memoryClustersCache ?? []
+  );
   const [nearbyCluster, setNearbyCluster] = useState<PotholeCluster | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(
+    () => memoryClustersCache === null
+  );
   const [error, setError] = useState<string | null>(null);
 
   /**
    * Mengambil data klaster berdasarkan bounding box viewport atau filter
    */
-  const fetchClusters = useCallback(async (filter?: BoundingBoxFilter) => {
-    setIsLoading(true);
+  const fetchClusters = useCallback(async (filter?: BoundingBoxFilter, force = false) => {
+    if (!force && memoryClustersCache !== null && Date.now() - lastClustersFetchMs < 30_000) {
+      setClusters(memoryClustersCache);
+      setIsLoading(false);
+      return memoryClustersCache;
+    }
+
+    if (memoryClustersCache === null) {
+      setIsLoading(true);
+    }
     setError(null);
     try {
       const data = await clustersService.getClusters(filter);
+      memoryClustersCache = data;
+      lastClustersFetchMs = Date.now();
       setClusters(data);
       return data;
     } catch (err: any) {
       const msg = err.message || 'Gagal memuat klaster jalan';
       setError(msg);
-      return [];
+      return memoryClustersCache ?? [];
     } finally {
       setIsLoading(false);
     }

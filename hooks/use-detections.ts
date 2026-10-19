@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { InteractionManager } from 'react-native';
 import { detectionsService } from '@/services/api/detections.service';
 import { offlineQueue } from '@/services/api/offline-queue';
 import { historyStorage } from '@/services/api/history-storage';
@@ -6,41 +7,63 @@ import type { CreateDetectionDto, DetectionsQueryFilter, RawDetection } from '@/
 
 /**
  * Hook Manajemen Riwayat Deteksi Mentah dan Sinkronisasi Telemetri.
- * Menggunakan strategi Stale-While-Revalidate: memuat data lokal instan
- * lalu menyinkronkan dengan data cloud server secara asinkron.
+ * Menggunakan strategi Stale-While-Revalidate setelah transisi navigasi selesai.
  */
 export function useDetections() {
-  const [detections, setDetections] = useState<RawDetection[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [detections, setDetections] = useState<RawDetection[]>(
+    () => historyStorage.getMemoryCache() ?? []
+  );
+  const [isLoading, setIsLoading] = useState<boolean>(
+    () => historyStorage.getMemoryCache() === null
+  );
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [queueCount, setQueueCount] = useState<number>(offlineQueue.size());
 
-  // 1. Muat riwayat lokal seketika saat hook dipasang (0 ms initial latency)
+  // 1. Sinkronkan state useState secara reaktif dengan in-memory cache historyStorage
   useEffect(() => {
-    historyStorage.getLocalDetections().then((cached) => {
-      if (cached && cached.length > 0) {
-        setDetections((prev) => (prev.length === 0 ? cached : prev));
-      }
+    const unsubscribe = historyStorage.subscribe((updated) => {
+      setDetections(updated);
+      setIsLoading(false);
     });
+
+    if (historyStorage.getMemoryCache() === null) {
+      const task = InteractionManager.runAfterInteractions(() => {
+        historyStorage.getLocalDetections().then((cached) => {
+          setDetections(cached);
+          setIsLoading(false);
+        });
+      });
+      return () => {
+        task.cancel();
+        unsubscribe();
+      };
+    }
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   /**
    * Mengambil log deteksi dari server dengan fallback ke local cache
    */
   const fetchDetections = useCallback(async (filter?: DetectionsQueryFilter) => {
-    setIsLoading(true);
+    if (historyStorage.getMemoryCache() === null) {
+      setIsLoading(true);
+    }
     setError(null);
     try {
       const data = await detectionsService.getDetections(filter);
       if (data && data.length > 0) {
-        // Simpan & gabungkan data terbaru ke penyimpanan lokal
+        // Simpan & gabungkan data terbaru ke penyimpanan lokal + memori
         const merged = await historyStorage.saveDetections(data);
         setDetections(merged);
         return merged;
       } else {
         // Jika server mengembalikan array kosong, gunakan data lokal yang ada
         const cached = await historyStorage.getLocalDetections();
+        historyStorage.markSynced();
         if (cached.length > 0) {
           setDetections(cached);
           return cached;

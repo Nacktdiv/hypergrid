@@ -224,26 +224,23 @@ export function useUserLocation(
           };
           const nowMs = loc.timestamp;
 
-          // ── Kecepatan dari GPS ─────────────────────────────────────────────
+          // ── Kecepatan dari GPS dengan Verifikasi Perpindahan Fisik ─────────
+          const movedMeters = lastLocRef.current
+            ? haversineMeters(lastLocRef.current.coords, currentCoords)
+            : 0;
+
           let rawKmh =
             loc.coords.speed != null && loc.coords.speed >= 0
               ? loc.coords.speed * 3.6
               : -1;
 
-          // ── Fallback jarak/waktu jika kecepatan GPS tidak tersedia ─────────
-          if (rawKmh < 0 && lastLocRef.current) {
+          // Jika perpindahan fisik < 2.5 meter, perangkat sedang diam (abaikan drift satelit)
+          if (lastLocRef.current && movedMeters < 2.5) {
+            rawKmh = 0;
+          } else if (rawKmh < 0 && lastLocRef.current) {
             const dt = (nowMs - lastLocRef.current.timeMs) / 1000;
             if (dt > 0) {
-              const distM = haversineMeters(
-                lastLocRef.current.coords,
-                currentCoords
-              );
-              // Filter jitter GPS saat perangkat diam (< 2 meter)
-              if (distM < 2.0) {
-                rawKmh = 0;
-              } else {
-                rawKmh = (distM / dt) * 3.6;
-              }
+              rawKmh = movedMeters < 2.5 ? 0 : (movedMeters / dt) * 3.6;
             } else {
               rawKmh = 0;
             }
@@ -251,8 +248,8 @@ export function useUserLocation(
             rawKmh = 0;
           }
 
-          // Eliminasi noise drift satelit saat kendaraan stasioner (< 1.5 km/h)
-          if (rawKmh < 1.5) {
+          // Eliminasi noise drift satelit saat kendaraan stasioner (< 2.0 km/h)
+          if (rawKmh < 2.0) {
             rawKmh = 0;
           }
 
@@ -262,13 +259,17 @@ export function useUserLocation(
             rawKmh = emaSpeedRef.current;
           }
 
-          // ── EMA low-pass filter kecepatan ─────────────────────────────────
-          const alpha = options?.speedEmaAlpha ?? SPEED_EMA_ALPHA;
-          emaSpeedRef.current =
-            alpha * rawKmh + (1 - alpha) * emaSpeedRef.current;
+          // ── EMA low-pass filter kecepatan (reset cepat ke 0 jika diam) ────
+          if (rawKmh === 0 && movedMeters < 2.5) {
+            emaSpeedRef.current = 0;
+          } else {
+            const alpha = options?.speedEmaAlpha ?? SPEED_EMA_ALPHA;
+            emaSpeedRef.current =
+              alpha * rawKmh + (1 - alpha) * emaSpeedRef.current;
+          }
 
-          // Deadband: jika hasil filter di bawah 1.0 km/h, kunci ke 0 murni
-          const filteredKmh = emaSpeedRef.current < 1.0 ? 0 : emaSpeedRef.current;
+          // Deadband: jika hasil filter di bawah 1.5 km/h, kunci ke 0 murni
+          const filteredKmh = emaSpeedRef.current < 1.5 ? 0 : emaSpeedRef.current;
 
           // Update lastLoc & global cache
           lastLocRef.current = { coords: currentCoords, timeMs: nowMs };
@@ -338,7 +339,11 @@ export function useUserLocation(
 
   useEffect(() => {
     if (!isEnabled) return;
-    getImmediateLocation();
+    const cached = getCachedLocation();
+    const isFresh = cached && Date.now() - cached.timestampMs < 15_000;
+    if (!isFresh) {
+      getImmediateLocation();
+    }
     if (autoStartTracking) startTracking();
     return () => {
       if (locationSubscription.current) {
@@ -365,6 +370,16 @@ export function useUserLocation(
               : [...prev.routeHistory, bg.coords];
         }
 
+        const movedFromPrev = prev.coords
+          ? haversineMeters(prev.coords, bg.coords)
+          : 0;
+        const effectiveSpeed =
+          prev.coords && movedFromPrev < 2.5
+            ? 0
+            : bg.speedKmh < 2.0
+            ? 0
+            : Math.round(bg.speedKmh * 10) / 10;
+
         const isCoordMoved =
           !prev.coords ||
           Math.abs(prev.coords.latitude - bg.coords.latitude) > 0.00001 ||
@@ -372,7 +387,7 @@ export function useUserLocation(
 
         if (
           !isCoordMoved &&
-          prev.speedKmh === bg.speedKmh &&
+          prev.speedKmh === effectiveSpeed &&
           nextRoute === prev.routeHistory
         ) {
           return prev;
@@ -382,8 +397,8 @@ export function useUserLocation(
           ...prev,
           coords: bg.coords,
           accuracy: bg.accuracy,
-          speedKmh: bg.speedKmh,
-          rawSpeedKmh: bg.speedKmh,
+          speedKmh: effectiveSpeed,
+          rawSpeedKmh: effectiveSpeed,
           routeHistory: nextRoute,
         };
       });

@@ -121,7 +121,7 @@ export default function StartScreen() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await Promise.allSettled([
-      fetchClusters({ limit: 500 }),
+      fetchClusters({ limit: 500 }, true),
       getImmediateLocation(),
     ]);
     setIsRefreshing(false);

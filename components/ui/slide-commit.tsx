@@ -112,6 +112,12 @@ export function SlideCommit({
     }).start();
   }, [translateX]);
 
+  const resetToIdle = useCallback(() => {
+    translateX.stopAnimation();
+    translateX.setValue(0);
+    setPhase("idle");
+  }, [translateX]);
+
   const commit = useCallback(async () => {
     const travelDistance = currentTravelRef.current;
     Animated.timing(translateX, {
@@ -143,6 +149,9 @@ export function SlideCommit({
       triggerHaptic("success");
       setPhase("done");
       onDone?.();
+      setTimeout(() => {
+        resetToIdle();
+      }, 300);
       return;
     }
 
@@ -157,6 +166,9 @@ export function SlideCommit({
         triggerHaptic("success");
         setPhase("done");
         onDone?.();
+        setTimeout(() => {
+          resetToIdle();
+        }, 300);
       }, delay);
     } catch (err) {
       const elapsed = Date.now() - t0;
@@ -172,7 +184,7 @@ export function SlideCommit({
         }, 1500);
       }, delay);
     }
-  }, [translateX, triggerHaptic, onConfirm, onDone, onError, shakeAnimation, snapHome]);
+  }, [translateX, triggerHaptic, onConfirm, onDone, onError, shakeAnimation, snapHome, resetToIdle]);
 
   const panResponder = useMemo(() => {
     let touchStartX = 0;

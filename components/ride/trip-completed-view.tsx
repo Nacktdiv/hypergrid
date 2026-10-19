@@ -409,7 +409,11 @@ export function TripCompletedView({
               Detection Pipeline
             </Text>
             <Text className="font-mono-bold text-xs text-brand">
-              {data.isTflite ? "TFLite Neural Net" : "Smart Edge AI Heuristic"}
+              {data.detectedCount === 0
+                ? "Zero Prediction (No Anomaly)"
+                : data.isTflite
+                ? "TFLite Neural Net"
+                : "Smart Edge AI Heuristic"}
             </Text>
           </View>
 
@@ -417,9 +421,14 @@ export function TripCompletedView({
             <Text className="font-quicksand text-xs text-slate-500">
               Confidence Rating
             </Text>
-            <Text className="font-mono-bold text-xs text-emerald-600">
-              {data.confidencePercent ?? 94}% (
-              {data.confidenceTier ?? "HIGH"})
+            <Text
+              className={`font-mono-bold text-xs ${
+                data.detectedCount > 0 ? "text-emerald-600" : "text-slate-500"
+              }`}
+            >
+              {data.detectedCount > 0
+                ? `${data.confidencePercent ?? 0}% (${data.confidenceTier ?? "HIGH"})`
+                : "0% (NONE)"}
             </Text>
           </View>
 
