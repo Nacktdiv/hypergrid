@@ -8,35 +8,47 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
+  Compass,
   MapPin,
   Navigation,
   RefreshCw,
+  Search,
   User,
+  X,
 } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MainMap } from "@/components/main/main-map";
 import { PlayButton } from "@/components/main/play-button";
 import { VehicleSelector } from "@/components/main/vehicle-selector";
+import { TripPlannerSheet } from "@/components/main/trip-planner-sheet";
 import { AppButton } from "@/components/ui/app-button";
+import { EmergencyModal } from "@/components/ui/emergency-modal";
 import { TopFloatingHeader } from "@/components/ui/top-floating-header";
 import { Touchable } from "@/components/ui/touchable";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
 import { useUserLocation } from "@/hooks/use-user-location";
 import { useVehicle } from "@/contexts/vehicle-context";
+import { type PlannedRoute } from "@/services/api/routing.service";
 import { TOKENS } from "@/lib/theme/tokens";
 
 const PEEK_HEIGHT = 48;
 
 export default function StartScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { vehicleId, setVehicle } = useVehicle();
-  const { fetchClusters } = usePotholeClusters();
+  const { clusters, fetchClusters } = usePotholeClusters();
   const { coords: liveCoords, getImmediateLocation } = useUserLocation();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isEmergencyVisible, setIsEmergencyVisible] = useState(false);
+  const [isTripPlannerVisible, setIsTripPlannerVisible] = useState(false);
+  const [activeRoute, setActiveRoute] = useState<PlannedRoute | null>(null);
   const [drawerHeight, setDrawerHeight] = useState(330);
 
   // Animated translateY for the bottom drawer
@@ -146,6 +158,7 @@ export default function StartScreen() {
           fullBleed
           showOverlayControls={false}
           currentCoords={liveCoords}
+          plannedRoute={activeRoute?.coordinates}
         />
       </View>
 
@@ -185,13 +198,68 @@ export default function StartScreen() {
         }
       />
 
-      {/* 3. RE-CENTER MAP FLOATING BUTTON (SYNCHRONIZED WITH DRAWER GESTURES) */}
+      {/* 2b. GOOGLE MAPS STYLE SEARCH BAR (TRIP PLANNER & HAZARDS SCAN) */}
+      <View
+        className="absolute inset-x-4 z-20"
+        style={{ top: Math.max(insets.top, 16) + 48 }}
+      >
+        <Touchable
+          onPress={() => setIsTripPlannerVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Rencanakan rute perjalanan dan cek kondisi lubang jalan"
+          className="flex-row items-center justify-between px-3.5 py-2.5 rounded-2xl bg-white/95 border border-slate-200 shadow-md"
+        >
+          <View className="flex-row items-center gap-2 flex-1 pr-2">
+            <Search size={15} color="#009EFF" />
+            <Text
+              className="font-quicksand-bold text-xs text-slate-700"
+              numberOfLines={1}
+            >
+              {activeRoute
+                ? `Rute: Menuju ${activeRoute.destinationName} (${(activeRoute.distanceMeters / 1000).toFixed(1)} km)`
+                : "Mau ke mana? Rencanakan rute & cek lubang jalan"}
+            </Text>
+          </View>
+
+          {activeRoute ? (
+            <Touchable
+              onPress={(e) => {
+                e.stopPropagation();
+                setActiveRoute(null);
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              className="h-5 w-5 rounded-full items-center justify-center bg-slate-200"
+            >
+              <X size={12} color="#475569" />
+            </Touchable>
+          ) : (
+            <Compass size={15} color="#64748B" />
+          )}
+        </Touchable>
+      </View>
+
+      {/* 3. FLOATING ACTION BUTTONS: SOS EMERGENCY & RE-CENTER */}
       <Animated.View
-        className="absolute right-4 z-10"
+        className="absolute right-4 z-10 items-end gap-2.5"
         style={{
           bottom: recenterBottom,
         }}
       >
+        {/* SOS Emergency Button */}
+        <Touchable
+          onPress={() => setIsEmergencyVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Buka Pusat Bantuan Darurat SOS"
+          className="flex-row items-center gap-1.5 px-3 py-2 rounded-full bg-rose-600 border border-white/80 shadow-md shadow-rose-600/40"
+        >
+          <View className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+          <AlertTriangle size={13} color="#FFFFFF" strokeWidth={2.5} />
+          <Text className="font-chivo-bold text-[11px] text-white tracking-wider">
+            SOS
+          </Text>
+        </Touchable>
+
+        {/* Center Map Location Button */}
         <AppButton
           variant="circle"
           size="sm"
@@ -254,6 +322,27 @@ export default function StartScreen() {
           </View>
         </View>
       </Animated.View>
+
+      {/* MODAL PERENCANAAN RUTE NAVIGASI & ANALISIS LUBANG JALAN */}
+      <TripPlannerSheet
+        visible={isTripPlannerVisible}
+        onClose={() => setIsTripPlannerVisible(false)}
+        userCoords={liveCoords}
+        clusters={clusters}
+        activeRoute={activeRoute}
+        onRouteCalculated={(route) => setActiveRoute(route)}
+        onStartRideWithRoute={(route) => {
+          setActiveRoute(route);
+          router.push("/ride");
+        }}
+      />
+
+      {/* MODAL PUSAT BANTUAN DARURAT (HOTLINE & SHARE LIVE LOCATION) */}
+      <EmergencyModal
+        visible={isEmergencyVisible}
+        onClose={() => setIsEmergencyVisible(false)}
+        currentCoords={liveCoords}
+      />
     </View>
   );
 }

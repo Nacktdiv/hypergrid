@@ -104,12 +104,10 @@ export default function ProfileScreen() {
           <>
             <ProfileHeader
               userName={user?.name}
-              onEditPhoto={() =>
-                Alert.alert(
-                  "Profile Photo",
-                  "Active avatar is linked to your account."
-                )
-              }
+              userImage={user?.image}
+              onImageUpdated={async (newImage) => {
+                await updateProfile({ image: newImage });
+              }}
             />
 
             {/* Info Cards Container */}

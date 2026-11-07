@@ -44,6 +44,7 @@ export type MainMapProps = {
   showOverlayControls?: boolean;
   onOpenClusterDetail?: (cluster: PotholeCluster) => void;
   currentCoords?: LatLng | null;
+  plannedRoute?: LatLng[];
 };
 
 export function MainMap({
@@ -52,8 +53,14 @@ export function MainMap({
   showOverlayControls = true,
   onOpenClusterDetail,
   currentCoords: externalCoords,
+  plannedRoute,
 }: MainMapProps) {
-  const { clusters, isLoading: isClustersLoading, fetchClusters } = usePotholeClusters();
+  const {
+    clusters,
+    heatmap,
+    isLoading: isClustersLoading,
+    fetchClusters,
+  } = usePotholeClusters();
   const hasExternalCoords = externalCoords !== undefined;
   const {
     coords: internalCoords,
@@ -96,15 +103,22 @@ export function MainMap({
   const mapData: MapData = useMemo(() => {
     const baseCenter = liveCoords || { latitude: -6.2088, longitude: 106.8456 };
 
-    // Hanya render data riil dari PostGIS clusters (tanpa titik dummy)
+    // Titik representatif tunggal hasil konsolidasi DBSCAN lintas pengguna
     const liveDamagePoints: DamagePoint[] = filteredClusters.map((c) => ({
       id: c.id,
       position: {
         latitude: c.center_latitude,
         longitude: c.center_longitude,
       },
-      severity: c.severity === "severe" ? "high" : c.severity,
+      severity: c.severity,
       reportCount: c.detection_count,
+      radius_meters: c.radius_meters || 18,
+      userCount: c.user_count || 1,
+      points: c.points?.map((p) => ({
+        latitude: p.latitude,
+        longitude: p.longitude,
+        intensity: p.intensity,
+      })),
     }));
 
     return {
@@ -113,17 +127,20 @@ export function MainMap({
         longitude: baseCenter.longitude,
         zoom: 15,
       },
-      route: { id: "user-route", coordinates: [] },
+      route: { id: "user-route", coordinates: plannedRoute || [] },
       damagePoints: liveDamagePoints,
+      heatmap: heatmap || [],
+      activeClusterId: selectedCluster?.id ?? null,
       userLocation: baseCenter,
       vehiclePosition: baseCenter,
     };
-  }, [filteredClusters, liveCoords]);
+  }, [filteredClusters, liveCoords, heatmap, selectedCluster?.id, plannedRoute]);
 
   const handleMarkerPress = (point: DamagePoint) => {
     const found = clusters.find((c) => c.id === point.id);
     if (found) {
       setSelectedCluster(found);
+      onOpenClusterDetail?.(found);
     }
   };
 
@@ -208,7 +225,7 @@ export function MainMap({
               <Database size={12} color="#009EFF" />
               <Text className="font-mono text-[10px] text-slate-700">
                 {clusters.length > 0
-                  ? `PostGIS: ${filteredClusters.length} Clusters`
+                  ? `DBSCAN: ${filteredClusters.length} Clusters • ${heatmap?.length || 0} Heatpoints`
                   : "No Clusters Nearby"}
               </Text>
             </View>

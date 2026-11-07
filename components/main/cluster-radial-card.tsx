@@ -285,6 +285,21 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
           </Text>
         </View>
 
+        <View className="flex-row items-center justify-between border-b border-slate-200/60 pb-2">
+          <View className="flex-row items-center gap-1.5">
+            <Radio size={14} color="#64748B" />
+            <Text className="font-quicksand-semibold text-xs text-slate-600">
+              DBSCAN Cluster Area
+            </Text>
+          </View>
+          <View className="flex-row items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 border border-emerald-200/60">
+            <View className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <Text className="font-mono-bold text-[10px] text-emerald-700">
+              ~{cluster.radius_meters || 18}m radius • {cluster.user_count || 1} User(s)
+            </Text>
+          </View>
+        </View>
+
         <View className="flex-row items-center justify-between">
           <View className="flex-row items-center gap-1.5">
             <Radio size={14} color="#64748B" />

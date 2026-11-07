@@ -190,7 +190,7 @@ export const authService = {
   },
 
   /**
-   * Memperbarui profil petugas di penyimpanan lokal
+   * Memperbarui profil petugas di penyimpanan lokal dan menyinkronkan ke server Better-Auth (database PostgreSQL)
    */
   async updateProfile(updates: Partial<AuthUser> & Record<string, any>): Promise<AuthUser> {
     const current = (await tokenStorage.getUser<AuthUser>()) || {
@@ -200,6 +200,19 @@ export const authService = {
     };
     const updated = { ...current, ...updates };
     await tokenStorage.setUser(updated);
+
+    // Kirim sinkronisasi ke backend Better-Auth (tabel User di database PostgreSQL)
+    try {
+      if (typeof (authClient as any).updateUser === 'function') {
+        const payload: Record<string, any> = {};
+        if (updates.name !== undefined) payload.name = updates.name;
+        if (updates.image !== undefined) payload.image = updates.image;
+        await (authClient as any).updateUser(payload);
+      }
+    } catch (err) {
+      console.warn('[authService] Gagal menyinkronkan profil ke server Better-Auth:', err);
+    }
+
     return updated as AuthUser;
   },
 

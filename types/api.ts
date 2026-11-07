@@ -7,8 +7,20 @@
 export type PotholeSeverity = 'low' | 'medium' | 'high' | 'severe';
 export type PotholeStatus = 'active' | 'verified' | 'repaired' | 'false_positive';
 
+export interface ClusterPointDetail {
+  id: string;
+  latitude: number;
+  longitude: number;
+  intensity: number;
+  z_accel_peak?: number | null;
+  confidence: number;
+  detected_at: string;
+  user_id?: string | null;
+  device_id?: string;
+}
+
 /**
- * Entitas Hasil Agregasi Spasial Klaster Pothole (PostGIS).
+ * Entitas Hasil Agregasi Spasial Klaster Pothole (PostGIS & DBSCAN).
  * Format atribut: snake_case sesuai respons SQL backend.
  */
 export interface PotholeCluster {
@@ -18,11 +30,25 @@ export interface PotholeCluster {
   severity: PotholeSeverity;
   confidence_avg: number;
   detection_count: number;
+  user_count?: number;
   status: PotholeStatus;
   first_detected_at: string;
   last_detected_at: string;
   updated_at: string;
   distance_meters?: number;
+  radius_meters?: number;
+  points?: ClusterPointDetail[];
+}
+
+/**
+ * Respons Konsolidasi DBSCAN & Heatmap dari Server
+ */
+export interface DbscanClustersResponse {
+  clusters: PotholeCluster[];
+  heatmap: Array<[number, number, number]>; // [lat, lon, intensity 0..1]
+  total_detections: number;
+  total_clusters: number;
+  generated_at: string;
 }
 
 /**

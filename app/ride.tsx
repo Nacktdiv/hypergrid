@@ -8,10 +8,12 @@ import { BottomHud, type ShockAlert } from "@/components/ride/bottom-hud";
 import { LiveMap } from "@/components/ride/live-map";
 import { TopFloatingBar } from "@/components/ride/top-floating-bar";
 import { TripCompletedView } from "@/components/ride/trip-completed-view";
+import { EmergencyModal } from "@/components/ui/emergency-modal";
 import { useVehicle } from "@/contexts/vehicle-context";
 import { EDGE_AI_CONFIG } from "@/edge-ai/model-config";
 import type { RawSensorSample } from "@/edge-ai/types";
 import { defaultEdgeDetector } from "@/edge-ai/detector";
+import { HighPassFilter } from "@/edge-ai/high-pass-filter";
 import { useAuth } from "@/hooks/use-auth";
 import { useDetections } from "@/hooks/use-detections";
 import { useEdgeAi } from "@/hooks/use-edge-ai";
@@ -45,6 +47,7 @@ export default function RideScreen() {
   const { vehicleProfile } = useVehicle();
   const [isPaused, setIsPaused] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
+  const [isEmergencyVisible, setIsEmergencyVisible] = useState(false);
 
   useEffect(() => {
     defaultEdgeDetector.setUserId(user?.id ?? null);
@@ -135,6 +138,9 @@ export default function RideScreen() {
     gz: 1,
     initialized: false,
   });
+
+  // Ref Digital High-Pass Filter (HPF 1.2 Hz @ 20 Hz) untuk eliminasi ayunan suspensi & kontur jalan
+  const hpfRef = useRef(new HighPassFilter(1.2, 20));
 
   // GPS Live Tracking Perjalanan dengan parameter adaptif per kendaraan
   const {
@@ -248,7 +254,7 @@ export default function RideScreen() {
           latitude: c.center_latitude,
           longitude: c.center_longitude,
         },
-        severity: c.severity === "severe" ? "high" : c.severity,
+        severity: c.severity,
         reportCount: c.detection_count || 1,
       });
     }
@@ -279,8 +285,10 @@ export default function RideScreen() {
           position: pos,
           severity:
             d.zAccelPeak && d.zAccelPeak >= 2.2
+              ? "severe"
+              : d.zAccelPeak && d.zAccelPeak >= 1.6
               ? "high"
-              : d.zAccelPeak && d.zAccelPeak >= 1.7
+              : d.zAccelPeak && d.zAccelPeak >= 1.1
               ? "medium"
               : "low",
           reportCount: 1,
@@ -350,9 +358,11 @@ export default function RideScreen() {
       const gUnitY = gravityRef.current.gy / gNorm;
       const gUnitZ = gravityRef.current.gz / gNorm;
 
-      // 2. Proyeksi akselerasi vertikal murni (sejajar gravitasi)
+      // 2. Proyeksi akselerasi vertikal murni (sejajar gravitasi) dipadu High-Pass Filter (HPF)
       const aVert = x * gUnitX + y * gUnitY + z * gUnitZ;
-      const dynamicVerticalG = Math.abs(aVert - gNorm);
+      const aVertDiff = aVert - gNorm;
+      // High-Pass Filter (1.8 Hz @ 20 Hz) menyaring tanjakan/turunan dan ayunan body-roll lambat
+      const dynamicVerticalG = Math.abs(hpfRef.current.filter(aVertDiff));
 
       // Total magnitudo untuk tampilan display HUD
       const totalG = Math.sqrt(x * x + y * y + z * z);
@@ -418,10 +428,29 @@ export default function RideScreen() {
 
       // Pre-filter Trigger evaluasi Edge AI (hanya saat kendaraan bergerak nyata)
       const shockThreshold = currentProfile.sensorConfig.zShockThreshold;
+      const maxSpikeLimit =
+        currentProfile.sensorConfig.maxExtremeSpikeG ??
+        EDGE_AI_CONFIG.maxExtremeSpikeG;
       const isCooldownPassed =
         now - lastDetectionTimeRef.current > EDGE_AI_CONFIG.detectionCooldownMs;
 
-      if (isMoving && dynamicVerticalG >= shockThreshold && isCooldownPassed) {
+      // Filter artefak non-jalan: tolak lonjakan ekstrem (HP jatuh / terbanting)
+      // dan perputaran liar giroskop (HP terlepas dari mount / dipegang tangan)
+      const gyroMag = Math.sqrt(
+        gyroRef.current.gx * gyroRef.current.gx +
+          gyroRef.current.gy * gyroRef.current.gy +
+          gyroRef.current.gz * gyroRef.current.gz
+      );
+      const isExtremeArtifact =
+        dynamicVerticalG > maxSpikeLimit ||
+        gyroMag > EDGE_AI_CONFIG.maxGyroTumbleRadPerSec;
+
+      if (
+        isMoving &&
+        dynamicVerticalG >= shockThreshold &&
+        !isExtremeArtifact &&
+        isCooldownPassed
+      ) {
         lastDetectionTimeRef.current = now;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
 
@@ -469,11 +498,7 @@ export default function RideScreen() {
               const newDamage: DamagePoint = {
                 id: `det_${Date.now()}`,
                 position: { latitude: currentLat, longitude: currentLon },
-                severity:
-                  res.estimatedSeverity === "severe" ||
-                  res.estimatedSeverity === "high"
-                    ? "high"
-                    : "medium",
+                severity: res.estimatedSeverity,
                 reportCount: 1,
               };
               setLiveDetections((prev) => [...prev, newDamage]);
@@ -640,7 +665,10 @@ export default function RideScreen() {
       />
 
       <View className="absolute inset-0">
-        <TopFloatingBar onBack={handleBackToMain} />
+        <TopFloatingBar
+          onBack={handleBackToMain}
+          onOpenEmergency={() => setIsEmergencyVisible(true)}
+        />
 
         {/* FLOATING BOTTOM HUD SHEET */}
         <View className="absolute inset-x-0 bottom-0 z-20">
@@ -661,6 +689,14 @@ export default function RideScreen() {
           />
         </View>
       </View>
+
+      {/* MODAL PUSAT BANTUAN DARURAT (HOTLINE & SHARE LIVE LOCATION) */}
+      <EmergencyModal
+        visible={isEmergencyVisible}
+        onClose={() => setIsEmergencyVisible(false)}
+        currentCoords={liveCoords}
+        speedKmh={currentSpeed}
+      />
     </View>
   );
 }

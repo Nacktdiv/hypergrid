@@ -3,6 +3,7 @@ import {
   classifySeverityFromProbability,
   classifySeverityFromZPeak,
   getConfidenceTier,
+  validateRoadAnomaly,
 } from './model-config';
 import { extractFeatures, decomposeSensorSignals } from './feature-extractor';
 import type {
@@ -79,8 +80,18 @@ export class EdgeRoadDamageDetector {
 
     // Dekomposisi sinyal vertikal dinamis untuk verifikasi fisik
     const decomposed = decomposeSensorSignals(samples);
+    const vertSignals =
+      decomposed.vertDynHpf.length > 0
+        ? decomposed.vertDynHpf
+        : decomposed.vertDyn;
     const maxVertDyn =
-      decomposed.vertDyn.length > 0 ? Math.max(...decomposed.vertDyn) : 0;
+      vertSignals.length > 0 ? Math.max(...vertSignals) : 0;
+
+    // Filter validasi fisik anomali jalan (tolak HP jatuh, diutak-atik, guncangan liar gyro)
+    const validation = validateRoadAnomaly(samples, vertSignals);
+    if (!validation.isValid) {
+      return this._notAnomaly(samples, latitude, longitude);
+    }
 
     // Ekstraksi 47 fitur dari window (identik dengan model training V2)
     const features = extractFeatures(samples);
@@ -135,11 +146,13 @@ export class EdgeRoadDamageDetector {
    * Digunakan saat TFLite native module belum siap (misal di Expo Go).
    *
    * Menggunakan analisis bentuk gelombang window (bukan 1 titik instan):
-   * 1. Dekomposisi vektor 3D dengan Causal EMA Gravity Removal (invarian orientasi HP).
+   * 1. Dekomposisi vektor 3D dengan Causal EMA Gravity Removal & HPF (invarian orientasi HP).
    * 2. Validasi Kecepatan Minimal (Speed Gate: kendaraan harus bergerak).
-   * 3. Validasi Puncak Guncangan Vertikal Murni (di atas gravitasi 1G).
-   * 4. Validasi Crest Factor (puncak tajam vs getaran rata-rata jalan/mesin).
-   * 5. Validasi Dominansi Vertikal (memisahkan lubang dari tikungan/pengereman keras).
+   * 3. Penolakan Artefak Non-Jalan (HP jatuh, terlempar, atau disentuh kasar).
+   * 4. Validasi Puncak Guncangan Vertikal Murni (di atas gravitasi 1G).
+   * 5. Validasi Crest Factor (puncak tajam vs getaran rata-rata jalan/mesin).
+   * 6. Validasi Dominansi Vertikal (memisahkan lubang dari tikungan/pengereman keras).
+   * 7. Kalibrasi Keparahan Berdasarkan Kecepatan Fisis Kendaraan.
    */
   public inferWindowHeuristic(
     window: SensorWindow,
@@ -165,20 +178,34 @@ export class EdgeRoadDamageDetector {
       return this._notAnomaly(samples, latitude, longitude);
     }
 
-    // 2. Dekomposisi gaya vertikal & horizontal
+    // 2. Dekomposisi gaya vertikal & horizontal dipadu High-Pass Filter (HPF)
     const decomposed = decomposeSensorSignals(samples);
-    const maxVertDyn = Math.max(...decomposed.vertDyn);
+    const vertSignals =
+      decomposed.vertDynHpf.length > 0
+        ? decomposed.vertDynHpf
+        : decomposed.vertDyn;
+
+    // 3. Validasi fisik anomali: Tolak lonjakan ekstrem non-jalan, gyro tumbling & glitch
+    const validation = validateRoadAnomaly(samples, vertSignals, {
+      minMovingSpeed: minSpeed,
+      zShockThreshold: config?.zShockThreshold,
+    });
+    if (!validation.isValid) {
+      return this._notAnomaly(samples, latitude, longitude);
+    }
+
+    const maxVertDyn = Math.max(...vertSignals);
     const maxHorizDyn = Math.max(...decomposed.horizDyn);
 
     const rmsVertDyn = Math.sqrt(
-      decomposed.vertDyn.reduce((s, v) => s + v * v, 0) / samples.length
+      vertSignals.reduce((s, v) => s + v * v, 0) / samples.length
     );
     const crestFactor = maxVertDyn / (rmsVertDyn + 1e-6);
 
     const threshold =
       config?.zShockThreshold ?? EDGE_AI_CONFIG.defaultShockThresholdG;
 
-    // 3. Evaluasi kondisi komprehensif
+    // 4. Evaluasi kondisi komprehensif
     const isShockSignificant = maxVertDyn >= threshold;
     const isSharpImpulse = crestFactor >= 1.55; // Puncak tunggal tajam, bukan dengung getaran rata
     const isVerticalDominant = maxVertDyn >= maxHorizDyn * 0.55; // Bukan belokan tajam / rem
@@ -210,9 +237,11 @@ export class EdgeRoadDamageDetector {
     );
 
     const { confidenceScore, confidenceTier } = getConfidenceTier(probability);
+    // Severity terkalibrasi normalisasi kecepatan kendaraan
     const severity = classifySeverityFromZPeak(
       maxVertDyn,
-      config?.severityThresholds
+      config?.severityThresholds,
+      speedAvg
     );
 
     const detectionDto: CreateDetectionDto = {
@@ -254,6 +283,11 @@ export class EdgeRoadDamageDetector {
     // Jika rawZ disuplai sebagai totalG (sekitar 1G gravitasi), kurangi baseline gravitasi
     const dynamicZ = rawZ >= 1.8 ? rawZ - 1.0 : rawZ;
 
+    // Filter lonjakan ekstrem non-jalan (HP jatuh/terlempar)
+    if (dynamicZ > EDGE_AI_CONFIG.maxExtremeSpikeG) {
+      return this._notAnomaly([], frame.latitude, frame.longitude);
+    }
+
     // Hanya picu anomali jika deviasi guncangan dinamis murni >= 1.10G
     const isAnomaly = dynamicZ >= 1.10;
 
@@ -275,7 +309,11 @@ export class EdgeRoadDamageDetector {
       Math.max(0.5, ((dynamicZ - 1.1) / 2.0) * 0.5 + 0.5)
     );
     const { confidenceScore, confidenceTier } = getConfidenceTier(probability);
-    const severity = classifySeverityFromZPeak(dynamicZ);
+    const severity = classifySeverityFromZPeak(
+      dynamicZ,
+      undefined,
+      frame.speedKmh
+    );
 
     const detectionDto: CreateDetectionDto = {
       deviceId: this.deviceId,
@@ -322,6 +360,7 @@ export class EdgeRoadDamageDetector {
       zAccelPeak: dto.zAccelPeak ?? null,
       modelVersion: dto.modelVersion ?? EDGE_AI_CONFIG.modelVersion,
       detectedAt: dto.detectedAt || new Date().toISOString(),
+      createdAt: dto.detectedAt || new Date().toISOString(),
     };
 
     // Simpan instan ke RAM + AsyncStorage agar langsung tersedia di History

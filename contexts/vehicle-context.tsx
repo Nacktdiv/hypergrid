@@ -48,6 +48,8 @@ export interface VehicleSensorConfig {
   minMovingSpeed: number;
   /** Batas kecepatan maksimal realistis untuk eliminasi lonjakan GPS error (km/h) */
   maxSpeedGlitch: number;
+  /** Ambang batas lonjakan ekstrem non-jalan per kendaraan (HP jatuh / terbentur) */
+  maxExtremeSpikeG?: number;
   /** Ambang batas klasifikasi keparahan fallback berdasarkan puncak Z */
   severityThresholds: {
     severe: number;
@@ -85,6 +87,7 @@ export const VEHICLE_PROFILES: Record<VehicleId, VehicleProfile> = {
     markerEmoji: "🚗",
     sensorConfig: {
       zShockThreshold: 1.10, // Dynamic vertical shock di atas 1G gravitasi (total ~2.10G)
+      maxExtremeSpikeG: 4.20,
       vibrationFactor: 1.0,
       idleVibration: 8, // Getaran halus kabin mobil saat idle
       shockGaugeMultiplier: 55,
@@ -109,6 +112,7 @@ export const VEHICLE_PROFILES: Record<VehicleId, VehicleProfile> = {
     markerEmoji: "🏍️",
     sensorConfig: {
       zShockThreshold: 1.45, // Stang motor bergetar lebih kuat, ambang shock dinamis >= 1.45G
+      maxExtremeSpikeG: 4.80,
       vibrationFactor: 1.35,
       idleVibration: 22, // Getaran mesin 1-silinder skutik pada stang saat idle
       shockGaugeMultiplier: 35,
@@ -133,6 +137,7 @@ export const VEHICLE_PROFILES: Record<VehicleId, VehicleProfile> = {
     markerEmoji: "🚲",
     sensorConfig: {
       zShockThreshold: 1.15,
+      maxExtremeSpikeG: 3.80,
       vibrationFactor: 0.85,
       idleVibration: 0, // Sepeda tanpa mesin, getaran 0 saat berhenti
       shockGaugeMultiplier: 45,

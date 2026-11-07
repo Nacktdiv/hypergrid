@@ -1,6 +1,7 @@
 import { apiClient } from './client';
 import type {
   BoundingBoxFilter,
+  DbscanClustersResponse,
   PotholeCluster,
   UpdateClusterDto,
   UpdateClusterStatusDto,
@@ -8,7 +9,7 @@ import type {
 
 /**
  * Service Modul Klaster Lubang Jalan (`/api/pothole-clusters`).
- * Mengelola hasil agregasi spasial PostGIS untuk visualisasi peta
+ * Mengelola hasil agregasi spasial PostGIS & DBSCAN untuk visualisasi peta
  * dan early warning driver.
  */
 interface CachedClusters {
@@ -17,20 +18,118 @@ interface CachedClusters {
   filterKey: string;
 }
 
+interface CachedDbscan {
+  data: DbscanClustersResponse;
+  timestamp: number;
+  filterKey: string;
+}
+
 let clustersCache: CachedClusters | null = null;
+let dbscanCache: CachedDbscan | null = null;
 const CLUSTERS_CACHE_TTL_MS = 15_000; // 15 detik
 
 export const clustersService = {
+  /**
+   * Mengambil klaster konsolidasi DBSCAN lintas pengguna dan data heatmap global.
+   * GET /api/pothole-clusters/dbscan
+   */
+  async getDbscanClusters(
+    filter?: BoundingBoxFilter & { eps?: number; minPts?: number },
+    forceRefresh = false
+  ): Promise<DbscanClustersResponse> {
+    const filterKey = JSON.stringify(filter || {});
+    const now = Date.now();
+
+    if (
+      !forceRefresh &&
+      dbscanCache &&
+      dbscanCache.filterKey === filterKey &&
+      now - dbscanCache.timestamp < CLUSTERS_CACHE_TTL_MS
+    ) {
+      return dbscanCache.data;
+    }
+
+    try {
+      const response = await apiClient.get<DbscanClustersResponse | PotholeCluster[]>(
+        '/pothole-clusters/dbscan',
+        {
+          params: {
+            eps: filter?.eps ?? 25,
+            minPts: filter?.minPts ?? 1,
+            minLat: filter?.minLat,
+            minLon: filter?.minLon,
+            maxLat: filter?.maxLat,
+            maxLon: filter?.maxLon,
+            status: filter?.status,
+            severity: filter?.severity,
+            limit: filter?.limit,
+          },
+        }
+      );
+
+      let result: DbscanClustersResponse;
+      if (Array.isArray(response)) {
+        // Fallback jika respons lama berupa array klaster
+        result = {
+          clusters: response,
+          heatmap: response.map((c) => [c.center_latitude, c.center_longitude, c.confidence_avg || 0.6]),
+          total_detections: response.reduce((sum, c) => sum + (c.detection_count || 1), 0),
+          total_clusters: response.length,
+          generated_at: new Date().toISOString(),
+        };
+      } else {
+        result = response;
+      }
+
+      dbscanCache = { data: result, timestamp: now, filterKey };
+      clustersCache = { data: result.clusters || [], timestamp: now, filterKey };
+      return result;
+    } catch (error) {
+      // Jika endpoint /dbscan gagal (misal server belum direstart), coba fallback ke /pothole-clusters?includeHeatmap=true
+      console.warn('[clustersService] /dbscan fallback ke /pothole-clusters?includeHeatmap=true:', error);
+      const fallback = await apiClient.get<any>('/pothole-clusters', {
+        params: {
+          includeHeatmap: 'true',
+          minLat: filter?.minLat,
+          minLon: filter?.minLon,
+          maxLat: filter?.maxLat,
+          maxLon: filter?.maxLon,
+          status: filter?.status,
+          severity: filter?.severity,
+          limit: filter?.limit,
+        },
+      });
+
+      let res: DbscanClustersResponse;
+      if (Array.isArray(fallback)) {
+        res = {
+          clusters: fallback,
+          heatmap: fallback.map((c) => [c.center_latitude, c.center_longitude, c.confidence_avg || 0.6]),
+          total_detections: fallback.reduce((s, c) => s + (c.detection_count || 1), 0),
+          total_clusters: fallback.length,
+          generated_at: new Date().toISOString(),
+        };
+      } else {
+        res = fallback;
+      }
+
+      dbscanCache = { data: res, timestamp: now, filterKey };
+      clustersCache = { data: res.clusters || [], timestamp: now, filterKey };
+      return res;
+    }
+  },
+
   /**
    * Mengambil klaster lubang jalan dalam jendela koordinat peta (Bounding Box)
    * atau filter status / tingkat keparahan dengan TTL caching 15 detik.
    * GET /api/pothole-clusters
    */
-  async getClusters(filter?: BoundingBoxFilter): Promise<PotholeCluster[]> {
+  async getClusters(filter?: BoundingBoxFilter, forceRefresh = false): Promise<PotholeCluster[]> {
     const filterKey = JSON.stringify(filter || {});
     const now = Date.now();
 
     if (
+      !forceRefresh &&
       clustersCache &&
       clustersCache.filterKey === filterKey &&
       now - clustersCache.timestamp < CLUSTERS_CACHE_TTL_MS
@@ -38,7 +137,7 @@ export const clustersService = {
       return clustersCache.data;
     }
 
-    const data = await apiClient.get<PotholeCluster[]>('/pothole-clusters', {
+    const data = await apiClient.get<PotholeCluster[] | DbscanClustersResponse>('/pothole-clusters', {
       params: {
         minLat: filter?.minLat,
         minLon: filter?.minLon,
@@ -50,8 +149,9 @@ export const clustersService = {
       },
     });
 
-    clustersCache = { data: data || [], timestamp: now, filterKey };
-    return data || [];
+    const clusters = Array.isArray(data) ? data : data?.clusters || [];
+    clustersCache = { data: clusters, timestamp: now, filterKey };
+    return clusters;
   },
 
   /**

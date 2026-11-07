@@ -76,6 +76,9 @@ importers:
       expo-image:
         specifier: ~57.0.5
         version: 57.0.5(expo@57.0.28)(react-native-web@0.21.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-native@0.86.3(patch_hash=922be9b00b9aba9668b7d41aab2e9eb9a5a82543a49c63c43f6d5ed485a10916)(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
+      expo-image-picker:
+        specifier: ^57.0.21
+        version: 57.0.21(expo@57.0.28)
       expo-linking:
         specifier: ~57.0.12
         version: 57.0.12(expo@57.0.28)(react-native@0.86.3(patch_hash=922be9b00b9aba9668b7d41aab2e9eb9a5a82543a49c63c43f6d5ed485a10916)(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
@@ -2513,6 +2516,16 @@ packages:
 
   expo-haptics@57.0.3:
     resolution: {integrity: sha512-qucUXtwtJdtECKSQK5D6TQBc/0SxKj7s5wQ4mrfSxhZsHrS9a4rcxINl/gbruMaY9spTXStco32ST4pV0vXmxw==}
+    peerDependencies:
+      expo: '*'
+
+  expo-image-loader@57.0.1:
+    resolution: {integrity: sha512-uhrZKLT/cTl2mXyR28kPpVkS5O+PK9N1QA/07IFM4f5T4g0lTW1JHT3NEWwEEsGFldPmVX4j7LwUVVZxE+woug==}
+    peerDependencies:
+      expo: '*'
+
+  expo-image-picker@57.0.21:
+    resolution: {integrity: sha512-DRAqZyzbAgpBRFIzqsIeGvCVxzEWg0KmqN5nMC8nPca00BLPJ/8ubdMmPFMMuilP4JI5xZV9rKp5H1bjycUyCg==}
     peerDependencies:
       expo: '*'
 
@@ -6168,9 +6181,7 @@ snapshots:
       metro-runtime: 0.84.5
     transitivePeerDependencies:
       - '@babel/core'
-      - bufferutil
       - supports-color
-      - utf-8-validate
 
   '@react-native/normalize-colors@0.74.89': {}
 
@@ -7519,6 +7530,15 @@ snapshots:
   expo-haptics@57.0.3(expo@57.0.28):
     dependencies:
       expo: 57.0.28(cb03e724d44540955874c3c7af5d99b7)
+
+  expo-image-loader@57.0.1(expo@57.0.28):
+    dependencies:
+      expo: 57.0.28(cb03e724d44540955874c3c7af5d99b7)
+
+  expo-image-picker@57.0.21(expo@57.0.28):
+    dependencies:
+      expo: 57.0.28(cb03e724d44540955874c3c7af5d99b7)
+      expo-image-loader: 57.0.1(expo@57.0.28)
 
   expo-image@57.0.5(expo@57.0.28)(react-native-web@0.21.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-native@0.86.3(patch_hash=922be9b00b9aba9668b7d41aab2e9eb9a5a82543a49c63c43f6d5ed485a10916)(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3):
     dependencies:

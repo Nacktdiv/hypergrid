@@ -1,4 +1,5 @@
 import type { RawSensorSample } from './types';
+import { HighPassFilter } from './high-pass-filter';
 
 // ──── Statistik dasar ────────────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ function stats6(arr: number[]): [number, number, number, number, number, number]
 
 export interface DecomposedSignals {
   vertDyn: number[];
+  vertDynHpf: number[];
   horizDyn: number[];
   accMag: number[];
   gyroMag: number[];
@@ -56,11 +58,13 @@ export interface DecomposedSignals {
 }
 
 /**
- * Dekomposisi sinyal 3D sensor menggunakan Causal EMA Gravity Tracking.
+ * Dekomposisi sinyal 3D sensor menggunakan Causal EMA Gravity Tracking
+ * dipadukan dengan Digital High-Pass Filter (HPF).
  *
  * 100% konsisten dengan implementasi Python: `RoadFeatureExtractorV2._decompose_signals_causal`.
  * Memproyeksikan vektor akselerasi ke arah gravitasi bumi sesungguhnya,
  * sehingga orientasi HP (miring, tidur, tegak di holder) tidak merusak sinyal vertikal.
+ * `vertDynHpf` menyaring drift frekuensi rendah (< 1.8 Hz: tanjakan, turunan, body roll).
  */
 export function decomposeSensorSignals(
   samples: RawSensorSample[],
@@ -70,6 +74,7 @@ export function decomposeSensorSignals(
   if (n === 0) {
     return {
       vertDyn: [],
+      vertDynHpf: [],
       horizDyn: [],
       accMag: [],
       gyroMag: [],
@@ -79,6 +84,7 @@ export function decomposeSensorSignals(
   }
 
   const vertDyn: number[] = [];
+  const vertDynDiff: number[] = [];
   const horizDyn: number[] = [];
   const accMag: number[] = [];
   const gyroMag: number[] = [];
@@ -109,7 +115,8 @@ export function decomposeSensorSignals(
 
     // 2. Dynamic Vertical Shock (Sejajar arah gravitasi bumi, baseline gravitasi dihilangkan)
     const aVert = ax * gUnitX + ay * gUnitY + az * gUnitZ;
-    const aVertDyn = Math.abs(aVert - gNorm);
+    const aVertDiff = aVert - gNorm;
+    const aVertDyn = Math.abs(aVertDiff);
 
     // 3. Dynamic Horizontal Forces (Tegak lurus gravitasi: belok, rem, akselerasi)
     const diffX = ax - aVert * gUnitX;
@@ -124,14 +131,20 @@ export function decomposeSensorSignals(
     const gm = Math.sqrt(s.gx * s.gx + s.gy * s.gy + s.gz * s.gz);
 
     vertDyn.push(aVertDyn);
+    vertDynDiff.push(aVertDiff);
     horizDyn.push(aHorizDyn);
     accMag.push(am);
     gyroMag.push(gm);
     speedClean.push(Math.max(0, s.speedKmh));
   }
 
+  // 5. High-Pass Filter (fc = 1.2 Hz, fs = 20 Hz) untuk menyaring ayunan suspensi halus
+  const hpfSignal = HighPassFilter.filterArray(vertDynDiff, 1.2, 20);
+  const vertDynHpf = hpfSignal.map((v) => Math.abs(v));
+
   return {
     vertDyn,
+    vertDynHpf,
     horizDyn,
     accMag,
     gyroMag,

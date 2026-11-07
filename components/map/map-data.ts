@@ -22,7 +22,7 @@ export type LatLng = {
 }
 
 /** Tingkat keparahan kerusakan jalan. */
-export type DamageSeverity = "high" | "medium" | "low"
+export type DamageSeverity = "severe" | "high" | "medium" | "low"
 
 /**
  * Satu titik kerusakan jalan di peta.
@@ -33,6 +33,9 @@ export type DamagePoint = {
   position: LatLng
   severity: DamageSeverity
   reportCount: number
+  radius_meters?: number
+  userCount?: number
+  points?: Array<{ latitude: number; longitude: number; intensity?: number }>
 }
 
 /** Seluruh data yang dibutuhkan satu layar untuk menggambar peta. */
@@ -46,6 +49,10 @@ export type MapData = {
   }
   /** Titik kerusakan jalan yang tampil di peta. */
   damagePoints: DamagePoint[]
+  /** Data heatmap sebaran intensitas kerusakan jalan [lat, lon, intensity 0..1]. */
+  heatmap?: Array<[number, number, number]>
+  /** ID klaster yang sedang aktif/diklik untuk di-highlight cakupan areanya */
+  activeClusterId?: string | null
   /** Posisi pengguna (titik biru). */
   userLocation: LatLng
   /** Posisi kendaraan aktif (ikon kendaraan). */
@@ -54,11 +61,13 @@ export type MapData = {
 
 /**
  * Warna sesuai design system Figma "Final Page Mobile":
+ *   - Severe #991B1B (marker `Dark Crimson`)
  *   - High   #B3261E (marker `Red`)
  *   - Medium #F59E0B (marker `Yellow 1` / Semantic-Warning)
  *   - Low    #FFFF00 (marker `Yellow 2`)
  */
 export const SEVERITY_COLOR: Record<DamageSeverity, string> = {
+  severe: "#991B1B",
   high: "#B3261E",
   medium: "#F59E0B",
   low: "#FFFF00",
