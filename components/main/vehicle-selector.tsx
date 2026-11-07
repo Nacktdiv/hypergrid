@@ -1,9 +1,8 @@
 import React from "react";
 import { Image } from "expo-image";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { Activity, Zap } from "lucide-react-native";
 
-import { Touchable } from "@/components/ui/touchable";
 import {
   VEHICLE_PROFILES,
   type VehicleId,
@@ -89,11 +88,10 @@ export function VehicleSelector({
         {VEHICLE_OPTIONS.map((option) => {
           const isActive = selected === option.id;
           return (
-            <Touchable
+            <Pressable
               key={option.id}
-              className="flex-1"
+              className="flex-1 active:opacity-80 active:scale-95"
               onPress={() => onSelect(option.id)}
-              scaleTo={0.96}
               accessibilityRole="radio"
               accessibilityState={{ selected: isActive }}
               accessibilityLabel={`Select vehicle ${option.label}`}
@@ -121,7 +119,7 @@ export function VehicleSelector({
                   {option.label}
                 </Text>
               </View>
-            </Touchable>
+            </Pressable>
           );
         })}
       </View>

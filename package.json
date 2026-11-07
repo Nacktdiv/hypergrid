@@ -51,7 +51,7 @@
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-css-interop": "^0.2.6",
-    "react-native-fast-tflite": "^3.0.1",
+    "react-native-fast-rlite": "^3.0.1",
     "react-native-gesture-handler": "~2.32.0",
     "react-native-maps": "^1.27.2",
     "react-native-reanimated": "~4.5.1",

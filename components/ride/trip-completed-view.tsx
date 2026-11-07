@@ -27,6 +27,8 @@ export interface TripCompletedData {
   isTflite?: boolean;
   confidencePercent?: number;
   confidenceTier?: string;
+  destinationName?: string;
+  startLocationName?: string;
 }
 
 export interface TripCompletedViewProps {
@@ -385,6 +387,36 @@ export function TripCompletedView({
             </AppCard>
           </View>
         </View>
+
+        {/* Route & Destination Detail */}
+        {data.destinationName ? (
+          <AppCard className="p-4 bg-white border border-slate-200/90 shadow-xs mb-3.5">
+            <View className="flex-row items-center gap-2 mb-2">
+              <Navigation size={14} color="#009EFF" />
+              <Text className="font-chivo-bold text-xs text-slate-800 uppercase tracking-wider">
+                Trip Route & Destination
+              </Text>
+            </View>
+
+            <View className="flex-row items-center justify-between py-1.5 border-b border-slate-100">
+              <Text className="font-quicksand text-xs text-slate-500">
+                Departure
+              </Text>
+              <Text className="font-quicksand-bold text-xs text-slate-800" numberOfLines={1}>
+                {data.startLocationName || "Origin Location"}
+              </Text>
+            </View>
+
+            <View className="flex-row items-center justify-between pt-1.5">
+              <Text className="font-quicksand text-xs text-slate-500">
+                Final Destination
+              </Text>
+              <Text className="font-quicksand-bold text-xs text-brand" numberOfLines={1}>
+                {data.destinationName}
+              </Text>
+            </View>
+          </AppCard>
+        ) : null}
 
         {/* Telemetry & Cloud Verification Card */}
         <AppCard className="p-4 bg-white border border-slate-200/90 shadow-xs mb-5">

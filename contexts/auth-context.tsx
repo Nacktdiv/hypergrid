@@ -5,7 +5,6 @@ import React, {
   useEffect,
   useState,
 } from 'react';
-import { useRouter, useSegments } from 'expo-router';
 import { authService } from '@/services/api/auth.service';
 import { authEvents } from '@/services/api/auth-events';
 import type { AuthUser, SignInEmailDto, SignUpEmailDto, AuthResponse } from '@/types/api';
@@ -32,55 +31,7 @@ export interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-/**
- * Middleware Route Guard:
- * Mengawasi segment rute dan state autentikasi secara reaktif.
- * Ketika user logout atau sesi habis, user otomatis dilempar ke halaman login/register.
- * Ketika user baru mendaftar (onboarding belum selesai), diarahkan ke /onboarding.
- */
-function AuthRouteGuard({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, isOnboardingCompleted } = useAuth();
-  const segments = useSegments();
-  const router = useRouter();
 
-  useEffect(() => {
-    if (isLoading) return;
-
-    const firstSegment = segments[0] as string | undefined;
-    const isProtectedRoute = firstSegment === '(tabs)' || firstSegment === 'ride';
-    const isAuthRoute = firstSegment === '(auth)';
-    const isOnboardingRoute = firstSegment === '(onboarding)';
-    const isUserOnboarded = Boolean(user?.isOnboarded || isOnboardingCompleted);
-
-    // 1. Jika belum login tapi berada di protected route atau onboarding
-    if (!user && (isProtectedRoute || isOnboardingRoute)) {
-      console.log('[AuthMiddleware] Sesi tidak ditemukan/selesai. Melempar ke auth login...');
-      router.replace('/(auth)');
-      return;
-    }
-
-    // 2. Jika sudah login tapi masih berada di halaman login (auth)
-    if (user && isAuthRoute) {
-      if (!isUserOnboarded) {
-        console.log('[AuthMiddleware] User baru login/register. Mengarahkan ke onboarding...');
-        router.replace('/(onboarding)');
-      } else {
-        console.log('[AuthMiddleware] Sesi aktif & onboarding sudah selesai. Mengarahkan ke tabs...');
-        router.replace('/(tabs)');
-      }
-      return;
-    }
-
-    // 3. Jika sudah login dan sudah menyelesaikan onboarding tapi masih di onboarding
-    if (user && isOnboardingRoute && isUserOnboarded) {
-      console.log('[AuthMiddleware] Onboarding sudah selesai. Mengarahkan ke tabs...');
-      router.replace('/(tabs)');
-      return;
-    }
-  }, [user, isLoading, isOnboardingCompleted, segments]);
-
-  return <>{children}</>;
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -275,7 +226,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={value}>
-      <AuthRouteGuard>{children}</AuthRouteGuard>
+      {children}
     </AuthContext.Provider>
   );
 }

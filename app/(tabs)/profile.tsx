@@ -18,6 +18,7 @@ import { AppButton } from "@/components/ui/app-button";
 import { ProfileContentSkeleton } from "@/components/ui/skeleton";
 import { Touchable } from "@/components/ui/touchable";
 import { useAuth } from "@/hooks/use-auth";
+import { useRouter } from "expo-router";
 
 /**
  * Screen 9 — Profile (Terintegrasi Penuh dengan Better-Auth & Fitur Edit Info).
@@ -28,6 +29,7 @@ import { useAuth } from "@/hooks/use-auth";
  *     tersimpan di memori/storage tanpa memicu request jaringan baru saat ganti tab.
  */
 export default function ProfileScreen() {
+  const router = useRouter();
   const { user, isLoading: isAuthLoading, signOut, updateProfile } = useAuth();
 
   // State Modal Edit Profil
@@ -80,8 +82,10 @@ export default function ProfileScreen() {
           onPress: async () => {
             try {
               await signOut();
+              router.replace("/(auth)");
             } catch (e) {
               console.warn("[ProfileScreen] Logout error:", e);
+              router.replace("/(auth)");
             }
           },
         },

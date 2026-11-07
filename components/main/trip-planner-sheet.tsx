@@ -1,67 +1,119 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   ActivityIndicator,
   Keyboard,
   Modal,
+  Pressable,
   ScrollView,
   Text,
   TextInput,
   View,
 } from "react-native";
 import {
-  AlertTriangle,
   ArrowRight,
-  CheckCircle2,
-  Clock,
+  Building2,
   Compass,
+  Landmark,
   MapPin,
-  Navigation,
   Search,
-  ShieldAlert,
+  Train,
+  Trophy,
   X,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AppButton } from "@/components/ui/app-button";
-import { Touchable } from "@/components/ui/touchable";
 import {
   routingService,
   type SearchLocationResult,
-  type PlannedRoute,
 } from "@/services/api/routing.service";
 import type { LatLng } from "@/components/map/map-data";
-import type { PotholeCluster } from "@/types/api";
 
 export interface TripPlannerSheetProps {
   visible: boolean;
   onClose: () => void;
   userCoords?: LatLng | null;
-  clusters?: PotholeCluster[];
-  activeRoute?: PlannedRoute | null;
-  onRouteCalculated?: (route: PlannedRoute | null) => void;
-  onStartRideWithRoute?: (route: PlannedRoute) => void;
+  onSelectDestination: (destName: string, destCoords: LatLng) => void;
 }
 
-const POPULAR_DESTINATIONS: Array<{ name: string; address: string; coords: LatLng }> = [
+interface PopularPlace {
+  name: string;
+  address: string;
+  category: string;
+  icon: React.ComponentType<{ size: number; color: string }>;
+  coords: LatLng;
+}
+
+function calculateHaversineMeters(a: LatLng, b: LatLng): number {
+  const R = 6371000;
+  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
+  const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
+  const sinLat = Math.sin(dLat / 2);
+  const sinLon = Math.sin(dLon / 2);
+  const hav =
+    sinLat * sinLat +
+    Math.cos((a.latitude * Math.PI) / 180) *
+      Math.cos((b.latitude * Math.PI) / 180) *
+      sinLon * sinLon;
+  return R * 2 * Math.atan2(Math.sqrt(hav), Math.sqrt(1 - hav));
+}
+
+const POPULAR_DESTINATIONS: PopularPlace[] = [
   {
     name: "Bundaran HI",
-    address: "Menteng, Jakarta Pusat",
+    address: "Menteng, Central Jakarta",
+    category: "City Center",
+    icon: Landmark,
     coords: { latitude: -6.1951, longitude: 106.8232 },
   },
   {
-    name: "Stasiun Sudirman",
-    address: "Jl. Kendal, Menteng, Jakarta Pusat",
+    name: "Sudirman Station",
+    address: "Jl. Kendal, Menteng, Central Jakarta",
+    category: "Transit Station",
+    icon: Train,
     coords: { latitude: -6.2023, longitude: 106.8236 },
   },
   {
     name: "SCBD Lot 8",
-    address: "Kebayoran Baru, Jakarta Selatan",
+    address: "Kebayoran Baru, South Jakarta",
+    category: "Business Hub",
+    icon: Building2,
     coords: { latitude: -6.2255, longitude: 106.8097 },
   },
   {
-    name: "Monumen Nasional (Monas)",
-    address: "Gambir, Jakarta Pusat",
+    name: "National Monument (Monas)",
+    address: "Gambir, Central Jakarta",
+    category: "Landmark",
+    icon: Landmark,
     coords: { latitude: -6.1754, longitude: 106.8272 },
+  },
+  {
+    name: "Blok M Hub",
+    address: "Kebayoran Baru, South Jakarta",
+    category: "Transit Hub",
+    icon: Train,
+    coords: { latitude: -6.2443, longitude: 106.8000 },
+  },
+  {
+    name: "Gelora Bung Karno (GBK)",
+    address: "Senayan, Central Jakarta",
+    category: "Sports Arena",
+    icon: Trophy,
+    coords: { latitude: -6.2185, longitude: 106.8026 },
+  },
+  {
+    name: "Kemang Village",
+    address: "Bangka, South Jakarta",
+    category: "Shopping & Dining",
+    icon: Building2,
+    coords: { latitude: -6.2605, longitude: 106.8155 },
+  },
+  {
+    name: "Senayan City",
+    address: "Jl. Asia Afrika, Central Jakarta",
+    category: "Shopping Mall",
+    icon: Building2,
+    coords: { latitude: -6.2272, longitude: 106.7974 },
   },
 ];
 
@@ -69,15 +121,12 @@ export function TripPlannerSheet({
   visible,
   onClose,
   userCoords,
-  clusters = [],
-  activeRoute,
-  onRouteCalculated,
-  onStartRideWithRoute,
+  onSelectDestination,
 }: TripPlannerSheetProps) {
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchLocationResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const defaultStart: LatLng = userCoords || {
@@ -85,7 +134,7 @@ export function TripPlannerSheet({
     longitude: 106.8206,
   };
 
-  // Debounced geocoding search
+  // Debounced geocoding search using OpenStreetMap Nominatim
   useEffect(() => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
@@ -107,7 +156,7 @@ export function TripPlannerSheet({
       } finally {
         setIsSearching(false);
       }
-    }, 450);
+    }, 380);
 
     return () => {
       if (searchTimeoutRef.current) {
@@ -116,59 +165,34 @@ export function TripPlannerSheet({
     };
   }, [searchQuery]);
 
-  const handleSelectDestination = useCallback(
-    async (destName: string, destCoords: LatLng) => {
+  const handleSelect = useCallback(
+    (name: string, coords: LatLng) => {
       Keyboard.dismiss();
-      setSearchResults([]);
-      setSearchQuery(destName);
-      setIsCalculatingRoute(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-
-      try {
-        const route = await routingService.calculateRoute(
-          defaultStart,
-          destCoords,
-          destName,
-          clusters
-        );
-
-        if (route) {
-          onRouteCalculated?.(route);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
-            () => {}
-          );
-        }
-      } catch (err) {
-        console.warn("[TripPlannerSheet] Gagal menghitung rute:", err);
-      } finally {
-        setIsCalculatingRoute(false);
-      }
+      onClose();
+      onSelectDestination(name, coords);
     },
-    [defaultStart, clusters, onRouteCalculated]
+    [onClose, onSelectDestination]
   );
-
-  const handleClearRoute = () => {
-    setSearchQuery("");
-    setSearchResults([]);
-    onRouteCalculated?.(null);
-  };
 
   const formatDistance = (meters: number) => {
     if (meters >= 1000) {
       return `${(meters / 1000).toFixed(1)} km`;
     }
-    return `${meters} m`;
+    return `${Math.round(meters)} m`;
   };
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.max(1, Math.round(seconds / 60));
-    if (mins >= 60) {
-      const hrs = Math.floor(mins / 60);
-      const rem = mins % 60;
-      return `${hrs} jam ${rem > 0 ? `${rem} mnt` : ""}`;
-    }
-    return `${mins} menit`;
-  };
+  // Sort popular destinations by actual distance from current user coordinates
+  const nearbyPopularDestinations = useMemo(() => {
+    const origin = userCoords || defaultStart;
+    return POPULAR_DESTINATIONS.map((dest) => {
+      const distance = calculateHaversineMeters(origin, dest.coords);
+      return {
+        ...dest,
+        distanceMeters: distance,
+      };
+    }).sort((a, b) => a.distanceMeters - b.distanceMeters);
+  }, [userCoords, defaultStart]);
 
   return (
     <Modal
@@ -178,250 +202,221 @@ export function TripPlannerSheet({
       onRequestClose={onClose}
     >
       <View className="flex-1 justify-end bg-black/50">
-        <View className="max-h-[85%] rounded-t-3xl bg-white px-5 pt-3 pb-8 shadow-2xl">
-          {/* Handle Bar */}
-          <View className="w-10 h-1 bg-slate-300 rounded-full self-center mb-2" />
+        <Pressable
+          onPress={onClose}
+          className="flex-1"
+          accessibilityRole="button"
+          accessibilityLabel="Close trip planner"
+        />
 
-          {/* Header Bar */}
+        <View
+          className="max-h-[82%] rounded-t-[30px] bg-white px-5 pt-3 shadow-2xl"
+          style={{
+            paddingBottom: Math.max(insets.bottom, 16) + 8,
+          }}
+        >
+          {/* Subtle Drag Handle */}
+          <View className="w-10 h-1 bg-slate-300 rounded-full self-center mb-3" />
+
+          {/* Modal Header: Clean neutral icon, English typography */}
           <View className="flex-row items-center justify-between pb-3 border-b border-slate-100">
-            <View className="flex-row items-center gap-2">
-              <View className="h-8 w-8 items-center justify-center rounded-full bg-sky-50 border border-sky-100">
-                <Compass size={18} color="#009EFF" />
+            <View className="flex-row items-center gap-3">
+              <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-100 border border-slate-200/80">
+                <Compass size={18} color="#0F172A" />
               </View>
-              <Text className="font-chivo-bold text-lg text-slate-900">
-                Rencanakan Perjalanan
-              </Text>
+              <View>
+                <Text className="font-chivo-bold text-base text-slate-900 leading-tight">
+                  Trip Planner
+                </Text>
+                <Text className="font-quicksand text-[11px] text-slate-500 mt-0.5">
+                  Eco route & road safety scanning
+                </Text>
+              </View>
             </View>
 
-            <Touchable
+            <Pressable
               onPress={onClose}
-              className="h-8 w-8 items-center justify-center rounded-full bg-slate-100 border border-slate-200"
+              className="h-8 w-8 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200 border border-slate-200"
               accessibilityRole="button"
-              accessibilityLabel="Tutup perencanaan rute"
+              accessibilityLabel="Close"
             >
-              <X size={16} color="#475569" />
-            </Touchable>
+              <X size={15} color="#475569" />
+            </Pressable>
           </View>
 
           <ScrollView
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerClassName="pt-3 pb-4 gap-4"
+            contentContainerClassName="pt-3 pb-2 gap-3.5"
           >
-            {/* INPUT PENCARIAN TUJUAN */}
-            <View className="gap-2.5">
-              {/* Origin Display (Lokasi Saya) */}
-              <View className="flex-row items-center gap-2.5 px-3 py-2.5 rounded-2xl bg-slate-50 border border-slate-200">
-                <View className="h-2.5 w-2.5 rounded-full bg-brand ring-4 ring-sky-100" />
-                <View className="flex-1">
-                  <Text className="font-quicksand text-[11px] text-slate-600">
-                    Titik Berangkat
-                  </Text>
-                  <Text className="font-quicksand-bold text-xs text-slate-800" numberOfLines={1}>
-                    Lokasi Saya Saat Ini (GPS Terkunci)
-                  </Text>
+            {/* 1. WAYPOINT JOURNEY CARD (DEPARTURE & DESTINATION INPUT) */}
+            <View className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5">
+              <View className="flex-row items-stretch">
+                {/* Visual Waypoint Connectors */}
+                <View className="items-center justify-between py-2 pr-3">
+                  <View className="h-2.5 w-2.5 rounded-full bg-sky-500 ring-4 ring-sky-100" />
+                  <View className="w-0.5 flex-1 bg-slate-300 my-1" />
+                  <View className="h-3 w-3 items-center justify-center rounded-full bg-rose-500">
+                    <MapPin size={8} color="#FFFFFF" />
+                  </View>
                 </View>
-              </View>
 
-              {/* Destination Search Input */}
-              <View className="flex-row items-center gap-2 px-3 py-2 rounded-2xl bg-white border border-sky-300 shadow-sm focus:border-brand">
-                <MapPin size={18} color="#009EFF" />
-                <TextInput
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholder="Ketik lokasi atau nama jalan tujuan..."
-                  placeholderTextColor="#94A3B8"
-                  className="flex-1 font-quicksand-bold text-sm text-slate-900 py-1"
-                  autoCorrect={false}
-                  returnKeyType="search"
-                />
-                {isSearching ? (
-                  <ActivityIndicator size="small" color="#009EFF" />
-                ) : searchQuery.length > 0 ? (
-                  <Touchable onPress={handleClearRoute} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <X size={16} color="#94A3B8" />
-                  </Touchable>
-                ) : (
-                  <Search size={16} color="#94A3B8" />
-                )}
+                {/* Form Fields */}
+                <View className="flex-1 gap-2">
+                  {/* Departure */}
+                  <View className="py-0.5">
+                    <Text className="font-quicksand-bold text-[10px] text-slate-400 uppercase tracking-wider">
+                      Departure
+                    </Text>
+                    <Text
+                      className="font-quicksand-bold text-xs text-slate-800 mt-0.5"
+                      numberOfLines={1}
+                    >
+                      Current GPS Location
+                    </Text>
+                  </View>
+
+                  <View className="h-[1px] bg-slate-200/80" />
+
+                  {/* Destination Input */}
+                  <View>
+                    <Text className="font-quicksand-bold text-[10px] text-slate-400 uppercase tracking-wider mb-1">
+                      Destination
+                    </Text>
+                    <View className="flex-row items-center px-3 py-2 rounded-xl bg-white border border-slate-200 focus:border-brand shadow-2xs">
+                      <TextInput
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        placeholder="Search destination or address..."
+                        placeholderTextColor="#94A3B8"
+                        className="flex-1 font-quicksand-bold text-xs text-slate-900 py-0.5"
+                        autoCorrect={false}
+                        returnKeyType="search"
+                      />
+                      {isSearching ? (
+                        <ActivityIndicator size="small" color="#009EFF" />
+                      ) : searchQuery.length > 0 ? (
+                        <Pressable
+                          onPress={() => setSearchQuery("")}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          className="h-5 w-5 rounded-full items-center justify-center bg-slate-100 active:bg-slate-200"
+                          accessibilityLabel="Clear query"
+                        >
+                          <X size={12} color="#64748B" />
+                        </Pressable>
+                      ) : (
+                        <Search size={15} color="#94A3B8" />
+                      )}
+                    </View>
+                  </View>
+                </View>
               </View>
             </View>
 
-            {/* HASIL PENCARIAN NOMINATIM AUTOCOMPLETE */}
+            {/* 2. LIVE SEARCH RESULTS */}
             {searchResults.length > 0 ? (
-              <View className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-                <Text className="font-quicksand-bold text-xs text-slate-600 uppercase tracking-wider px-3.5 pt-3 pb-1">
-                  Hasil Pencarian Lokasi
-                </Text>
+              <View className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+                <View className="px-3.5 pt-2.5 pb-1 border-b border-slate-100 flex-row items-center justify-between">
+                  <Text className="font-quicksand-bold text-[11px] text-slate-500 uppercase tracking-wider">
+                    Search Results
+                  </Text>
+                  <Text className="font-quicksand text-[10px] text-slate-400">
+                    {searchResults.length} places
+                  </Text>
+                </View>
+
                 {searchResults.map((res) => (
-                  <Touchable
+                  <Pressable
                     key={res.id}
                     onPress={() =>
-                      handleSelectDestination(res.name, {
+                      handleSelect(res.name, {
                         latitude: res.latitude,
                         longitude: res.longitude,
                       })
                     }
-                    className="flex-row items-center gap-2.5 px-3.5 py-3 border-t border-slate-100"
+                    className="flex-row items-center justify-between p-3 border-b border-slate-100 last:border-b-0 active:bg-slate-50"
                     accessibilityRole="button"
-                    accessibilityLabel={`Pilih ${res.name}`}
+                    accessibilityLabel={`Choose destination ${res.name}`}
                   >
-                    <View className="h-7 w-7 items-center justify-center rounded-full bg-sky-50">
-                      <MapPin size={14} color="#009EFF" />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="font-quicksand-bold text-xs text-slate-900" numberOfLines={1}>
+                    <View className="flex-1 pr-2">
+                      <Text
+                        className="font-quicksand-bold text-xs text-slate-900"
+                        numberOfLines={1}
+                      >
                         {res.name}
                       </Text>
-                      <Text className="font-quicksand text-[11px] text-slate-500" numberOfLines={1}>
+                      <Text
+                        className="font-quicksand text-[11px] text-slate-500 mt-0.5"
+                        numberOfLines={1}
+                      >
                         {res.address}
                       </Text>
                     </View>
-                  </Touchable>
+                    <ArrowRight size={14} color="#94A3B8" />
+                  </Pressable>
                 ))}
               </View>
             ) : null}
 
-            {/* KARTU PREVIEW RUTE & ANALISIS KERUSAKAN JALAN */}
-            {isCalculatingRoute ? (
-              <View className="p-6 items-center justify-center rounded-2xl bg-slate-50 border border-slate-200 gap-2">
-                <ActivityIndicator size="small" color="#009EFF" />
-                <Text className="font-quicksand text-xs text-slate-600">
-                  Menghitung rute navigasi & memindai lubang jalan...
-                </Text>
-              </View>
-            ) : activeRoute ? (
-              <View className="rounded-2xl border border-slate-200 bg-white p-4 gap-3 shadow-md">
-                {/* Header Rute */}
-                <View className="flex-row items-start justify-between">
-                  <View className="flex-1 pr-2">
-                    <Text className="font-chivo-bold text-base text-slate-900" numberOfLines={1}>
-                      Menuju {activeRoute.destinationName}
-                    </Text>
-                    <View className="flex-row items-center gap-3 mt-1">
-                      <View className="flex-row items-center gap-1">
-                        <Navigation size={13} color="#009EFF" />
-                        <Text className="font-mono-bold text-xs text-slate-700">
-                          {formatDistance(activeRoute.distanceMeters)}
-                        </Text>
-                      </View>
-                      <View className="flex-row items-center gap-1">
-                        <Clock size={13} color="#64748B" />
-                        <Text className="font-mono-bold text-xs text-slate-700">
-                          {formatDuration(activeRoute.durationSeconds)}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Safety Rating Badge */}
-                  <View
-                    className={`px-2.5 py-1 rounded-full border ${
-                      activeRoute.hazards.safetyRating === "dangerous"
-                        ? "bg-rose-50 border-rose-200"
-                        : activeRoute.hazards.safetyRating === "caution"
-                        ? "bg-amber-50 border-amber-200"
-                        : "bg-emerald-50 border-emerald-200"
-                    }`}
-                  >
-                    <Text
-                      className={`font-quicksand-bold text-[11px] ${
-                        activeRoute.hazards.safetyRating === "dangerous"
-                          ? "text-rose-700"
-                          : activeRoute.hazards.safetyRating === "caution"
-                          ? "text-amber-700"
-                          : "text-emerald-700"
-                      }`}
-                    >
-                      {activeRoute.hazards.safetyRating === "dangerous"
-                        ? "Jalur Rawan"
-                        : activeRoute.hazards.safetyRating === "caution"
-                        ? "Waspada"
-                        : "Jalan Mulus"}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Road Hazard Assessment Card */}
-                <View className="rounded-xl bg-slate-50 border border-slate-100 p-3 gap-1.5">
-                  <View className="flex-row items-center justify-between">
-                    <View className="flex-row items-center gap-1.5">
-                      <ShieldAlert
-                        size={15}
-                        color={
-                          activeRoute.hazards.safetyRating === "dangerous"
-                            ? "#E11D48"
-                            : activeRoute.hazards.safetyRating === "caution"
-                            ? "#D97706"
-                            : "#059669"
-                        }
-                      />
-                      <Text className="font-quicksand-bold text-xs text-slate-800">
-                        {activeRoute.hazards.safetyLabel}
-                      </Text>
-                    </View>
-                    <Text className="font-mono-bold text-xs text-slate-600">
-                      {activeRoute.hazards.totalHazards} titik terdeteksi
-                    </Text>
-                  </View>
-
-                  <Text className="font-quicksand text-[11px] text-slate-500">
-                    Densitas: ~{activeRoute.hazards.hazardDensityPerKm} titik/km dalam koridor jalan 35m.
-                    {activeRoute.hazards.severeCount > 0
-                      ? ` Terdapat ${activeRoute.hazards.severeCount} lubang tingkat severe!`
-                      : ""}
+            {/* 3. NEARBY POPULAR DESTINATIONS (ALWAYS POPULATED & SORTED) */}
+            {searchResults.length === 0 ? (
+              <View className="gap-2">
+                <View className="flex-row items-center justify-between px-1">
+                  <Text className="font-quicksand-bold text-[11px] text-slate-500 uppercase tracking-wider">
+                    Nearby Popular Destinations
+                  </Text>
+                  <Text className="font-quicksand text-[10px] text-slate-400">
+                    Sorted by nearest
                   </Text>
                 </View>
 
-                {/* Action Buttons */}
-                <View className="flex-row gap-2 pt-1">
-                  <View className="flex-1">
-                    <AppButton
-                      variant="primary"
-                      size="md"
-                      label="Mulai Berkendara"
-                      iconRight={<ArrowRight size={16} color="#FFFFFF" />}
-                      onPress={() => {
-                        onClose();
-                        onStartRideWithRoute?.(activeRoute);
-                      }}
-                      accessibilityLabel="Mulai berkendara dengan rute navigasi terpilih"
-                    />
-                  </View>
+                <View className="gap-2">
+                  {nearbyPopularDestinations.map((dest) => {
+                    const IconComp = dest.icon;
+                    return (
+                      <Pressable
+                        key={dest.name}
+                        onPress={() => handleSelect(dest.name, dest.coords)}
+                        className="flex-row items-center justify-between p-3 rounded-2xl border border-slate-200 bg-white active:bg-slate-50 shadow-2xs"
+                        accessibilityRole="button"
+                        accessibilityLabel={`Plan route to ${dest.name}`}
+                      >
+                        <View className="flex-row items-center gap-2.5 flex-1 pr-2">
+                          <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-100">
+                            <IconComp size={17} color="#0F172A" />
+                          </View>
+                          <View className="flex-1 justify-center">
+                            <View className="flex-row items-center gap-1.5 flex-wrap">
+                              <Text
+                                className="font-quicksand-bold text-xs text-slate-900"
+                                numberOfLines={1}
+                              >
+                                {dest.name}
+                              </Text>
+                              <View className="px-1.5 py-0.5 rounded-md bg-slate-100">
+                                <Text className="font-quicksand-semibold text-[9px] text-slate-600">
+                                  {dest.category}
+                                </Text>
+                              </View>
+                              <View className="px-1.5 py-0.5 rounded-md bg-sky-50 border border-sky-100">
+                                <Text className="font-mono-bold text-[9px] text-sky-700">
+                                  {formatDistance(dest.distanceMeters)}
+                                </Text>
+                              </View>
+                            </View>
+                            <Text
+                              className="font-quicksand text-[11px] text-slate-500 mt-0.5"
+                              numberOfLines={1}
+                            >
+                              {dest.address}
+                            </Text>
+                          </View>
+                        </View>
+                        <ArrowRight size={14} color="#94A3B8" />
+                      </Pressable>
+                    );
+                  })}
                 </View>
-              </View>
-            ) : null}
-
-            {/* REKOMENDASI TUJUAN POPULER KORIDOR UTAMA */}
-            {!activeRoute && searchResults.length === 0 ? (
-              <View className="gap-2">
-                <Text className="font-quicksand-bold text-xs text-slate-600 uppercase tracking-wider px-1">
-                  Tujuan Populer di Sekitar
-                </Text>
-                {POPULAR_DESTINATIONS.map((dest) => (
-                  <Touchable
-                    key={dest.name}
-                    onPress={() => handleSelectDestination(dest.name, dest.coords)}
-                    className="flex-row items-center justify-between p-3 rounded-2xl border border-slate-200 bg-white shadow-sm"
-                    accessibilityRole="button"
-                    accessibilityLabel={`Rencanakan rute ke ${dest.name}`}
-                  >
-                    <View className="flex-row items-center gap-2.5 flex-1 pr-2">
-                      <View className="h-8 w-8 items-center justify-center rounded-xl bg-slate-100">
-                        <MapPin size={16} color="#009EFF" />
-                      </View>
-                      <View className="flex-1">
-                        <Text className="font-quicksand-bold text-xs text-slate-900">
-                          {dest.name}
-                        </Text>
-                        <Text className="font-quicksand text-[11px] text-slate-500" numberOfLines={1}>
-                          {dest.address}
-                        </Text>
-                      </View>
-                    </View>
-                    <ArrowRight size={14} color="#94A3B8" />
-                  </Touchable>
-                ))}
               </View>
             ) : null}
           </ScrollView>

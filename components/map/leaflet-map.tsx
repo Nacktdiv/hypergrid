@@ -313,15 +313,22 @@ export const LeafletMap = React.memo(function LeafletMap({
       };
 
       window.updateRoute = function(coords) {
+        var validCoords = (Array.isArray(coords) && coords.length > 0) ? coords : [];
         if (window.routePolyline) {
-          window.routePolyline.setLatLngs(coords);
-        } else if (coords && coords.length > 0) {
-          window.routePolyline = L.polyline(coords, {
+          window.routePolyline.setLatLngs(validCoords);
+        } else if (validCoords.length > 0) {
+          window.routePolyline = L.polyline(validCoords, {
             color: '#009EFF',
             weight: 5,
             opacity: 0.85,
             lineJoin: 'round'
           }).addTo(window.map);
+        }
+
+        if (validCoords.length > 1 && window.map) {
+          try {
+            window.map.fitBounds(validCoords, { padding: [60, 60], maxZoom: 16, animate: true });
+          } catch(e) {}
         }
       };
 
@@ -423,19 +430,6 @@ export const LeafletMap = React.memo(function LeafletMap({
     webViewRef.current.injectJavaScript(js);
   }, [data.heatmap]);
 
-  // 4b. Pembaruan rute navigasi perjalanan secara real-time
-  useEffect(() => {
-    if (!isMapLoaded.current || !webViewRef.current) return;
-    const routeCoords = data.route?.coordinates || [];
-    const routeJson = JSON.stringify(
-      routeCoords.map((c) => [c.latitude, c.longitude])
-    );
-    const js = `
-      if (window.updateRoute) window.updateRoute(${routeJson});
-      true;
-    `;
-    webViewRef.current.injectJavaScript(js);
-  }, [data.route?.coordinates]);
 
   // 5. Pembaruan highlight cakupan area klaster saat user memilih klaster
   useEffect(() => {

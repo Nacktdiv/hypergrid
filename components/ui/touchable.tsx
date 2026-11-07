@@ -1,22 +1,13 @@
 import * as React from "react";
-import { Animated, Pressable, type PressableProps } from "react-native"
+import { Animated, Pressable, type PressableProps } from "react-native";
 
 import { cn } from "@/lib/utils";
 
-/**
- * Pressable dengan umpan balik visual (scale) saat disentuh.
- *
- * Memakai `Animated` bawaan React Native — tanpa dependensi tambahan dan
- * tanpa reanimated, sehingga tetap aman di tahap UI-Only.
- *
- * `onPress` biarkan opsional supaya pemanggil bisa mengosongkan aksi
- * (misalnya tombol yang sengaja belum punya navigasi/backend).
- */
 type TouchableProps = Omit<PressableProps, "children"> & {
-  children?: React.ReactNode
+  children?: React.ReactNode;
   /** Nilai scale saat ditekan, default 0.96 */
-  scaleTo?: number
-}
+  scaleTo?: number;
+};
 
 export function Touchable({
   className,
@@ -25,19 +16,26 @@ export function Touchable({
   disabled,
   ...props
 }: TouchableProps) {
-  // `useState` dengan initializer dipakai, bukan `useRef`, agar complies
-  // dengan aturan `react-hooks/refs` (nilai Animated tetap stabil seumur
-  // hidup komponen).
-  const [scale] = React.useState(() => new Animated.Value(1))
+  const scale = React.useRef(new Animated.Value(1)).current;
+  const isMountedRef = React.useRef(true);
+
+  React.useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      scale.stopAnimation();
+    };
+  }, [scale]);
 
   const animateTo = (value: number) => {
+    if (!isMountedRef.current) return;
     Animated.spring(scale, {
       toValue: value,
       useNativeDriver: true,
       speed: 40,
       bounciness: 4,
-    }).start()
-  }
+    }).start();
+  };
 
   return (
     <Pressable
@@ -47,11 +45,11 @@ export function Touchable({
       onPressOut={() => animateTo(1)}
       {...props}
     >
-      <Animated.View style={{ transform: [{ scale }] }}>
+      <Animated.View style={{ transform: [{ scale }], width: "100%" }}>
         {children}
       </Animated.View>
     </Pressable>
-  )
+  );
 }
 
 /** Varian gaya yang sering dipakai di HyperGrid */
@@ -62,6 +60,6 @@ export const touchableStyles = {
   primary: "rounded-full border-2 border-custom-primary bg-custom-primary",
   /** Tombol outline biru */
   outline: "rounded-3xl border-2 border-custom-primary bg-white",
-} as const
+} as const;
 
-export { cn }
+export { cn };

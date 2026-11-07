@@ -1,16 +1,16 @@
-import React, { useCallback, useState } from "react";
-import { useFocusEffect, useRouter } from "expo-router";
+import React, { useState } from "react";
+import { useRouter } from "expo-router";
 import { SlideCommit } from "@/components/ui/slide-commit";
+import type { PlannedRoute } from "@/services/api/routing.service";
 
-export function PlayButton() {
+export interface PlayButtonProps {
+  activeRoute?: PlannedRoute | null;
+  onStartRide?: () => void;
+}
+
+export function PlayButton({ activeRoute, onStartRide }: PlayButtonProps) {
   const router = useRouter();
   const [sliderKey, setSliderKey] = useState(0);
-
-  useFocusEffect(
-    useCallback(() => {
-      setSliderKey((prev) => prev + 1);
-    }, [])
-  );
 
   const handleConfirm = async () => {
     // Memberikan jeda singkat 200ms untuk feedback getaran & sensor sync
@@ -18,13 +18,34 @@ export function PlayButton() {
   };
 
   const handleDone = () => {
-    router.push("/ride");
+    if (onStartRide) {
+      onStartRide();
+    } else if (activeRoute) {
+      router.push({
+        pathname: "/ride",
+        params: {
+          destinationName: activeRoute.destinationName,
+          destinationLat: String(activeRoute.destinationPoint.latitude),
+          destinationLon: String(activeRoute.destinationPoint.longitude),
+          routeCoords: JSON.stringify(activeRoute.coordinates),
+          distanceMeters: String(activeRoute.distanceMeters),
+          durationSeconds: String(activeRoute.durationSeconds),
+        },
+      });
+    } else {
+      router.push("/ride");
+    }
+
+    // Reset key agar saat kembali dari ride slider siap digunakan kembali
+    setTimeout(() => {
+      setSliderKey((prev) => prev + 1);
+    }, 600);
   };
 
   return (
     <SlideCommit
       key={sliderKey}
-      label="Slide to Start Ride"
+      label={activeRoute ? `Slide to Start: ${activeRoute.destinationName}` : "Slide to Start Ride"}
       doneLabel="Starting Ride..."
       errorLabel="Cannot start ride"
       onConfirm={handleConfirm}

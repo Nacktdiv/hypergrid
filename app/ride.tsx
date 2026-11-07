@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { BackHandler, InteractionManager, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Accelerometer, Gyroscope } from "expo-sensors";
 
@@ -22,6 +22,8 @@ import { useUserLocation } from "@/hooks/use-user-location";
 import { offlineQueue } from "@/services/api/offline-queue";
 import { tokenStorage } from "@/services/api/token-storage";
 import { backgroundTrackingService } from "@/services/background-tracking";
+import { routingService } from "@/services/api/routing.service";
+import { tripStorage, type SavedTripRecord } from "@/services/api/trip-storage";
 import type { DamagePoint, LatLng } from "@/components/map/map-data";
 
 function haversineMeters(a: LatLng, b: LatLng): number {
@@ -43,11 +45,46 @@ function haversineMeters(a: LatLng, b: LatLng): number {
  */
 export default function RideScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    destinationName?: string;
+    destinationLat?: string;
+    destinationLon?: string;
+    routeCoords?: string;
+    distanceMeters?: string;
+    durationSeconds?: string;
+  }>();
+
+  // Mempertahankan status tujuan perjalanan & rute navigasi terarah
+  const destination = useMemo(() => {
+    if (params.destinationName && params.destinationLat && params.destinationLon) {
+      let planned: LatLng[] = [];
+      try {
+        if (params.routeCoords) planned = JSON.parse(params.routeCoords);
+      } catch {}
+      return {
+        name: params.destinationName,
+        coords: {
+          latitude: parseFloat(params.destinationLat),
+          longitude: parseFloat(params.destinationLon),
+        },
+        plannedRoute: planned,
+      };
+    }
+    return null;
+  }, [params.destinationName, params.destinationLat, params.destinationLon, params.routeCoords]);
+
   const { user } = useAuth();
   const { vehicleProfile } = useVehicle();
   const [isPaused, setIsPaused] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [isEmergencyVisible, setIsEmergencyVisible] = useState(false);
+  const [resolvedDestinationName, setResolvedDestinationName] = useState<string>(
+    destination?.name || ""
+  );
+
+  const startCoordsRef = useRef<LatLng | null>(null);
+  const startLocationNameRef = useRef<string>("Origin Location");
+  const tripStartTimeRef = useRef<number>(Date.now());
 
   useEffect(() => {
     defaultEdgeDetector.setUserId(user?.id ?? null);
@@ -62,7 +99,7 @@ export default function RideScreen() {
 
     return () => {
       task.cancel();
-      backgroundTrackingService.startBackgroundTracking("idle").catch(() => {});
+      backgroundTrackingService.stopBackgroundTracking().catch(() => {});
     };
   }, []);
 
@@ -164,6 +201,25 @@ export default function RideScreen() {
     gpsSpeedRef.current = gpsSpeed;
     vehicleProfileRef.current = vehicleProfile;
   }, [liveCoords, gpsSpeed, vehicleProfile]);
+
+  // Simpan koordinat awal dan deteksi nama lokasi keberangkatan di background
+  useEffect(() => {
+    if (liveCoords && !startCoordsRef.current) {
+      startCoordsRef.current = liveCoords;
+      routingService
+        .reverseGeocode(liveCoords)
+        .then((name) => {
+          if (name) startLocationNameRef.current = name;
+        })
+        .catch(() => {});
+    }
+  }, [liveCoords]);
+
+  // Jarak tersisa live ke lokasi tujuan terarah (diperbarui secara akurat setiap GPS tick)
+  const remainingDistanceMeters = useMemo(() => {
+    if (!destination?.coords || !liveCoords) return null;
+    return haversineMeters(liveCoords, destination.coords);
+  }, [destination?.coords, liveCoords]);
 
   // Kecepatan spidometer terkalibrasi secara dinamis sesuai profil kendaraan
   const currentSpeed = useMemo(() => {
@@ -560,10 +616,84 @@ export default function RideScreen() {
 
   // Selesai Perjalanan via tombol End Ride (Tampilkan ringkasan Trip Completed)
   const handleStopDrive = async () => {
-    setIsFinished(true);
     stopTracking();
+    await backgroundTrackingService.stopBackgroundTracking().catch(() => {});
+
+    // 1. Tentukan nama destinasi:
+    // Jika rute tujuan ditentukan pengguna -> pakai nama tujuan tersebut
+    // Jika tidak menetapkan tujuan -> otomatis deteksi tempat pemberhentian akhir via reverseGeocode
+    let finalDest = destination?.name;
+    const finalEndCoords = liveCoordsRef.current || startCoordsRef.current;
+
+    if (!finalDest && finalEndCoords) {
+      try {
+        finalDest = await routingService.reverseGeocode(finalEndCoords);
+      } catch {
+        finalDest = `[${finalEndCoords.latitude.toFixed(4)}, ${finalEndCoords.longitude.toFixed(4)}]`;
+      }
+    } else if (!finalDest) {
+      finalDest = "Completed Ride";
+    }
+
+    setResolvedDestinationName(finalDest);
+
+    // Hitung road quality score (0–100)
+    const roadScore = Math.max(
+      30,
+      Math.min(
+        100,
+        Math.round(
+          100 -
+            detectedCountRef.current * 12 -
+            Math.max(0, (maxGForceRef.current - 1.0) * 15)
+        )
+      )
+    );
+
+    // 2. Simpan record sesi perjalanan lengkap ke persistent storage
+    const isTfliteModel = Boolean(
+      detectedCountRef.current > 0 &&
+        lastResultRef.current &&
+        !lastResultRef.current.modelVersion?.includes("fallback") &&
+        !lastResultRef.current.modelVersion?.includes("heuristic")
+    );
+
+    const tripRecord: SavedTripRecord = {
+      id: `trip_${Date.now()}`,
+      startTime: new Date(tripStartTimeRef.current).toISOString(),
+      endTime: new Date().toISOString(),
+      elapsedSeconds,
+      distanceMeters: totalDistanceMeters,
+      maxGForce:
+        detectedCountRef.current > 0 || totalDistanceMeters >= 5
+          ? maxGForceRef.current
+          : 0,
+      anomalyCount: detectedCountRef.current,
+      vehicleName: vehicleProfile.name,
+      vehiclePlate: vehicleProfile.plate,
+      vehicleType: vehicleProfile.type,
+      startLocationName: startLocationNameRef.current,
+      destinationName: finalDest,
+      startCoords: startCoordsRef.current,
+      destinationCoords: destination?.coords || finalEndCoords,
+      roadScore,
+      isTflite: isTfliteModel,
+      confidencePercent:
+        detectedCountRef.current > 0 && lastResultRef.current
+          ? Math.round(lastResultRef.current.confidence * 100)
+          : 0,
+      confidenceTier:
+        detectedCountRef.current > 0 && lastResultRef.current
+          ? lastResultRef.current.confidenceTier
+          : "NONE",
+    };
+
+    tripStorage.saveTrip(tripRecord).catch((err) => {
+      console.warn("[RideScreen] Error saving trip to storage:", err);
+    });
+
     saveRideSessionTelemetry();
-    await backgroundTrackingService.startBackgroundTracking("idle").catch(() => {});
+    setIsFinished(true);
   };
 
   // Kembali ke Main Page via tombol Back pojok kiri atas:
@@ -573,14 +703,54 @@ export default function RideScreen() {
     setIsPaused(true);
     stopTracking();
     saveRideSessionTelemetry();
-    backgroundTrackingService.startBackgroundTracking("idle").catch(() => {});
+    backgroundTrackingService.stopBackgroundTracking().catch(() => {});
+
+    // Jika kendaraan sudah menempuh jarak nyata >= 50m, simpan sebagai riwayat perjalanan
+    if (totalDistanceMeters >= 50) {
+      const finalEndCoords = liveCoordsRef.current || startCoordsRef.current;
+      const finalDest =
+        destination?.name ||
+        (finalEndCoords
+          ? `[${finalEndCoords.latitude.toFixed(4)}, ${finalEndCoords.longitude.toFixed(4)}]`
+          : "Drive Session");
+
+      const tripRecord: SavedTripRecord = {
+        id: `trip_${Date.now()}`,
+        startTime: new Date(tripStartTimeRef.current).toISOString(),
+        endTime: new Date().toISOString(),
+        elapsedSeconds,
+        distanceMeters: totalDistanceMeters,
+        maxGForce: detectedCountRef.current > 0 ? maxGForceRef.current : 0,
+        anomalyCount: detectedCountRef.current,
+        vehicleName: vehicleProfile.name,
+        vehiclePlate: vehicleProfile.plate,
+        vehicleType: vehicleProfile.type,
+        startLocationName: startLocationNameRef.current,
+        destinationName: finalDest,
+        startCoords: startCoordsRef.current,
+        destinationCoords: destination?.coords || finalEndCoords,
+        roadScore: 85,
+      };
+      tripStorage.saveTrip(tripRecord).catch(() => {});
+    }
 
     if (router.canGoBack()) {
       router.back();
     } else {
       router.replace("/(tabs)");
     }
-  }, [router, stopTracking, saveRideSessionTelemetry]);
+  }, [
+    router,
+    stopTracking,
+    saveRideSessionTelemetry,
+    totalDistanceMeters,
+    destination?.name,
+    destination?.coords,
+    elapsedSeconds,
+    vehicleProfile.name,
+    vehicleProfile.plate,
+    vehicleProfile.type,
+  ]);
 
   // Tangani tombol hardware Back Android agar konsisten menyimpan data & langsung ke Main Page
   useEffect(() => {
@@ -640,6 +810,8 @@ export default function RideScreen() {
           isTflite,
           confidencePercent: confPercent,
           confidenceTier: confTier,
+          destinationName: resolvedDestinationName || destination?.name,
+          startLocationName: startLocationNameRef.current,
         }}
         onViewHistory={() => {
           setIsFinished(false);
@@ -659,6 +831,7 @@ export default function RideScreen() {
         isPaused={isPaused}
         currentCoords={liveCoords}
         routeHistory={routeHistory}
+        plannedRoute={destination?.plannedRoute}
         liveDetections={allRoadHazards}
         vehicleType={vehicleProfile.id}
         onDamagePress={handleHazardPress}
@@ -668,6 +841,8 @@ export default function RideScreen() {
         <TopFloatingBar
           onBack={handleBackToMain}
           onOpenEmergency={() => setIsEmergencyVisible(true)}
+          destinationName={destination?.name}
+          remainingDistanceMeters={remainingDistanceMeters}
         />
 
         {/* FLOATING BOTTOM HUD SHEET */}

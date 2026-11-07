@@ -12,6 +12,7 @@ export interface LiveMapProps {
   vehicleType?: "car" | "motor" | "bicycle";
   currentCoords?: LatLng | null;
   routeHistory?: LatLng[];
+  plannedRoute?: LatLng[];
   liveDetections?: DamagePoint[];
   isLoadingHazards?: boolean;
   onDamagePress?: (point: DamagePoint) => void;
@@ -20,7 +21,7 @@ export interface LiveMapProps {
 /**
  * Peta live full-screen untuk Drive Mode (Leaflet + OpenStreetMap).
  *
- * Menampilkan koordinat live perangkat, jejak rute perjalanan nyata, serta
+ * Menampilkan koordinat live perangkat, rute navigasi terarah (jika ada), jejak rute perjalanan nyata, serta
  * seluruh titik history dan klaster lubang jalan yang telah terekam di sekitar area jalan.
  */
 export const LiveMap = React.memo(function LiveMap({
@@ -28,6 +29,7 @@ export const LiveMap = React.memo(function LiveMap({
   vehicleType = "car",
   currentCoords,
   routeHistory = [],
+  plannedRoute,
   liveDetections = [],
   onDamagePress,
 }: LiveMapProps) {
@@ -41,6 +43,15 @@ export const LiveMap = React.memo(function LiveMap({
   const mapData: MapData | null = useMemo(() => {
     if (!activeCoord) return null;
 
+    // Rute prioritas: jika rute navigasi terarah aktif, tampilkan plannedRoute ke destinasi.
+    // Jika tidak, tampilkan jejak titik GPS perjalanan nyata yang sudah dilalui.
+    const activeRouteCoordinates =
+      plannedRoute && plannedRoute.length > 0
+        ? plannedRoute
+        : routeHistory.length > 0
+        ? routeHistory
+        : [activeCoord];
+
     return {
       camera: {
         latitude: activeCoord.latitude,
@@ -49,13 +60,13 @@ export const LiveMap = React.memo(function LiveMap({
       },
       route: {
         id: "live-drive-route",
-        coordinates: routeHistory.length > 0 ? routeHistory : [activeCoord],
+        coordinates: activeRouteCoordinates,
       },
       damagePoints: liveDetections,
       userLocation: activeCoord,
       vehiclePosition: activeCoord,
     };
-  }, [activeCoord, routeHistory, liveDetections]);
+  }, [activeCoord, plannedRoute, routeHistory, liveDetections]);
 
   // Tampilkan Skeleton saat GPS & data peta sedang dimuat
   if (!mapData || !activeCoord) {

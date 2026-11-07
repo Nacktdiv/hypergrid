@@ -1,145 +1,62 @@
-import { View, Text } from "react-native";
-import { usePathname } from "expo-router";
-import { Tabs, TabList, TabTrigger, TabSlot } from "expo-router/ui";
+import React from "react";
+import { Tabs } from "expo-router";
 import { CarFront, RotateCcwClock, User } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-function FilledTabList({ children, style, ...props }: any) {
+export default function TabsLayout() {
   const insets = useSafeAreaInsets();
 
   return (
-    <View
-      {...props}
-      className="w-full bg-white border-t border-slate-200/80 shadow-xs"
-      style={[
-        style,
-        {
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: "#FFFFFF",
+          borderTopColor: "#E2E8F0",
+          borderTopWidth: 1,
+          height: 56 + Math.max(insets.bottom, 10),
           paddingBottom: Math.max(insets.bottom, 10),
           paddingTop: 8,
         },
-      ]}
+        tabBarActiveTintColor: "#009EFF",
+        tabBarInactiveTintColor: "#64748B",
+        tabBarLabelStyle: {
+          fontFamily: "Quicksand_700Bold",
+          fontSize: 11,
+          marginTop: -2,
+        },
+      }}
     >
-      {children}
-    </View>
-  );
-}
-
-export default function RootLayout() {
-  const pathname = usePathname();
-
-  const isStartFocused =
-    pathname === "/" ||
-    pathname === "/(tabs)" ||
-    pathname === "/(tabs)/" ||
-    pathname === "/(tabs)/index";
-  const isHistoryFocused = pathname.includes("history");
-  const isProfileFocused = pathname.includes("profile");
-
-  return (
-    <Tabs className="flex-1 bg-surface-canvas">
-      <TabSlot />
-      <TabList asChild>
-        <FilledTabList>
-          <TabTrigger
-            name="index"
-            href="/(tabs)"
-            style={{
-              flex: 1,
-              alignItems: "center",
-              justifyContent: "center",
-              paddingVertical: 4,
-            }}
-            accessibilityRole="tab"
-            accessibilityLabel="Start Tab"
-          >
-            <View
-              style={{ alignItems: "center", justifyContent: "center" }}
-              className="gap-0.5"
-            >
-              <CarFront
-                size={22}
-                color={isStartFocused ? "#009EFF" : "#64748B"}
-              />
-              <Text
-                className={`text-xs ${
-                  isStartFocused
-                    ? "font-quicksand-bold text-brand"
-                    : "font-quicksand-medium text-slate-600"
-                }`}
-              >
-                Start
-              </Text>
-            </View>
-          </TabTrigger>
-
-          <TabTrigger
-            name="history"
-            href="/(tabs)/history"
-            style={{
-              flex: 1,
-              alignItems: "center",
-              justifyContent: "center",
-              paddingVertical: 4,
-            }}
-            accessibilityRole="tab"
-            accessibilityLabel="History Tab"
-          >
-            <View
-              style={{ alignItems: "center", justifyContent: "center" }}
-              className="gap-0.5"
-            >
-              <RotateCcwClock
-                size={22}
-                color={isHistoryFocused ? "#009EFF" : "#64748B"}
-              />
-              <Text
-                className={`text-xs ${
-                  isHistoryFocused
-                    ? "font-quicksand-bold text-brand"
-                    : "font-quicksand-medium text-slate-600"
-                }`}
-              >
-                History
-              </Text>
-            </View>
-          </TabTrigger>
-
-          <TabTrigger
-            name="profile"
-            href="/(tabs)/profile"
-            style={{
-              flex: 1,
-              alignItems: "center",
-              justifyContent: "center",
-              paddingVertical: 4,
-            }}
-            accessibilityRole="tab"
-            accessibilityLabel="Profile Tab"
-          >
-            <View
-              style={{ alignItems: "center", justifyContent: "center" }}
-              className="gap-0.5"
-            >
-              <User
-                size={22}
-                color={isProfileFocused ? "#009EFF" : "#64748B"}
-              />
-              <Text
-                className={`text-xs ${
-                  isProfileFocused
-                    ? "font-quicksand-bold text-brand"
-                    : "font-quicksand-medium text-slate-600"
-                }`}
-              >
-                Profile
-              </Text>
-            </View>
-          </TabTrigger>
-        </FilledTabList>
-      </TabList>
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: "Start",
+          tabBarAccessibilityLabel: "Start Tab",
+          tabBarIcon: ({ color, focused }) => (
+            <CarFront size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="history"
+        options={{
+          title: "History",
+          tabBarAccessibilityLabel: "History Tab",
+          tabBarIcon: ({ color, focused }) => (
+            <RotateCcwClock size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profile",
+          tabBarAccessibilityLabel: "Profile Tab",
+          tabBarIcon: ({ color, focused }) => (
+            <User size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

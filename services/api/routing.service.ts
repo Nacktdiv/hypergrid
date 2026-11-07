@@ -124,6 +124,38 @@ export const routingService = {
   },
 
   /**
+   * Deteksi nama tempat secara otomatis dari koordinat GPS (Reverse Geocoding OpenStreetMap Nominatim).
+   * Digunakan saat user menyelesaikan perjalanan tanpa tujuan manual atau berhenti di suatu tempat.
+   */
+  async reverseGeocode(coords: LatLng): Promise<string> {
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.latitude}&lon=${coords.longitude}&addressdetails=1`;
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'HyperGrid-Road-Safety-App/1.0 (contact@hypergrid.io)',
+          'Accept-Language': 'id-ID,id;q=0.9,en;q=0.8',
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.display_name) {
+          const parts = (data.display_name as string).split(',');
+          // Ambil nama jalan/tempat utama dan kelurahan/kecamatan
+          const place = parts.slice(0, 2).map((s) => s.trim()).join(', ');
+          if (place && place.length > 2) {
+            return place;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[routingService] Reverse geocode error:', err);
+    }
+    // Fallback rapi ke format titik koordinat jika offline / tidak terdaftar
+    return `[${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}]`;
+  },
+
+  /**
    * Hitung rute mengemudi mengunakan OSRM Driving Engine API.
    */
   async calculateRoute(

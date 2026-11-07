@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { SplashScreen, Stack } from "expo-router";
 import { AuthProvider } from "@/contexts/auth-context";
 import { VehicleProvider } from "@/contexts/vehicle-context";
+import "@/services/background-tracking";
 import "../global.css";
 
 import {
@@ -19,7 +20,6 @@ import {
   JetBrainsMono_400Regular,
   JetBrainsMono_700Bold,
 } from "@expo-google-fonts/jetbrains-mono";
-import { backgroundTrackingService } from "@/services/background-tracking";
 import { warmupServer } from "@/services/api/config";
 
 SplashScreen.preventAutoHideAsync();
@@ -55,12 +55,9 @@ export default function RootLayout() {
     }
   }, [loaded, error]);
 
-  // Inisialisasi background tracking pada kondisi idle & bangunkan server cloud saat aplikasi dibuka
+  // Bangunkan server cloud saat aplikasi dibuka
   useEffect(() => {
     warmupServer();
-    backgroundTrackingService.startBackgroundTracking('idle').catch((err) => {
-      console.warn('[RootLayout] Background tracking idle init warning:', err);
-    });
   }, []);
 
   if (!loaded && !error) {
