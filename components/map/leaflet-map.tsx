@@ -144,7 +144,7 @@ export const LeafletMap = React.memo(function LeafletMap({
       width: 20px !important;
       height: 20px !important;
       border-radius: 50%;
-      background-color: #009EFF;
+      background-color: #0040FF;
       border: 3px solid #ffffff;
       box-shadow: 0 2px 6px rgba(0,0,0,0.35);
     }
@@ -253,7 +253,7 @@ export const LeafletMap = React.memo(function LeafletMap({
       window.clusterRoadCache = {};
       if (initialRoute && initialRoute.length > 0) {
         window.routePolyline = L.polyline(initialRoute, {
-          color: '#009EFF',
+          color: '#0040FF',
           weight: 5,
           opacity: 0.85,
           lineJoin: 'round'
@@ -776,7 +776,7 @@ export const LeafletMap = React.memo(function LeafletMap({
           blur: 6,
           maxZoom: 18,
           minOpacity: 0.35,
-          gradient: { 0.2: '#009EFF', 0.5: '#EAB308', 0.75: '#F59E0B', 1.0: '#EF4444' }
+          gradient: { 0.2: '#0040FF', 0.5: '#EAB308', 0.75: '#F59E0B', 1.0: '#EF4444' }
         });
       };
 
@@ -1314,7 +1314,7 @@ export const LeafletMap = React.memo(function LeafletMap({
           window.routePolyline.setLatLngs(validCoords);
         } else if (validCoords.length > 0) {
           window.routePolyline = L.polyline(validCoords, {
-            color: '#009EFF',
+            color: '#0040FF',
             weight: 5,
             opacity: 0.85,
             lineJoin: 'round'
@@ -1519,7 +1519,7 @@ export const LeafletMap = React.memo(function LeafletMap({
         startInLoadingState={true}
         renderLoading={() => (
           <View style={styles.loader}>
-            <ActivityIndicator size="small" color="#009EFF" />
+            <ActivityIndicator size="small" color="#0040FF" />
           </View>
         )}
       />

@@ -270,7 +270,7 @@ export function MainMap({
           <View className="flex-row items-center justify-between">
             {/* Status Badge */}
             <View className="self-start flex-row items-center gap-1.5 rounded-full border border-slate-200/90 bg-white/95 px-2.5 py-1 shadow-sm backdrop-blur-md">
-              <Database size={12} color="#009EFF" />
+              <Database size={12} color="#0040FF" />
               <Text className="font-mono text-[10px] text-slate-700">
                 {clusters.length > 0
                   ? `DBSCAN: ${filteredClusters.length} Road Hazard Clusters`
@@ -477,7 +477,7 @@ export function MainMap({
                 <View className="flex-row items-center justify-between pb-1">
                   <View className="flex-row items-center gap-2.5">
                     <View className="rounded-xl bg-sky-100 p-2">
-                      <Layers size={20} color="#009EFF" />
+                      <Layers size={20} color="#0040FF" />
                     </View>
                     <View>
                       <Text className="font-chivo-bold text-lg text-slate-900">
