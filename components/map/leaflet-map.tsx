@@ -168,20 +168,60 @@ export const LeafletMap = React.memo(function LeafletMap({
       font-size: 9px !important;
       background: rgba(255,255,255,0.7) !important;
     }
+    /* 3. Sub-detection marker: Modern, minimal, pulsating pip */
+    .sub-detection-marker {
+      position: relative;
+      width: 22px !important;
+      height: 22px !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    .sub-detection-pulse {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      opacity: 0.3;
+      transform: scale(0.9);
+      animation: subPointPulse 2.4s ease-out infinite;
+    }
+    @keyframes subPointPulse {
+      0% { transform: scale(0.8); opacity: 0.45; }
+      50% { transform: scale(1.3); opacity: 0.12; }
+      100% { transform: scale(0.8); opacity: 0.45; }
+    }
+    .sub-detection-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      border: 2px solid #ffffff;
+      box-shadow: 0 2px 5px rgba(15, 23, 42, 0.4);
+      z-index: 2;
+      transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .sub-detection-marker:active .sub-detection-dot,
+    .sub-detection-marker:hover .sub-detection-dot {
+      transform: scale(1.4);
+    }
     .subpoint-tooltip {
-      background: rgba(15, 23, 42, 0.92) !important;
+      background: rgba(15, 23, 42, 0.94) !important;
+      backdrop-filter: blur(8px) !important;
+      -webkit-backdrop-filter: blur(8px) !important;
       color: #ffffff !important;
-      border: 1px solid rgba(255, 255, 255, 0.25) !important;
-      border-radius: 8px !important;
+      border: 1px solid rgba(255, 255, 255, 0.2) !important;
+      border-radius: 9999px !important;
       font-size: 11px !important;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
       font-weight: 700 !important;
-      padding: 4px 8px !important;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35) !important;
+      padding: 3px 9px !important;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
       white-space: nowrap !important;
     }
     .subpoint-tooltip::before {
-      border-top-color: rgba(15, 23, 42, 0.92) !important;
+      border-top-color: rgba(15, 23, 42, 0.94) !important;
     }
   </style>
 </head>
@@ -209,6 +249,8 @@ export const LeafletMap = React.memo(function LeafletMap({
       // Route Polyline
       var initialRoute = ${routeCoords};
       window.routePolyline = null;
+      window.activeMapRoute = (initialRoute && initialRoute.length > 0) ? initialRoute : [];
+      window.clusterRoadCache = {};
       if (initialRoute && initialRoute.length > 0) {
         window.routePolyline = L.polyline(initialRoute, {
           color: '#009EFF',
@@ -242,6 +284,110 @@ export const LeafletMap = React.memo(function LeafletMap({
                 Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
                 Math.sin(dLon / 2) * Math.sin(dLon / 2);
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      }
+
+      function distanceToSegmentMeters(lat, lng, aLat, aLng, bLat, bLng) {
+        var midLatRad = ((aLat + bLat) / 2) * (Math.PI / 180);
+        var cosLat = Math.cos(midLatRad);
+        var DEG_TO_M = 111320;
+        var ax = aLng * DEG_TO_M * cosLat;
+        var ay = aLat * DEG_TO_M;
+        var bx = bLng * DEG_TO_M * cosLat;
+        var by = bLat * DEG_TO_M;
+        var px = lng * DEG_TO_M * cosLat;
+        var py = lat * DEG_TO_M;
+
+        var dx = bx - ax;
+        var dy = by - ay;
+        var lenSq = dx * dx + dy * dy;
+        if (lenSq < 1e-6) {
+          var diffX = px - ax;
+          var diffY = py - ay;
+          return { dist: Math.sqrt(diffX * diffX + diffY * diffY), t: 0, proj: [aLat, aLng] };
+        }
+
+        var t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+        var projX = ax + t * dx;
+        var projY = ay + t * dy;
+        var distX = px - projX;
+        var distY = py - projY;
+        var projLat = projY / DEG_TO_M;
+        var projLng = projX / (DEG_TO_M * cosLat);
+        return { dist: Math.sqrt(distX * distX + distY * distY), t: t, proj: [projLat, projLng] };
+      }
+
+      function findClosestPointOnPolyline(lat, lng, polyline) {
+        if (!polyline || polyline.length < 2) return { dist: Infinity, segIdx: 0, proj: [lat, lng], t: 0 };
+        var bestDist = Infinity;
+        var bestIdx = 0;
+        var bestProj = [lat, lng];
+        var bestT = 0;
+
+        for (var i = 0; i < polyline.length - 1; i++) {
+          var a = polyline[i];
+          var b = polyline[i + 1];
+          var aLat = a.lat !== undefined ? a.lat : a[0];
+          var aLng = a.lng !== undefined ? a.lng : a[1];
+          var bLat = b.lat !== undefined ? b.lat : b[0];
+          var bLng = b.lng !== undefined ? b.lng : b[1];
+
+          var res = distanceToSegmentMeters(lat, lng, aLat, aLng, bLat, bLng);
+          if (res.dist < bestDist) {
+            bestDist = res.dist;
+            bestIdx = i;
+            bestProj = res.proj;
+            bestT = res.t;
+          }
+        }
+        return { dist: bestDist, segIdx: bestIdx, proj: bestProj, t: bestT };
+      }
+
+      function slicePolylineAroundPoint(polyline, segIdx, projPt, halfLenMeters) {
+        var backwardCoords = [projPt];
+        var accumulatedBack = 0;
+        var currBack = projPt;
+        for (var i = segIdx; i >= 0; i--) {
+          var rawV = polyline[i];
+          var v = [rawV.lat !== undefined ? rawV.lat : rawV[0], rawV.lng !== undefined ? rawV.lng : rawV[1]];
+          var d = haversineM(currBack[0], currBack[1], v[0], v[1]);
+          if (accumulatedBack + d >= halfLenMeters) {
+            var remain = halfLenMeters - accumulatedBack;
+            var frac = d > 0 ? (remain / d) : 1;
+            var cutLat = currBack[0] + frac * (v[0] - currBack[0]);
+            var cutLng = currBack[1] + frac * (v[1] - currBack[1]);
+            backwardCoords.push([cutLat, cutLng]);
+            break;
+          } else {
+            accumulatedBack += d;
+            backwardCoords.push(v);
+            currBack = v;
+          }
+        }
+
+        backwardCoords.reverse();
+
+        var forwardCoords = [];
+        var accumulatedFwd = 0;
+        var currFwd = projPt;
+        for (var j = segIdx + 1; j < polyline.length; j++) {
+          var rawW = polyline[j];
+          var w = [rawW.lat !== undefined ? rawW.lat : rawW[0], rawW.lng !== undefined ? rawW.lng : rawW[1]];
+          var df = haversineM(currFwd[0], currFwd[1], w[0], w[1]);
+          if (accumulatedFwd + df >= halfLenMeters) {
+            var remFwd = halfLenMeters - accumulatedFwd;
+            var fracFwd = df > 0 ? (remFwd / df) : 1;
+            var cutFwdLat = currFwd[0] + fracFwd * (w[0] - currFwd[0]);
+            var cutFwdLng = currFwd[1] + fracFwd * (w[1] - currFwd[1]);
+            forwardCoords.push([cutFwdLat, cutFwdLng]);
+            break;
+          } else {
+            accumulatedFwd += df;
+            forwardCoords.push(w);
+            currFwd = w;
+          }
+        }
+
+        return backwardCoords.concat(forwardCoords);
       }
 
       // Helper membuat SVG Badge Icon Lokasi (Map Pin)
@@ -467,55 +613,29 @@ export const LeafletMap = React.memo(function LeafletMap({
         }
       };
 
-      // 2b. Highlight Rute Per Klaster dan Titik-Titik Deteksi Sub-Klasternya
-      window.highlightClusterDetails = function(pt, options) {
-        if (!pt || !pt.position) return;
-        var opts = options || {};
-        var skipCamera = opts.skipCamera || false;
-
-        window.activeSelectedPointId = pt.id;
+      // 2b. Render Rute Jalan Klaster dan Titik-Titik Deteksi Sub-Klaster (Modern & Simple)
+      window.renderClusterRouteAndSubPoints = function(pt, routeCoords, isUpdate, skipCamera) {
+        if (!pt || !routeCoords || routeCoords.length < 2) return;
         window.clusterHighlightLayer.clearLayers();
 
-        var sevColor = pt.severity === 'severe' ? '#991B1B' : (pt.severity === 'high' ? '#EF4444' : (pt.severity === 'medium' ? '#F59E0B' : '#EAB308'));
+        var sevColor = pt.severity === 'severe' ? '#EF4444' : (pt.severity === 'high' ? '#F97316' : (pt.severity === 'medium' ? '#F59E0B' : '#EAB308'));
 
-        // 1. Ekstrak koordinat rute / bentang koridor jalan untuk klaster ini (Route per Klaster)
-        var routeCoords = [];
-        if (Array.isArray(pt.road_segment_coords) && pt.road_segment_coords.length > 1) {
-          routeCoords = pt.road_segment_coords.map(function(c) {
-            return [c.latitude !== undefined ? c.latitude : c.lat, c.longitude !== undefined ? c.longitude : c.lng];
-          });
-        } else if (Array.isArray(pt.points) && pt.points.length > 1) {
-          routeCoords = pt.points.map(function(p) {
-            return [p.latitude !== undefined ? p.latitude : p.lat, p.longitude !== undefined ? p.longitude : p.lng];
-          });
-        }
-
-        // Fallback jika titik tunggal: bentang jalan pendek ~25 meter
-        if (routeCoords.length < 2) {
-          var cLat = pt.position.latitude;
-          var cLng = pt.position.longitude;
-          var deltaLat = 0.00012;
-          var deltaLng = 0.00008;
-          routeCoords = [
-            [cLat - deltaLat, cLng - deltaLng],
-            [cLat + deltaLat, cLng + deltaLng]
-          ];
-        }
-
-        // 2. Gambar Garis Polyline Rute Per Klaster (Corridor Halo + Centerline Inti)
+        // A. Dual-layer Road Corridor (Visual modern & simple mengikuti geometri rute jalan):
+        // 1. Underlay Halo Corridor
         var routeHalo = L.polyline(routeCoords, {
           color: sevColor,
-          weight: 9,
-          opacity: 0.35,
+          weight: 10,
+          opacity: 0.25,
           lineCap: 'round',
           lineJoin: 'round',
           interactive: false
         });
         window.clusterHighlightLayer.addLayer(routeHalo);
 
+        // 2. Centerline Inti Jalan
         var routeCore = L.polyline(routeCoords, {
           color: sevColor,
-          weight: 4,
+          weight: 4.5,
           opacity: 0.95,
           lineCap: 'round',
           lineJoin: 'round',
@@ -523,54 +643,79 @@ export const LeafletMap = React.memo(function LeafletMap({
         });
         window.clusterHighlightLayer.addLayer(routeCore);
 
-        // 3. Gambar Titik-Titik Highlight Sub-Klasternya (Individual Detection Points)
+        // 3. Terminal Endpoint Pips (Penanda batas awal & akhir zona bahaya yang rapi & minimalis)
+        var startCap = L.circleMarker(routeCoords[0], {
+          radius: 3.5,
+          color: sevColor,
+          weight: 2,
+          fillColor: '#ffffff',
+          fillOpacity: 1.0,
+          interactive: false
+        });
+        window.clusterHighlightLayer.addLayer(startCap);
+
+        var endCap = L.circleMarker(routeCoords[routeCoords.length - 1], {
+          radius: 3.5,
+          color: sevColor,
+          weight: 2,
+          fillColor: '#ffffff',
+          fillOpacity: 1.0,
+          interactive: false
+        });
+        window.clusterHighlightLayer.addLayer(endCap);
+
+        // B. Render Titik-Titik Highlight Sub-Klaster (Tersnap rapi sepanjang garis jalan)
         var subPoints = (Array.isArray(pt.points) && pt.points.length > 0)
           ? pt.points
           : [{ latitude: pt.position.latitude, longitude: pt.position.longitude, intensity: 1.0 }];
 
+        var renderedSubCoords = [];
+
         subPoints.forEach(function(sp, idx) {
-          var spLat = sp.latitude !== undefined ? sp.latitude : sp.lat;
-          var spLng = sp.longitude !== undefined ? sp.longitude : sp.lng;
+          var rawLat = sp.latitude !== undefined ? sp.latitude : sp.lat;
+          var rawLng = sp.longitude !== undefined ? sp.longitude : sp.lng;
           var spIntensity = sp.intensity !== undefined ? sp.intensity : (pt.severity === 'severe' ? 3.5 : (pt.severity === 'high' ? 2.5 : (pt.severity === 'medium' ? 1.5 : 0.8)));
 
-          // Outer glowing halo aura
-          var subHalo = L.circleMarker([spLat, spLng], {
-            radius: 8.5,
-            color: sevColor,
-            weight: 1.8,
-            opacity: 0.85,
-            fillColor: sevColor,
-            fillOpacity: 0.28,
-            zIndexOffset: 850
-          });
-          window.clusterHighlightLayer.addLayer(subHalo);
+          // Snap sub-point ke sumbu rute jalan jika berada dalam radius 15 meter
+          var snapRes = findClosestPointOnPolyline(rawLat, rawLng, routeCoords);
+          var finalLat = (snapRes.dist <= 15) ? snapRes.proj[0] : rawLat;
+          var finalLng = (snapRes.dist <= 15) ? snapRes.proj[1] : rawLng;
+          renderedSubCoords.push([finalLat, finalLng]);
 
-          // Inner solid core dot
-          var subDot = L.circleMarker([spLat, spLng], {
-            radius: 4.5,
-            color: '#ffffff',
-            weight: 2,
-            fillColor: sevColor,
-            fillOpacity: 1.0,
-            zIndexOffset: 900
+          // Marker modern minimalis: white ring + colored dot + ambient pulse
+          var subHtml = '<div class="sub-detection-marker">' +
+            '<div class="sub-detection-pulse" style="background-color: ' + sevColor + ';"></div>' +
+            '<div class="sub-detection-dot" style="background-color: ' + sevColor + ';"></div>' +
+            '</div>';
+
+          var subIcon = L.divIcon({
+            className: '',
+            html: subHtml,
+            iconSize: [22, 22],
+            iconAnchor: [11, 11]
           });
 
-          var tooltipText = 'Deteksi #' + (idx + 1) + ' • Guncangan: ' + (Math.round(spIntensity * 10) / 10) + 'g';
-          subDot.bindTooltip(tooltipText, {
+          var subMarker = L.marker([finalLat, finalLng], {
+            icon: subIcon,
+            zIndexOffset: 850 + idx
+          });
+
+          var tooltipText = '<span style="color:' + sevColor + ';font-weight:800;">#' + (idx + 1) + '</span> ' +
+            '<span style="opacity:0.4;margin:0 3px;">•</span> ' +
+            'Guncangan <span style="font-family:monospace;font-weight:700;">' + (Math.round(spIntensity * 10) / 10) + 'g</span>';
+
+          subMarker.bindTooltip(tooltipText, {
             direction: 'top',
-            offset: [0, -6],
+            offset: [0, -8],
             className: 'subpoint-tooltip'
           });
-          window.clusterHighlightLayer.addLayer(subDot);
+
+          window.clusterHighlightLayer.addLayer(subMarker);
         });
 
-        // 4. Update status pin pada peta agar pin aktif bertransformasi (.is-active)
-        if (window.map && window.map.getZoom() >= 16) {
-          window.renderDamageClusterMarkers(window.rawDamagePoints);
-        } else if (window.rawDamagePoints) {
-          // Jika saat ini di zoom < 16, sematkan pin aktif ini langsung ke highlight layer
-          var isPtActive = true;
-          var pinSvg = createLocationPinSvg(sevColor, pt.reportCount, isPtActive);
+        // C. Update status visual pin pada layer damage
+        if (window.map && window.map.getZoom() < 16) {
+          var pinSvg = createLocationPinSvg(sevColor, pt.reportCount, true);
           var pinHtml = '<div class="location-pin-marker is-active">' + pinSvg + '</div>';
           var pinIcon = L.divIcon({
             className: '',
@@ -587,25 +732,17 @@ export const LeafletMap = React.memo(function LeafletMap({
             window.handlePointInteraction(pt, null);
           });
           window.clusterHighlightLayer.addLayer(pinMarker);
+        } else if (window.rawDamagePoints) {
+          window.renderDamageClusterMarkers(window.rawDamagePoints);
         }
 
-        // 5. Penyesuaian kamera membungkus rute per klaster dan seluruh sub-titiknya
-        if (!skipCamera && window.map) {
-          var allCoords = [];
-          for (var r = 0; r < routeCoords.length; r++) {
-            allCoords.push(routeCoords[r]);
-          }
-          for (var s = 0; s < subPoints.length; s++) {
-            allCoords.push([
-              subPoints[s].latitude !== undefined ? subPoints[s].latitude : subPoints[s].lat,
-              subPoints[s].longitude !== undefined ? subPoints[s].longitude : subPoints[s].lng
-            ]);
-          }
-
+        // D. Penyesuaian kamera membungkus rute per klaster dan seluruh sub-titiknya
+        if (!skipCamera && !isUpdate && window.map) {
+          var allCoords = routeCoords.concat(renderedSubCoords);
           if (allCoords.length > 1) {
             try {
               var bounds = L.latLngBounds(allCoords);
-              window.map.fitBounds(bounds, { padding: [55, 55], maxZoom: 18.0, animate: true });
+              window.map.fitBounds(bounds, { padding: [65, 65], maxZoom: 17.5, animate: true });
             } catch (err) {
               window.map.setView([pt.position.latitude, pt.position.longitude], 17.5, { animate: true });
             }
@@ -613,6 +750,92 @@ export const LeafletMap = React.memo(function LeafletMap({
             window.map.setView([pt.position.latitude, pt.position.longitude], 17.5, { animate: true });
           }
         }
+      };
+
+      // 2c. Highlight Rute Per Klaster: Mengikuti Rute Maps (Active Route / OSRM Snapping / Local)
+      window.highlightClusterDetails = function(pt, options) {
+        if (!pt || !pt.position) return;
+        var opts = options || {};
+        var skipCamera = opts.skipCamera || false;
+
+        window.activeSelectedPointId = pt.id;
+
+        var halfLen = Math.max(15, ((pt.road_length_meters || 30) / 2));
+
+        // 1. Cek apakah titik klaster ini berada di dekat Rute Navigasi Aktif di peta
+        var activeRoute = window.activeMapRoute || [];
+        var slicedFromRoute = null;
+
+        if (activeRoute && activeRoute.length > 1) {
+          var routeCheck = findClosestPointOnPolyline(pt.position.latitude, pt.position.longitude, activeRoute);
+          if (routeCheck.dist <= 45) {
+            // Berada di sepanjang rute navigasi map! Ambil potongan rute map yang presisi
+            slicedFromRoute = slicePolylineAroundPoint(activeRoute, routeCheck.segIdx, routeCheck.proj, halfLen);
+          }
+        }
+
+        if (slicedFromRoute && slicedFromRoute.length > 1) {
+          window.renderClusterRouteAndSubPoints(pt, slicedFromRoute, false, skipCamera);
+          return;
+        }
+
+        // 2. Cek apakah rute OpenStreetMap sudah ada di cache
+        if (window.clusterRoadCache && window.clusterRoadCache[pt.id]) {
+          window.renderClusterRouteAndSubPoints(pt, window.clusterRoadCache[pt.id], false, skipCamera);
+          return;
+        }
+
+        // 3. Fallback lokal awal: Ekstrak lintasan awal terproyeksi
+        var localCoords = [];
+        if (Array.isArray(pt.road_segment_coords) && pt.road_segment_coords.length > 1) {
+          localCoords = pt.road_segment_coords.map(function(c) {
+            return [c.latitude !== undefined ? c.latitude : c.lat, c.longitude !== undefined ? c.longitude : c.lng];
+          });
+        } else if (Array.isArray(pt.points) && pt.points.length > 1) {
+          localCoords = pt.points.map(function(p) {
+            return [p.latitude !== undefined ? p.latitude : p.lat, p.longitude !== undefined ? p.longitude : p.lng];
+          });
+        }
+
+        if (localCoords.length < 2) {
+          var cLat = pt.position.latitude;
+          var cLng = pt.position.longitude;
+          var deltaLat = 0.00012;
+          var deltaLng = 0.00008;
+          localCoords = [
+            [cLat - deltaLat, cLng - deltaLng],
+            [cLat + deltaLat, cLng + deltaLng]
+          ];
+        }
+
+        // Render langsung koordinat lokal agar tidak ada jeda (0 ms)
+        window.renderClusterRouteAndSubPoints(pt, localCoords, false, skipCamera);
+
+        // 4. Asynchronously fetch rute geometris jalan raya nyata dari OSRM (OpenStreetMap Roads)
+        var pStart = localCoords[0];
+        var pEnd = localCoords[localCoords.length - 1];
+        var osrmUrl = 'https://router.project-osrm.org/route/v1/driving/' +
+          pStart[1] + ',' + pStart[0] + ';' + pEnd[1] + ',' + pEnd[0] +
+          '?overview=full&geometries=geojson&steps=false';
+
+        fetch(osrmUrl)
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data && data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry) {
+              var geomCoords = data.routes[0].geometry.coordinates;
+              if (geomCoords && geomCoords.length > 1) {
+                var snappedRoad = geomCoords.map(function(c) { return [c[1], c[0]]; });
+                window.clusterRoadCache[pt.id] = snappedRoad;
+                // Jika user masih melihat klaster ini, perbarui dengan rute jalan OpenStreetMap yang mulus
+                if (window.activeSelectedPointId === pt.id) {
+                  window.renderClusterRouteAndSubPoints(pt, snappedRoad, true, true);
+                }
+              }
+            }
+          })
+          .catch(function() {
+            // Jika offline atau OSRM gagal, localCoords yang sudah ter-render tetap aktif
+          });
       };
 
       // Penangan sentral interaksi klik titik (TWO-STEP INTERACTION):
@@ -834,6 +1057,7 @@ export const LeafletMap = React.memo(function LeafletMap({
 
       window.updateRoute = function(coords) {
         var validCoords = (Array.isArray(coords) && coords.length > 0) ? coords : [];
+        window.activeMapRoute = validCoords;
         if (window.routePolyline) {
           window.routePolyline.setLatLngs(validCoords);
         } else if (validCoords.length > 0) {
