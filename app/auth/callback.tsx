@@ -60,7 +60,7 @@ export default function AuthCallback() {
 
   return (
     <View className="flex-1 items-center justify-center bg-custom-white">
-      <ActivityIndicator size="large" color="#0040FF" />
+      <ActivityIndicator size="large" color="#1DA1F2" />
       <Text className="mt-4 font-quicksand text-sm text-slate-500">
         Memverifikasi autentikasi...
       </Text>

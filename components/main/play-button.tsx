@@ -54,7 +54,7 @@ export function PlayButton({ activeRoute, onStartRide }: PlayButtonProps) {
       errorLabel="Cannot start ride"
       onConfirm={handleConfirm}
       onDone={handleDone}
-      trackColor="#0040FF"
+      trackColor="#1DA1F2"
       handleColor="#FFFFFF"
       successColor="#10B981"
       height={54}

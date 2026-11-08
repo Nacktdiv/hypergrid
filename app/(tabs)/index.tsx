@@ -2,7 +2,6 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import {
   AlertTriangle,
-  ChevronUp,
   MapPin,
   Navigation,
   RefreshCw,
@@ -10,7 +9,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   User,
-  X,
+  X
 } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -234,7 +233,7 @@ export default function StartScreen() {
           >
             {isCalculatingRoute ? (
               <View className="flex-row items-center gap-2 flex-1">
-                <ActivityIndicator size="small" color="#0040FF" />
+                <ActivityIndicator size="small" color="#1DA1F2" />
                 <Text
                   className="font-quicksand-bold text-xs text-sky-600 flex-1"
                   numberOfLines={1}
@@ -244,7 +243,7 @@ export default function StartScreen() {
               </View>
             ) : activeRoute ? (
               <View className="flex-row items-center gap-2 flex-1 pr-1.5">
-                <Navigation size={13} color="#0040FF" />
+                <Navigation size={13} color="#1DA1F2" />
                 <Text
                   className="font-quicksand-bold text-xs text-slate-800 flex-1"
                   numberOfLines={1}
@@ -335,7 +334,7 @@ export default function StartScreen() {
             <View className="flex-row items-center justify-between pb-2.5 border-b border-slate-100">
               <View className="flex-1 pr-2">
                 <View className="flex-row items-center gap-1.5">
-                  <Navigation size={13} color="#0040FF" />
+                  <Navigation size={13} color="#1DA1F2" />
                   <Text
                     className="font-chivo-bold text-sm text-slate-900"
                     numberOfLines={1}

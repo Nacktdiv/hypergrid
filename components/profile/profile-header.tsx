@@ -176,7 +176,7 @@ export function ProfileHeader({
               shadowRadius: 8,
             }}
           >
-            <Camera size={14} color="#0040FF" />
+            <Camera size={14} color="#1DA1F2" />
           </View>
         </Touchable>
       </View>

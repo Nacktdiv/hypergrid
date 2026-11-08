@@ -1,4 +1,4 @@
-import { Activity, ShieldCheck, Zap } from "lucide-react-native";
+import { Zap } from "lucide-react-native";
 import { Text, View } from "react-native";
 import Svg, { Circle, G, Line } from "react-native-svg";
 
@@ -11,7 +11,7 @@ import type { Metric } from "./mock-data";
  *
  * Menggantikan 3 kartu kotak menjadi satu kartu visual radial konsentris:
  * - Outer Ring: G-Force Peak (Skala 0.0G - 3.0G) - Deep Blue (#1D4ED8)
- * - Middle Ring: AI Confidence (Skala 0% - 100%) - Brand Blue (#0040FF)
+ * - Middle Ring: AI Confidence (Skala 0% - 100%) - Brand Blue (#1DA1F2)
  * - Inner Ring: Anomaly Points (Skala 0 - 10+ Lokasi) - Sky Blue (#38BDF8)
  * - Spiderweb Polar Grid: Lingkaran & garis spoke radial halus (#E2E8F0)
  */
@@ -65,17 +65,17 @@ export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
       {/* CARD HEADER */}
       <View className="flex-row items-center justify-between">
         <View>
-          <Text className="font-chivo-bold text-sm text-slate-900">
+          <Text className="font-chivo-bold text-sm text-gray-900">
             Telemetry Radial Index
           </Text>
-          <Text className="font-quicksand text-xs text-slate-600 mt-0.5">
+          <Text className="font-quicksand text-[13px] text-muted-foreground mt-0.5">
             Radial sensor vibration & AI model metrics
           </Text>
         </View>
       </View>
 
       {/* CENTER RADIAL CHART (CONCENTRIC ARCS WITH POLAR GRID) */}
-      <View className="items-center justify-center py-2">
+      <View className="items-center justify-center py-4">
         <View
           style={{ width: size, height: size }}
           className="items-center justify-center relative"
@@ -192,7 +192,7 @@ export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
           {/* INNER HOLE STAT BADGE */}
           <View className="absolute items-center justify-center">
             <Zap size={20} color={TOKENS.colors.brand.DEFAULT} />
-            <Text className="font-mono-bold text-xs text-slate-800 mt-0.5">
+            <Text className="font-mono-bold text-xs text-gray-800 mt-0.5">
               {peakVal > 0 ? `${peakVal}G` : "0.0G"}
             </Text>
           </View>
@@ -200,76 +200,63 @@ export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
       </View>
 
       {/* METRIC BREAKDOWN LEGEND (HIGH-CONTRAST SWISS GRID) */}
-      <View className="flex-row divide-x divide-slate-100 rounded-2xl bg-slate-50 border border-slate-200/70 p-3">
+      <View className="flex-row divide-x divide-gray rounded-2xl bg-gray-50 border border-gray-200/70 p-3">
         {/* Ring 1 Legend */}
         <View className="flex-1 items-center px-1">
-          <View className="flex-row items-center gap-1.5 mb-1">
-            <View className="h-2 w-2 rounded-full bg-[#38BDF8]" />
+          <View className="flex-row items-center gap-1.5 mb-2">
+            <View className="h-1.5 w-1.5 rounded-full bg-[#38BDF8]" />
             <Text
-              className="font-quicksand text-[11px] text-slate-600 font-medium"
+              className=" text-[10px] text-muted-foreground font-medium"
               numberOfLines={1}
             >
               Anomalies
             </Text>
           </View>
-          <Text className="font-mono-bold text-sm text-slate-900">
+          <Text className="font-mono-bold text-sm text-gray-900">
             {anomalyCount}
           </Text>
-          <Text className="font-quicksand text-[10px] text-slate-500">
-            locations
+          <Text className="font-quicksand text-[10px] text-gray-500 mt-2">
+            Locations
           </Text>
         </View>
 
         {/* Ring 2 Legend */}
         <View className="flex-1 items-center px-1">
-          <View className="flex-row items-center gap-1.5 mb-1">
-            <View className="h-2 w-2 rounded-full bg-brand" />
+          <View className="flex-row items-center gap-1.5 mb-2">
+            <View className="h-1.5 w-1.5 rounded-full bg-brand" />
             <Text
-              className="font-quicksand text-[11px] text-slate-600 font-medium"
+              className=" text-[10px] text-muted-foreground font-medium"
               numberOfLines={1}
             >
               Confidence
             </Text>
           </View>
-          <Text className="font-mono-bold text-sm text-slate-900">
+          <Text className="font-mono-bold text-sm text-gray-900">
             {confidencePct}%
           </Text>
-          <Text className="font-quicksand text-[10px] text-slate-500">
-            AI Score
+          <Text className="font-quicksand text-[10px] text-gray-500 mt-2">
+            HypeLN Score
           </Text>
         </View>
 
         {/* Ring 3 Legend */}
         <View className="flex-1 items-center px-1">
-          <View className="flex-row items-center gap-1.5 mb-1">
-            <View className="h-2 w-2 rounded-full bg-[#1D4ED8]" />
+          <View className="flex-row items-center gap-1.5 mb-2">
+            <View className="h-1.5 w-1.5 rounded-full bg-[#1D4ED8]" />
             <Text
-              className="font-quicksand text-[11px] text-slate-600 font-medium"
+              className=" text-[10px] text-muted-foreground font-medium"
               numberOfLines={1}
             >
               Peak Shock
             </Text>
           </View>
-          <Text className="font-mono-bold text-sm text-slate-900">
+          <Text className="font-mono-bold text-sm text-gray-900">
             {peakVal.toFixed(1)}G
           </Text>
-          <Text className="font-quicksand text-[10px] text-slate-500">
-            Z-Gravity
+          <Text className="font-quicksand text-[10px] text-gray-500 mt-2">
+            Gravity
           </Text>
         </View>
-      </View>
-
-      {/* FOOTER INSIGHT ROW */}
-      <View className="flex-row items-center justify-between pt-1 border-t border-slate-100">
-        <View className="flex-row items-center gap-1.5">
-          <ShieldCheck size={14} color={TOKENS.colors.status.success} />
-          <Text className="font-quicksand text-xs text-slate-700">
-            {anomalyCount === 0
-              ? "Optimal road surface conditions recorded"
-              : `${anomalyCount} shock anomaly clusters recorded`}
-          </Text>
-        </View>
-        <Text className="font-mono text-[10px] text-slate-500">EDGE AI v1</Text>
       </View>
     </AppCard>
   );

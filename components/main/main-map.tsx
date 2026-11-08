@@ -1,12 +1,3 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  InteractionManager,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
 import {
   AlertTriangle,
   ChevronRight,
@@ -17,6 +8,15 @@ import {
   X,
   ZoomIn,
 } from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  InteractionManager,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 
 import { LeafletMap } from "@/components/map/leaflet-map";
 import {
@@ -27,11 +27,11 @@ import {
 } from "@/components/map/map-data";
 import { MapCanvasSkeleton } from "@/components/ui/skeleton";
 import { Touchable } from "@/components/ui/touchable";
-import { ClusterRadialCard } from "./cluster-radial-card";
+import { type VehicleId } from "@/contexts/vehicle-context";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
 import { useUserLocation } from "@/hooks/use-user-location";
 import type { PotholeCluster, PotholeStatus } from "@/types/api";
-import { type VehicleId } from "@/contexts/vehicle-context";
+import { ClusterRadialCard } from "./cluster-radial-card";
 
 type FilterStatus = "all" | PotholeStatus;
 
@@ -82,7 +82,7 @@ export function MainMap({
 
   const [activeFilter, setActiveFilter] = useState<FilterStatus>("all");
   const [selectedCluster, setSelectedCluster] = useState<PotholeCluster | null>(
-    null
+    null,
   );
   const [isClusterModalVisible, setIsClusterModalVisible] = useState(false);
   const [selectedArea, setSelectedArea] = useState<AreaSummary | null>(null);
@@ -94,12 +94,17 @@ export function MainMap({
   } | null>(null);
 
   const [hasFetchedInitial, setHasFetchedInitial] = useState(
-    () => clusters.length > 0 || !isClustersLoading
+    () => clusters.length > 0 || !isClustersLoading,
   );
 
   const loadInitialClusters = useCallback(async () => {
     try {
-      await fetchClusters({ limit: 500, eps: 100, minPts: 2, vehicleType: vehicleId });
+      await fetchClusters({
+        limit: 500,
+        eps: 100,
+        minPts: 2,
+        vehicleType: vehicleId,
+      });
     } finally {
       setHasFetchedInitial(true);
     }
@@ -132,8 +137,11 @@ export function MainMap({
       severity: c.severity,
       reportCount: c.detection_count ?? (c as any).detectionCount ?? 1,
       radius_meters: c.radius_meters || (c as any).radiusMeters || 18,
-      road_length_meters: c.road_length_meters || (c as any).roadLengthMeters || 15,
-      road_segment_coords: (c.road_segment_coords || (c as any).roadSegmentCoords)?.map((p: any) => ({
+      road_length_meters:
+        c.road_length_meters || (c as any).roadLengthMeters || 15,
+      road_segment_coords: (
+        c.road_segment_coords || (c as any).roadSegmentCoords
+      )?.map((p: any) => ({
         latitude: p.latitude ?? p.lat,
         longitude: p.longitude ?? p.lng,
       })),
@@ -158,7 +166,13 @@ export function MainMap({
       userLocation: baseCenter,
       vehiclePosition: baseCenter,
     };
-  }, [filteredClusters, liveCoords, selectedCluster?.id, selectedArea?.id, plannedRoute]);
+  }, [
+    filteredClusters,
+    liveCoords,
+    selectedCluster?.id,
+    selectedArea?.id,
+    plannedRoute,
+  ]);
 
   // Handler KLIK KEDUA (Re-click pada pin yang sedang aktif) -> Baru buka modal Road Damage Details
   const handleMarkerPress = (point: DamagePoint) => {
@@ -197,7 +211,11 @@ export function MainMap({
             ? "flex-1 w-full h-full items-center justify-center bg-slate-100"
             : "flex-1 w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100"
         }
-        style={fullBleed ? { width: "100%", height: "100%" } : { height: 340, width: "100%" }}
+        style={
+          fullBleed
+            ? { width: "100%", height: "100%" }
+            : { height: 340, width: "100%" }
+        }
       >
         {errorMsg ? (
           <View className="items-center gap-2 p-4">
@@ -228,7 +246,11 @@ export function MainMap({
           ? "flex-1 w-full h-full overflow-hidden"
           : "flex-1 w-full overflow-hidden rounded-2xl border border-[#CAD5E2]"
       }
-      style={fullBleed ? { width: "100%", height: "100%" } : { height: 340, width: "100%" }}
+      style={
+        fullBleed
+          ? { width: "100%", height: "100%" }
+          : { height: 340, width: "100%" }
+      }
     >
       <LeafletMap
         data={mapData}
@@ -244,9 +266,14 @@ export function MainMap({
         <>
           {/* SWISS DESIGN GPS LIVE TELEMETRY BADGE */}
           <View className="absolute bottom-3 left-3 flex-row items-center gap-1.5 rounded-md border border-slate-900 bg-slate-950/90 px-2.5 py-1 shadow-md">
-            <View className={`h-2 w-2 rounded-full ${liveCoords ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+            <View
+              className={`h-2 w-2 rounded-full ${liveCoords ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}
+            />
             <Text className="font-mono text-[9px] font-bold uppercase tracking-wider text-white">
-              GPS {liveCoords ? `${liveCoords.latitude.toFixed(4)}, ${liveCoords.longitude.toFixed(4)}` : "SEARCHING COORDINATES..."}
+              GPS{" "}
+              {liveCoords
+                ? `${liveCoords.latitude.toFixed(4)}, ${liveCoords.longitude.toFixed(4)}`
+                : "SEARCHING COORDINATES..."}
             </Text>
           </View>
 
@@ -271,7 +298,7 @@ export function MainMap({
           <View className="flex-row items-center justify-between">
             {/* Status Badge */}
             <View className="self-start flex-row items-center gap-1.5 rounded-full border border-slate-200/90 bg-white/95 px-2.5 py-1 shadow-sm backdrop-blur-md">
-              <Database size={12} color="#0040FF" />
+              <Database size={12} color="#1DA1F2" />
               <Text className="font-mono text-[10px] text-slate-700">
                 {clusters.length > 0
                   ? `DBSCAN: ${filteredClusters.length} Road Hazard Clusters`
@@ -348,7 +375,9 @@ export function MainMap({
                     </Text>
                   </View>
                   <Text className="mt-1 font-quicksand text-[11px] leading-relaxed text-slate-600">
-                    Verification, work orders, and road repairs are managed exclusively by the Public Works Department (Dinas PU) via the Web Admin Dashboard.
+                    Verification, work orders, and road repairs are managed
+                    exclusively by the Public Works Department (Dinas PU) via
+                    the Web Admin Dashboard.
                   </Text>
                 </View>
               </View>
@@ -378,25 +407,31 @@ export function MainMap({
             >
               <View
                 className={`h-8 w-8 rounded-xl items-center justify-center border ${
-                  (selectedCluster?.severity || selectedArea?.worstSeverity) === "severe"
+                  (selectedCluster?.severity || selectedArea?.worstSeverity) ===
+                  "severe"
                     ? "bg-red-50 border-red-200"
-                    : (selectedCluster?.severity || selectedArea?.worstSeverity) === "high"
-                    ? "bg-rose-50 border-rose-200"
-                    : (selectedCluster?.severity || selectedArea?.worstSeverity) === "medium"
-                    ? "bg-amber-50 border-amber-200"
-                    : "bg-yellow-50 border-yellow-200"
+                    : (selectedCluster?.severity ||
+                          selectedArea?.worstSeverity) === "high"
+                      ? "bg-rose-50 border-rose-200"
+                      : (selectedCluster?.severity ||
+                            selectedArea?.worstSeverity) === "medium"
+                        ? "bg-amber-50 border-amber-200"
+                        : "bg-yellow-50 border-yellow-200"
                 }`}
               >
                 <AlertTriangle
                   size={15}
                   color={
-                    (selectedCluster?.severity || selectedArea?.worstSeverity) === "severe"
+                    (selectedCluster?.severity ||
+                      selectedArea?.worstSeverity) === "severe"
                       ? "#991B1B"
-                      : (selectedCluster?.severity || selectedArea?.worstSeverity) === "high"
-                      ? "#EF4444"
-                      : (selectedCluster?.severity || selectedArea?.worstSeverity) === "medium"
-                      ? "#F59E0B"
-                      : "#CA8A04"
+                      : (selectedCluster?.severity ||
+                            selectedArea?.worstSeverity) === "high"
+                        ? "#EF4444"
+                        : (selectedCluster?.severity ||
+                              selectedArea?.worstSeverity) === "medium"
+                          ? "#F59E0B"
+                          : "#CA8A04"
                   }
                 />
               </View>
@@ -413,8 +448,8 @@ export function MainMap({
                           : `${selectedArea.roadLengthMeters} m`
                       }`
                     : selectedCluster
-                    ? `Klaster Bahaya Jalan (${selectedCluster.road_length_meters ? `${selectedCluster.road_length_meters}m` : 'Area Klaster'})`
-                    : "Titik Bahaya Jalan"}
+                      ? `Klaster Bahaya Jalan (${selectedCluster.road_length_meters ? `${selectedCluster.road_length_meters}m` : "Area Klaster"})`
+                      : "Titik Bahaya Jalan"}
                 </Text>
                 <Text
                   numberOfLines={1}
@@ -423,8 +458,8 @@ export function MainMap({
                   {selectedCluster
                     ? `${selectedCluster.detection_count} Deteksi Sub-Klaster • ${selectedCluster.severity.toUpperCase()}`
                     : selectedArea
-                    ? `${selectedArea.clusterCount} Titik Kerusakan • ${selectedArea.totalReports} Laporan`
-                    : "Ketuk untuk melihat detail"}
+                      ? `${selectedArea.clusterCount} Titik Kerusakan • ${selectedArea.totalReports} Laporan`
+                      : "Ketuk untuk melihat detail"}
                 </Text>
               </View>
             </Pressable>
@@ -478,14 +513,18 @@ export function MainMap({
                 <View className="flex-row items-center justify-between pb-1">
                   <View className="flex-row items-center gap-2.5">
                     <View className="rounded-xl bg-sky-100 p-2">
-                      <Layers size={20} color="#0040FF" />
+                      <Layers size={20} color="#1DA1F2" />
                     </View>
                     <View>
                       <Text className="font-chivo-bold text-lg text-slate-900">
-                        Ruas Jalan: {selectedArea.roadLengthMeters >= 1000 ? `${(selectedArea.roadLengthMeters / 1000).toFixed(1)} km` : `${selectedArea.roadLengthMeters} m`}
+                        Ruas Jalan:{" "}
+                        {selectedArea.roadLengthMeters >= 1000
+                          ? `${(selectedArea.roadLengthMeters / 1000).toFixed(1)} km`
+                          : `${selectedArea.roadLengthMeters} m`}
                       </Text>
                       <Text className="font-quicksand text-xs text-slate-500">
-                        {selectedArea.clusterCount} titik kerusakan di sepanjang bentang jalan ini
+                        {selectedArea.clusterCount} titik kerusakan di sepanjang
+                        bentang jalan ini
                       </Text>
                     </View>
                   </View>
@@ -527,10 +566,10 @@ export function MainMap({
                         selectedArea.worstSeverity === "severe"
                           ? "text-red-700"
                           : selectedArea.worstSeverity === "high"
-                          ? "text-rose-600"
-                          : selectedArea.worstSeverity === "medium"
-                          ? "text-amber-600"
-                          : "text-yellow-600"
+                            ? "text-rose-600"
+                            : selectedArea.worstSeverity === "medium"
+                              ? "text-amber-600"
+                              : "text-yellow-600"
                       }`}
                     >
                       {selectedArea.worstSeverity}
@@ -582,9 +621,13 @@ export function MainMap({
                 {/* List of Clusters in Area */}
                 <View className="gap-1.5">
                   <Text className="font-quicksand-bold text-xs text-slate-700">
-                    Daftar Titik Klaster di Ruas Ini ({selectedArea.clusters.length})
+                    Daftar Titik Klaster di Ruas Ini (
+                    {selectedArea.clusters.length})
                   </Text>
-                  <ScrollView className="max-h-40" showsVerticalScrollIndicator={true}>
+                  <ScrollView
+                    className="max-h-40"
+                    showsVerticalScrollIndicator={true}
+                  >
                     <View className="gap-1.5">
                       {selectedArea.clusters.map((pt, idx) => (
                         <Touchable
@@ -606,14 +649,15 @@ export function MainMap({
                                   pt.severity === "severe"
                                     ? "bg-red-700"
                                     : pt.severity === "high"
-                                    ? "bg-red-500"
-                                    : pt.severity === "medium"
-                                    ? "bg-amber-500"
-                                    : "bg-yellow-400"
+                                      ? "bg-red-500"
+                                      : pt.severity === "medium"
+                                        ? "bg-amber-500"
+                                        : "bg-yellow-400"
                                 }`}
                               />
                               <Text className="font-mono text-[11px] text-slate-800">
-                                {pt.position.latitude.toFixed(4)}, {pt.position.longitude.toFixed(4)}
+                                {pt.position.latitude.toFixed(4)},{" "}
+                                {pt.position.longitude.toFixed(4)}
                               </Text>
                             </View>
                             <View className="flex-row items-center gap-1.5">
@@ -625,10 +669,10 @@ export function MainMap({
                                   pt.severity === "severe"
                                     ? "text-red-700"
                                     : pt.severity === "high"
-                                    ? "text-rose-600"
-                                    : pt.severity === "medium"
-                                    ? "text-amber-600"
-                                    : "text-yellow-600"
+                                      ? "text-rose-600"
+                                      : pt.severity === "medium"
+                                        ? "text-amber-600"
+                                        : "text-yellow-600"
                                 }`}
                               >
                                 {pt.severity}

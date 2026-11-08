@@ -53,7 +53,7 @@ export function HypergridMap({
         key={`map-${data.camera.latitude}-${data.camera.longitude}`}
         loadingBackgroundColor="#F8FAFC"
         loadingEnabled={true}
-        loadingIndicatorColor="#0040FF"
+        loadingIndicatorColor="#1DA1F2"
         onMapReady={() => {
           console.log(
             "[HypergridMap] Native map successfully mounted and ready",

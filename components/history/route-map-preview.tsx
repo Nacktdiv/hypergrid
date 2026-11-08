@@ -42,7 +42,7 @@ export function RouteMapPreview({
   }, [routeCoordinates, damagePoints]);
 
   return (
-    <View className="h-56 overflow-hidden rounded-2xl border-2 border-slate-900 bg-white shadow-sm">
+    <View className="h-56 overflow-hidden rounded-2xl border border-gray-300 bg-white shadow-sm">
       <LeafletMap data={mapData} interactive={true} />
     </View>
   );

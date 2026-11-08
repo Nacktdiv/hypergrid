@@ -15,7 +15,7 @@ export default function RootIndex() {
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#0040FF" />
+        <ActivityIndicator size="large" color="#1DA1F2" />
       </View>
     );
   }

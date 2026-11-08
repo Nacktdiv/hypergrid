@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { Compass, Navigation, RefreshCw } from "lucide-react-native";
+import { Compass, Navigation } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   InteractionManager,
@@ -247,7 +247,7 @@ export default function HistoryScreen() {
           label: "Avg AI Confidence",
           value: "0%",
           unit: "AI",
-          accent: "#0040FF",
+          accent: "#1DA1F2",
         },
         {
           id: "peak",
@@ -294,7 +294,7 @@ export default function HistoryScreen() {
         label: "Avg AI Confidence",
         value: `${avgConfidence}%`,
         unit: "Score",
-        accent: "#0040FF",
+        accent: "#1DA1F2",
       },
       {
         id: "peak",
@@ -392,18 +392,18 @@ export default function HistoryScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={["#0040FF"]}
-            tintColor="#0040FF"
+            colors={["#1DA1F2"]}
+            tintColor="#1DA1F2"
           />
         }
       >
         {/* HEADER */}
         <View className="flex-row items-center justify-between">
           <View>
-            <Text className="font-chivo-bold text-2xl text-slate-900">
+            <Text className="font-chivo-bold text-2xl text-gray-900">
               History
             </Text>
-            <Text className="font-quicksand text-xs text-slate-600 mt-0.5">
+            <Text className="font-quicksand text-xs text-gray-600 mt-0.5">
               Driving telemetry and detected road anomalies
             </Text>
           </View>
@@ -420,7 +420,7 @@ export default function HistoryScreen() {
         {/* PEMILIH HARI INTUITIF (7 HARI TERAKHIR + TOMBOL KALENDER) */}
         <View className="gap-2">
           {/* <View className="flex-row items-center justify-between">
-            <Text className="text-xs font-bold tracking-wider text-slate-700">
+            <Text className="text-xs font-bold tracking-wider text-gray-700">
               Select Date:
             </Text>
             <Text className="font-mono text-[11px] text-brand">
@@ -442,14 +442,14 @@ export default function HistoryScreen() {
             {/* TAMPILAN PETA RIWAYAT: HANYA TAMPIL JIKA ADA DATA PERJALANAN NYATA */}
             {hasTripOnDate ? (
               <View className="gap-2">
-                <View className="flex-row items-center justify-between">
-                  <Text className="font-mono text-xs font-bold uppercase tracking-wider text-slate-900">
+                {/* <View className="flex-row items-center justify-between">
+                  <Text className="font-mono text-xs font-bold">
                     Route Preview
                   </Text>
-                  <Text className="font-mono text-xs text-slate-600">
+                  <Text className="text-xs text-muted-foreground">
                     {realRouteCoordinates.length} Coordinates
                   </Text>
-                </View>
+                </View> */}
 
                 <RouteMapPreview
                   routeCoordinates={realRouteCoordinates}
@@ -460,13 +460,13 @@ export default function HistoryScreen() {
               /* EMPTY STATE BERBASIS DESIGN SYSTEM */
               <AppCard variant="default" className="p-5 gap-3">
                 <View className="gap-1">
-                  <Text className="font-chivo-bold text-lg text-slate-900">
+                  <Text className="font-chivo-bold text-lg text-gray-900">
                     No Driving Activity Detected
                   </Text>
-                  <Text className="font-quicksand text-xs leading-relaxed text-slate-700">
+                  <Text className="font-quicksand text-xs leading-relaxed text-gray-700">
                     No driving activity or road shock anomaly detections
                     recorded on{" "}
-                    <Text className="font-mono-bold text-slate-900">
+                    <Text className="font-mono-bold text-gray-900">
                       {formatIsoToLongLabel(selectedDate)}
                     </Text>
                     . Map preview is hidden as no GPS telemetry routes were
@@ -475,28 +475,28 @@ export default function HistoryScreen() {
                 </View>
 
                 {/* Metric Preview Row */}
-                <View className="flex-row divide-x divide-slate-200 rounded-2xl border border-slate-200 bg-slate-50 p-3 mt-2">
+                <View className="flex-row divide-x divide-gray-200 rounded-2xl border border-gray-200 bg-gray-50 p-3 mt-2">
                   <View className="flex-1 items-center gap-0.5">
-                    <Text className="font-mono text-[9px] uppercase font-bold text-slate-600">
+                    <Text className="font-mono text-[9px] uppercase font-bold text-gray-600">
                       Anomaly Points
                     </Text>
-                    <Text className="font-mono-bold text-sm text-slate-900">
+                    <Text className="font-mono-bold text-sm text-gray-900">
                       0
                     </Text>
                   </View>
                   <View className="flex-1 items-center gap-0.5">
-                    <Text className="font-mono text-[9px] uppercase font-bold text-slate-600">
+                    <Text className="font-mono text-[9px] uppercase font-bold text-gray-600">
                       Distance
                     </Text>
-                    <Text className="font-mono-bold text-sm text-slate-900">
+                    <Text className="font-mono-bold text-sm text-gray-900">
                       0.0 KM
                     </Text>
                   </View>
                   <View className="flex-1 items-center gap-0.5">
-                    <Text className="font-mono text-[9px] uppercase font-bold text-slate-600">
+                    <Text className="font-mono text-[9px] uppercase font-bold text-gray-600">
                       Sensor Status
                     </Text>
-                    <Text className="font-mono-bold text-sm text-slate-900">
+                    <Text className="font-mono-bold text-sm text-gray-900">
                       IDLE
                     </Text>
                   </View>
@@ -518,28 +518,15 @@ export default function HistoryScreen() {
 
             {/* DAFTAR LOG DETAIL PERJALANAN */}
             <View className="gap-3">
-              <View className="flex-row items-center justify-between">
-                <View className="flex-1 flex-row items-baseline gap-2">
-                  <Text className="font-chivo-bold text-lg uppercase tracking-tight text-slate-900">
-                    Telemetry Log Entries
-                  </Text>
-                  <Text className="font-mono text-[11px] text-slate-600 font-semibold">
-                    {hasTripOnDate
-                      ? `${historyEntries.length} points`
-                      : "0 entries"}
-                  </Text>
-                </View>
-              </View>
-
               {/* List Log Items */}
               {historyEntries.length > 0 ? (
                 historyEntries.map((entry) => (
                   <HistoryItemCard key={entry.id} entry={entry} />
                 ))
               ) : (
-                <View className="items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white py-8">
+                <View className="items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-white py-8">
                   <Compass size={24} color="#64748B" />
-                  <Text className="mt-2 font-quicksand-semibold text-xs text-slate-700">
+                  <Text className="mt-2 font-quicksand-semibold text-xs text-gray-700">
                     No telemetry logs recorded for this date.
                   </Text>
                 </View>

@@ -188,7 +188,7 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
                           isSelected
                             ? "border-gray-900 bg-gray-900 text-white"
                             : isToday
-                              ? "border-sky-500 bg-sky-50"
+                              ? "border-brand bg-sky-50"
                               : "border-transparent bg-transparent",
                         )}
                       >
@@ -198,7 +198,7 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
                             isSelected
                               ? "text-white"
                               : isToday
-                                ? "text-sky-600"
+                                ? "text-brand"
                                 : "text-gray-800",
                           )}
                         >
@@ -220,8 +220,8 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
                   setCalendarModalVisible(false);
                 }}
               >
-                <View className="items-center justify-center rounded-xl border border-gray-900 bg-white py-2.5">
-                  <Text className="font-mono-bold text-xs uppercase text-gray-900">
+                <View className="items-center justify-center rounded-xl border border-gray-300 bg-white py-2.5">
+                  <Text className="text-xs text-gray-900">
                     Today
                   </Text>
                 </View>
@@ -236,8 +236,8 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
                   setCalendarModalVisible(false);
                 }}
               >
-                <View className="items-center justify-center rounded-xl border border-gray-200 bg-gray-100 py-2.5">
-                  <Text className="font-mono-bold text-xs uppercase text-custom-black">
+                <View className="items-center justify-center rounded-xl border border-gray-300 bg-gray-100 py-2.5">
+                  <Text className="text-xs text-custom-black">
                     Yesterday
                   </Text>
                 </View>

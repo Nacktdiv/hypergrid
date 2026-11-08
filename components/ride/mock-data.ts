@@ -19,7 +19,7 @@ export type DriveStatus = "safe" | "warning" | "speeding";
  * Status kondisi SenaWA.
  * Figma sendiri tidak punya badge ini — berasal dari spec, jadi warna
  * diambil dari semantic token yang sudah ada di Figma:
- *   - safe     "AMAN"           biru Primary #0040FF
+ *   - safe     "AMAN"           biru Primary #1DA1F2
  *   - warning  "PERINGATAN"     Semantic/Warning #F59E0B
  *   - speeding "TERLALU CEPAT"  Semantic/Danger #EF4444
  */
@@ -27,7 +27,7 @@ export const STATUS_META: Record<
   DriveStatus,
   { label: string; color: string; textColor: string }
 > = {
-  safe: { label: "SAFE", color: "#0040FF", textColor: "#FFFFFF" },
+  safe: { label: "SAFE", color: "#1DA1F2", textColor: "#FFFFFF" },
   warning: { label: "WARNING", color: "#F59E0B", textColor: "#000000" },
   speeding: { label: "TOO FAST", color: "#EF4444", textColor: "#FFFFFF" },
 };

@@ -1,8 +1,7 @@
-import React, { useMemo, useRef, useEffect, useState } from "react";
-import { StyleSheet, View, ActivityIndicator } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 import type { AreaSummary, DamagePoint, MapData } from "./map-data";
-import { VEHICLE_MARKER_IMAGES } from "./vehicle-assets-base64";
 
 export type LeafletMapProps = {
   data: MapData;
@@ -45,14 +44,13 @@ export const LeafletMap = React.memo(function LeafletMap({
 
   // Buat HTML Leaflet sekali dengan titik awal nyata
   const htmlContent = useMemo(() => {
-    const { camera, route, damagePoints, vehiclePosition } =
-      initialData;
+    const { camera, route, damagePoints, vehiclePosition } = initialData;
     const centerLat = camera.latitude;
     const centerLng = camera.longitude;
     const zoomLevel = Math.max(12, Math.min(18, Math.round(camera.zoom)));
 
     const routeCoords = JSON.stringify(
-      route.coordinates.map((c) => [c.latitude, c.longitude])
+      route.coordinates.map((c) => [c.latitude, c.longitude]),
     );
     const damageData = JSON.stringify(damagePoints);
     const vehicleCoord = JSON.stringify([
@@ -144,7 +142,7 @@ export const LeafletMap = React.memo(function LeafletMap({
       width: 20px !important;
       height: 20px !important;
       border-radius: 50%;
-      background-color: #0040FF;
+      background-color: #1DA1F2;
       border: 3px solid #ffffff;
       box-shadow: 0 2px 6px rgba(0,0,0,0.35);
     }
@@ -253,7 +251,7 @@ export const LeafletMap = React.memo(function LeafletMap({
       window.clusterRoadCache = {};
       if (initialRoute && initialRoute.length > 0) {
         window.routePolyline = L.polyline(initialRoute, {
-          color: '#0040FF',
+          color: '#1DA1F2',
           weight: 5,
           opacity: 0.85,
           lineJoin: 'round'
@@ -776,7 +774,7 @@ export const LeafletMap = React.memo(function LeafletMap({
           blur: 6,
           maxZoom: 18,
           minOpacity: 0.35,
-          gradient: { 0.2: '#0040FF', 0.5: '#EAB308', 0.75: '#F59E0B', 1.0: '#EF4444' }
+          gradient: { 0.2: '#1DA1F2', 0.5: '#EAB308', 0.75: '#F59E0B', 1.0: '#EF4444' }
         });
       };
 
@@ -1309,7 +1307,7 @@ export const LeafletMap = React.memo(function LeafletMap({
           window.routePolyline.setLatLngs(validCoords);
         } else if (validCoords.length > 0) {
           window.routePolyline = L.polyline(validCoords, {
-            color: '#0040FF',
+            color: '#1DA1F2',
             weight: 5,
             opacity: 0.85,
             lineJoin: 'round'
@@ -1380,7 +1378,7 @@ export const LeafletMap = React.memo(function LeafletMap({
     lastRouteLengthRef.current = coords.length;
 
     const routeJson = JSON.stringify(
-      coords.map((c) => [c.latitude, c.longitude])
+      coords.map((c) => [c.latitude, c.longitude]),
     );
     const js = `
       if (window.updateRoute) window.updateRoute(${routeJson});
@@ -1415,7 +1413,7 @@ export const LeafletMap = React.memo(function LeafletMap({
 
     if (data.activeClusterId) {
       const activePt = data.damagePoints.find(
-        (p) => p.id === data.activeClusterId
+        (p) => p.id === data.activeClusterId,
       );
       const activeJson = JSON.stringify(activePt || null);
       const js = `
@@ -1474,7 +1472,7 @@ export const LeafletMap = React.memo(function LeafletMap({
         const lat = data.vehiclePosition.latitude;
         const lng = data.vehiclePosition.longitude;
         const routeJson = JSON.stringify(
-          data.route.coordinates.map((c) => [c.latitude, c.longitude])
+          data.route.coordinates.map((c) => [c.latitude, c.longitude]),
         );
         const activePt = data.activeClusterId
           ? data.damagePoints.find((p) => p.id === data.activeClusterId)
@@ -1514,7 +1512,7 @@ export const LeafletMap = React.memo(function LeafletMap({
         startInLoadingState={true}
         renderLoading={() => (
           <View style={styles.loader}>
-            <ActivityIndicator size="small" color="#0040FF" />
+            <ActivityIndicator size="small" color="#1DA1F2" />
           </View>
         )}
       />

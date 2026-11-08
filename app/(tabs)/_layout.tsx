@@ -17,7 +17,7 @@ export default function TabsLayout() {
           paddingBottom: Math.max(insets.bottom, 10),
           paddingTop: 8,
         },
-        tabBarActiveTintColor: "#0040FF",
+        tabBarActiveTintColor: "#1DA1F2",
         tabBarInactiveTintColor: "#64748B",
         tabBarLabelStyle: {
           // fontFamily: "Inter_700Bold",

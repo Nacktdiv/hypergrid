@@ -89,7 +89,7 @@ export default function ProfileScreen() {
   const showSkeleton = !user && isAuthLoading;
 
   return (
-    <SafeAreaView className="flex-1 bg-surface-canvas" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ScrollView
         className="flex-1"
         contentContainerClassName="gap-5 px-4 pt-2 pb-8"
@@ -109,7 +109,7 @@ export default function ProfileScreen() {
 
             {/* Info Cards Container */}
             <View className="gap-3.5 pt-1">
-              <SelectedVehicleCard />
+              {/* <SelectedVehicleCard /> */}
               <PersonalInfoList onEdit={handleOpenEdit} user={user as any} />
               <LogoutButton onPress={handleLogout} />
             </View>
@@ -128,7 +128,7 @@ export default function ProfileScreen() {
           <View className="rounded-t-sheet bg-white p-6 border-t border-slate-200/80 shadow-lg">
             <View className="mb-4 flex-row items-center justify-between pb-2 border-b border-slate-100">
               <View className="flex-row items-center gap-2">
-                <Edit3 size={20} color="#0040FF" />
+                <Edit3 size={20} color="#1DA1F2" />
                 <Text className="font-chivo-bold text-xl text-slate-900">
                   Edit Personal Information
                 </Text>

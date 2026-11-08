@@ -254,7 +254,7 @@ export default function Index() {
           <View className="rounded-t-[32px] bg-white p-6 shadow-xl">
             <View className="mb-4 flex-row items-center justify-between">
               <View className="flex-row items-center gap-2">
-                <ShieldCheck size={22} color="#0040FF" />
+                <ShieldCheck size={22} color="#1DA1F2" />
                 <Text className="font-chivo-bold text-xl text-[#0F172A]">
                   {isRegisterMode ? "User Registration" : "Sign In"}
                 </Text>

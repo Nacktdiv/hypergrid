@@ -269,7 +269,7 @@ export function EmergencyModal({
             <View className="rounded-2xl border border-slate-200/90 bg-slate-50/80 p-4 gap-3">
               <View className="flex-row items-center justify-between">
                 <View className="flex-row items-center gap-2">
-                  <MapPin size={16} color="#0040FF" />
+                  <MapPin size={16} color="#1DA1F2" />
                   <Text className="font-quicksand-bold text-xs text-slate-700 uppercase tracking-wider">
                     Your Current GPS Position
                   </Text>

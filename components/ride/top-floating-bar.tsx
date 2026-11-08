@@ -42,7 +42,7 @@ export const TopFloatingBar = React.memo(function TopFloatingBar({
         <View className="flex-1 mx-2.5 flex-row items-center justify-between h-11 px-3 rounded-full bg-white/95 border border-slate-200/90 shadow-sm">
           <View className="flex-row items-center gap-1.5 flex-1 pr-1.5">
             <View className="h-6 w-6 rounded-full bg-sky-50 items-center justify-center">
-              <Navigation size={12} color="#0040FF" />
+              <Navigation size={12} color="#1DA1F2" />
             </View>
             <Text
               className="font-quicksand-bold text-xs text-slate-900 flex-1"

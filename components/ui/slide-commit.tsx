@@ -21,6 +21,7 @@ export interface SlideCommitProps {
   onDone?: () => void;
   onError?: (reason: unknown) => void;
   trackColor?: string;
+  idleTrackColor?: string;
   handleColor?: string;
   successColor?: string;
   dangerColor?: string;
@@ -42,8 +43,9 @@ export function SlideCommit({
   onConfirm,
   onDone,
   onError,
-  trackColor = "#0040FF",
-  handleColor = "#FFFFFF",
+  trackColor = "#1DA1F2",
+  idleTrackColor = "#E2E8F0",
+  handleColor = "#1DA1F2",
   successColor = "#10B981",
   dangerColor = "#EF4444",
   height = 56,
@@ -130,7 +132,7 @@ export function SlideCommit({
   const snapHome = useCallback(() => {
     Animated.spring(translateX, {
       toValue: 0,
-      useNativeDriver: true,
+      useNativeDriver: false,
       bounciness: 4,
       speed: 16,
     }).start();
@@ -147,7 +149,7 @@ export function SlideCommit({
     Animated.timing(translateX, {
       toValue: travelDistance,
       duration: 100,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
 
     triggerHaptic("medium");
@@ -245,7 +247,6 @@ export function SlideCommit({
           travel,
         );
 
-        // Ambang aktivasi: melewati 85% perjalanan atau flick cepat ke kanan
         if (currentX >= travel * 0.85 || gesture.vx > 0.8) {
           commit();
         } else {
@@ -262,21 +263,28 @@ export function SlideCommit({
     }
   };
 
-  // Text fade out as handle slides past 40% of the travel track
+  const fillWidth = useMemo(() => {
+    return translateX.interpolate({
+      inputRange: [0, Math.max(1, TRAVEL)],
+      outputRange: [GRIP + PAD * 2, actualWidth],
+      extrapolate: "clamp",
+    });
+  }, [translateX, TRAVEL, GRIP, actualWidth]);
+
   const labelOpacity = useMemo(() => {
     return translateX.interpolate({
-      inputRange: [0, Math.max(1, TRAVEL * 0.45)],
+      inputRange: [0, Math.max(1, TRAVEL * 0.35)],
       outputRange: [1, 0],
       extrapolate: "clamp",
     });
   }, [translateX, TRAVEL]);
 
-  const currentBgColor =
+  const baseBgColor =
     phase === "done"
       ? successColor
       : phase === "error"
         ? dangerColor
-        : trackColor;
+        : idleTrackColor;
 
   return (
     <Animated.View
@@ -286,7 +294,7 @@ export function SlideCommit({
         {
           height,
           borderRadius: r,
-          backgroundColor: currentBgColor,
+          backgroundColor: baseBgColor,
           transform: [{ translateX: shakeX }],
           opacity: disabled ? 0.55 : 1,
         },
@@ -295,25 +303,53 @@ export function SlideCommit({
       accessibilityRole="button"
       accessibilityLabel={phase === "done" ? doneLabel : label}
     >
+      {/* ACTIVE TRACK FILL */}
+      {phase !== "done" && phase !== "error" && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.activeTrackFill,
+            {
+              width: fillWidth,
+              backgroundColor: trackColor,
+              borderRadius: r,
+            },
+          ]}
+        />
+      )}
+
       {/* BACKGROUND CENTER LABEL */}
       <View style={styles.labelContainer} pointerEvents="none">
         {phase === "idle" ? (
           <Animated.Text
-            style={[styles.labelText, { opacity: labelOpacity }]}
+            style={[
+              styles.labelText,
+              styles.labelIdleText,
+              { opacity: labelOpacity },
+            ]}
             numberOfLines={1}
           >
             {label}
           </Animated.Text>
         ) : phase === "pending" ? (
-          <Text style={styles.labelText} numberOfLines={1}>
+          <Text
+            style={[styles.labelText, styles.labelActiveText]}
+            numberOfLines={1}
+          >
             Preparing ride...
           </Text>
         ) : phase === "done" ? (
-          <Text style={styles.labelText} numberOfLines={1}>
+          <Text
+            style={[styles.labelText, styles.labelActiveText]}
+            numberOfLines={1}
+          >
             {doneLabel}
           </Text>
         ) : (
-          <Text style={styles.labelText} numberOfLines={1}>
+          <Text
+            style={[styles.labelText, styles.labelActiveText]}
+            numberOfLines={1}
+          >
             {errorLabel}
           </Text>
         )}
@@ -335,7 +371,7 @@ export function SlideCommit({
       >
         {phase === "idle" ? (
           (icon ?? (
-            <ChevronsRight size={22} color={trackColor} strokeWidth={2.6} />
+            <ChevronsRight size={22} color="#475569" strokeWidth={2.6} />
           ))
         ) : phase === "pending" ? (
           <ActivityIndicator size="small" color={trackColor} />
@@ -356,11 +392,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: PAD,
     overflow: "hidden",
-    elevation: 2,
-    shadowColor: "#fff",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
+  },
+  activeTrackFill: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
   },
   labelContainer: {
     ...StyleSheet.absoluteFill,
@@ -369,19 +406,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 48,
   },
   labelText: {
-    color: "#FFFFFF",
-    fontFamily: "Inter_700Bold",
-    fontSize: 15,
-    letterSpacing: 0.2,
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.3,
     textAlign: "center",
+  },
+  labelIdleText: {
+    color: "#64748B",
+  },
+  labelActiveText: {
+    color: "#FFFFFF",
   },
   handle: {
     alignItems: "center",
     justifyContent: "center",
-    elevation: 4,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
   },
 });

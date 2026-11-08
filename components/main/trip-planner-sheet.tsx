@@ -305,7 +305,7 @@ export function TripPlannerSheet({
                         returnKeyType="search"
                       />
                       {isSearching ? (
-                        <ActivityIndicator size="small" color="#0040FF" />
+                        <ActivityIndicator size="small" color="#1DA1F2" />
                       ) : searchQuery.length > 0 ? (
                         <Pressable
                           onPress={() => setSearchQuery("")}

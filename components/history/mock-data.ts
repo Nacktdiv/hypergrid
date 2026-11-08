@@ -65,7 +65,7 @@ export const METRICS_BY_DAY: Record<string, Metric[]> = {
       label: "Jarak Tempuh",
       value: "9.8",
       unit: "KM",
-      accent: "#0040FF",
+      accent: "#1DA1F2",
     },
     {
       id: "waktu",
@@ -88,7 +88,7 @@ export const METRICS_BY_DAY: Record<string, Metric[]> = {
       label: "Jarak Tempuh",
       value: "6.1",
       unit: "KM",
-      accent: "#0040FF",
+      accent: "#1DA1F2",
     },
     {
       id: "waktu",
@@ -111,7 +111,7 @@ export const METRICS_BY_DAY: Record<string, Metric[]> = {
       label: "Jarak Tempuh",
       value: "21.4",
       unit: "KM",
-      accent: "#0040FF",
+      accent: "#1DA1F2",
     },
     {
       id: "waktu",
@@ -134,7 +134,7 @@ export const METRICS_BY_DAY: Record<string, Metric[]> = {
       label: "Jarak Tempuh",
       value: "12.7",
       unit: "KM",
-      accent: "#0040FF",
+      accent: "#1DA1F2",
     },
     {
       id: "waktu",
@@ -157,7 +157,7 @@ export const METRICS_BY_DAY: Record<string, Metric[]> = {
       label: "Jarak Tempuh",
       value: "14.2",
       unit: "KM",
-      accent: "#0040FF",
+      accent: "#1DA1F2",
     },
     {
       id: "waktu",
@@ -180,7 +180,7 @@ export const METRICS_BY_DAY: Record<string, Metric[]> = {
       label: "Jarak Tempuh",
       value: "26.9",
       unit: "KM",
-      accent: "#0040FF",
+      accent: "#1DA1F2",
     },
     {
       id: "waktu",
@@ -203,7 +203,7 @@ export const METRICS_BY_DAY: Record<string, Metric[]> = {
       label: "Jarak Tempuh",
       value: "3.2",
       unit: "KM",
-      accent: "#0040FF",
+      accent: "#1DA1F2",
     },
     {
       id: "waktu",

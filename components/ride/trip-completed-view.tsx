@@ -86,7 +86,7 @@ export function TripCompletedView({
       : roadScore >= 70
         ? {
             label: "GOOD",
-            color: "#0040FF",
+            color: "#1DA1F2",
             bg: "bg-sky-50",
             text: "text-sky-700",
             border: "border-sky-200",
@@ -390,7 +390,7 @@ export function TripCompletedView({
         {data.destinationName ? (
           <AppCard className="p-4 bg-white border border-slate-200/90 shadow-xs mb-3.5">
             <View className="flex-row items-center gap-2 mb-2">
-              <Navigation size={14} color="#0040FF" />
+              <Navigation size={14} color="#1DA1F2" />
               <Text className="font-chivo-bold text-xs text-slate-800 uppercase tracking-wider">
                 Trip Route & Destination
               </Text>
