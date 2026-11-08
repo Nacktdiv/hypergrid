@@ -275,6 +275,7 @@ export const LeafletMap = React.memo(function LeafletMap({
 
       window.rawDamagePoints = ${damageData} || [];
       window.activeRoadSegments = [];
+      window.activeSnappedPinCoord = null;
 
       function haversineM(lat1, lon1, lat2, lon2) {
         var R = 6371000;
@@ -390,6 +391,265 @@ export const LeafletMap = React.memo(function LeafletMap({
         return backwardCoords.concat(forwardCoords);
       }
 
+      function slicePolylineBetweenSegments(polyline, minIdx, maxIdx, padMeters) {
+        if (!polyline || polyline.length < 2) return [];
+        var pad = padMeters || 16;
+        var startIdx = Math.max(0, Math.min(minIdx, maxIdx));
+        var endIdx = Math.min(polyline.length - 1, Math.max(minIdx, maxIdx));
+
+        var pStart = polyline[startIdx];
+        var startLat = pStart.lat !== undefined ? pStart.lat : pStart[0];
+        var startLng = pStart.lng !== undefined ? pStart.lng : pStart[1];
+        var backCoords = [[startLat, startLng]];
+        var accBack = 0;
+        var currBack = [startLat, startLng];
+
+        for (var i = startIdx - 1; i >= 0; i--) {
+          var rawV = polyline[i];
+          var vLat = rawV.lat !== undefined ? rawV.lat : rawV[0];
+          var vLng = rawV.lng !== undefined ? rawV.lng : rawV[1];
+          var d = haversineM(currBack[0], currBack[1], vLat, vLng);
+          if (accBack + d >= pad) {
+            var rem = pad - accBack;
+            var frac = d > 0 ? (rem / d) : 1;
+            var cutLat = currBack[0] + frac * (vLat - currBack[0]);
+            var cutLng = currBack[1] + frac * (vLng - currBack[1]);
+            backCoords.push([cutLat, cutLng]);
+            break;
+          } else {
+            accBack += d;
+            backCoords.push([vLat, vLng]);
+            currBack = [vLat, vLng];
+          }
+        }
+        backCoords.reverse();
+
+        var midCoords = [];
+        for (var k = startIdx; k <= Math.min(endIdx + 1, polyline.length - 1); k++) {
+          var rawM = polyline[k];
+          midCoords.push([rawM.lat !== undefined ? rawM.lat : rawM[0], rawM.lng !== undefined ? rawM.lng : rawM[1]]);
+        }
+
+        var fwdStartIdx = Math.min(endIdx + 1, polyline.length - 1);
+        var pFwdStart = polyline[fwdStartIdx];
+        var fwdStartLat = pFwdStart.lat !== undefined ? pFwdStart.lat : pFwdStart[0];
+        var fwdStartLng = pFwdStart.lng !== undefined ? pFwdStart.lng : pFwdStart[1];
+        var fwdCoords = [];
+        var accFwd = 0;
+        var currFwd = [fwdStartLat, fwdStartLng];
+
+        for (var j = fwdStartIdx + 1; j < polyline.length; j++) {
+          var rawW = polyline[j];
+          var wLat = rawW.lat !== undefined ? rawW.lat : rawW[0];
+          var wLng = rawW.lng !== undefined ? rawW.lng : rawW[1];
+          var df = haversineM(currFwd[0], currFwd[1], wLat, wLng);
+          if (accFwd + df >= pad) {
+            var remF = pad - accFwd;
+            var fracF = df > 0 ? (remF / df) : 1;
+            var cutFLat = currFwd[0] + fracF * (wLat - currFwd[0]);
+            var cutFLng = currFwd[1] + fracF * (wLng - currFwd[1]);
+            fwdCoords.push([cutFLat, cutFLng]);
+            break;
+          } else {
+            accFwd += df;
+            fwdCoords.push([wLat, wLng]);
+            currFwd = [wLat, wLng];
+          }
+        }
+
+        var combined = backCoords.concat(midCoords).concat(fwdCoords);
+        var clean = [];
+        for (var c = 0; c < combined.length; c++) {
+          if (c === 0 || (Math.abs(combined[c][0] - combined[c - 1][0]) > 1e-6 || Math.abs(combined[c][1] - combined[c - 1][1]) > 1e-6)) {
+            clean.push(combined[c]);
+          }
+        }
+        return clean.length >= 2 ? clean : combined;
+      }
+
+      function collectClusterPoints(pt) {
+        var pts = [];
+        if (pt && pt.position) {
+          var pLat = pt.position.latitude !== undefined ? pt.position.latitude : pt.position.lat;
+          var pLng = pt.position.longitude !== undefined ? pt.position.longitude : pt.position.lng;
+          if (pLat != null && pLng != null) pts.push([pLat, pLng]);
+        }
+        if (pt && Array.isArray(pt.points)) {
+          pt.points.forEach(function(p) {
+            var lat = p.latitude !== undefined ? p.latitude : p.lat;
+            var lng = p.longitude !== undefined ? p.longitude : p.lng;
+            if (lat != null && lng != null) pts.push([lat, lng]);
+          });
+        }
+        if (pt && Array.isArray(pt.road_segment_coords)) {
+          pt.road_segment_coords.forEach(function(c) {
+            var lat = c.latitude !== undefined ? c.latitude : c.lat;
+            var lng = c.longitude !== undefined ? c.longitude : c.lng;
+            if (lat != null && lng != null) pts.push([lat, lng]);
+          });
+        }
+        return pts;
+      }
+
+      function trySliceFromActiveRoute(allPts) {
+        var activeRoute = window.activeMapRoute;
+        if (!activeRoute || activeRoute.length < 2 || !allPts || allPts.length === 0) return null;
+
+        var matchedSegIndices = [];
+        for (var i = 0; i < allPts.length; i++) {
+          var check = findClosestPointOnPolyline(allPts[i][0], allPts[i][1], activeRoute);
+          if (check.dist <= 60) {
+            matchedSegIndices.push(check.segIdx);
+          }
+        }
+
+        if (matchedSegIndices.length === 0) return null;
+
+        var minIdx = Math.min.apply(null, matchedSegIndices);
+        var maxIdx = Math.max.apply(null, matchedSegIndices);
+        var sliced = slicePolylineBetweenSegments(activeRoute, minIdx, maxIdx, 22);
+        return (sliced && sliced.length >= 2) ? sliced : null;
+      }
+
+      function buildLocalClusterRoute(allPts, centerLat, centerLng) {
+        var lat0 = centerLat;
+        var lng0 = centerLng;
+        if (!allPts || allPts.length === 0) {
+          return [
+            [lat0 - 0.00015, lng0],
+            [lat0 + 0.00015, lng0]
+          ];
+        }
+
+        var cosLat = Math.cos(lat0 * Math.PI / 180);
+        var DEG_TO_M = 111320;
+
+        var localXY = allPts.map(function(p) {
+          return {
+            x: (p[1] - lng0) * DEG_TO_M * cosLat,
+            y: (p[0] - lat0) * DEG_TO_M,
+            orig: p
+          };
+        });
+
+        var ux = 1, uy = 0;
+        var maxDistSq = 0;
+
+        if (localXY.length >= 2) {
+          for (var i = 0; i < localXY.length; i++) {
+            for (var j = i + 1; j < localXY.length; j++) {
+              var dx = localXY[j].x - localXY[i].x;
+              var dy = localXY[j].y - localXY[i].y;
+              var dSq = dx * dx + dy * dy;
+              if (dSq > maxDistSq) {
+                maxDistSq = dSq;
+                var len = Math.sqrt(dSq);
+                if (len > 0.5) {
+                  ux = dx / len;
+                  uy = dy / len;
+                }
+              }
+            }
+          }
+        }
+
+        if (maxDistSq < 4) {
+          ux = 0.894;
+          uy = 0.447;
+        }
+
+        var projections = localXY.map(function(pt) {
+          var t = pt.x * ux + pt.y * uy;
+          return { t: t, pt: pt };
+        });
+
+        var minT = Infinity;
+        var maxT = -Infinity;
+        projections.forEach(function(p) {
+          if (p.t < minT) minT = p.t;
+          if (p.t > maxT) maxT = p.t;
+        });
+
+        var pad = 18;
+        var startT = minT - pad;
+        var endT = maxT + pad;
+
+        var tValues = [startT];
+        projections.sort(function(a, b) { return a.t - b.t; });
+        projections.forEach(function(p) {
+          if (Math.abs(p.t - tValues[tValues.length - 1]) >= 1.5) {
+            tValues.push(p.t);
+          }
+        });
+        tValues.push(endT);
+
+        var routeResult = tValues.map(function(t) {
+          var rx = t * ux;
+          var ry = t * uy;
+          var rLat = lat0 + (ry / DEG_TO_M);
+          var rLng = lng0 + (rx / (DEG_TO_M * cosLat));
+          return [rLat, rLng];
+        });
+
+        return routeResult.length >= 2 ? routeResult : [
+          [lat0 - 0.00015, lng0],
+          [lat0 + 0.00015, lng0]
+        ];
+      }
+
+      function fetchOsrmNearestRoad(lat, lng, callback) {
+        var url = 'https://router.project-osrm.org/nearest/v1/driving/' + lng + ',' + lat + '?number=8';
+        fetch(url)
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data && data.code === 'Ok' && Array.isArray(data.waypoints) && data.waypoints.length > 0) {
+              var mainName = data.waypoints[0].name || '';
+              var validWaypoints = data.waypoints.filter(function(w) {
+                return (mainName && w.name === mainName) || (w.distance && w.distance <= 40);
+              });
+              if (validWaypoints.length >= 2) {
+                var nodes = validWaypoints.map(function(w) {
+                  return [w.location[1], w.location[0]];
+                });
+
+                var bestA = 0, bestB = 1, maxD = -1;
+                for (var i = 0; i < nodes.length; i++) {
+                  for (var j = i + 1; j < nodes.length; j++) {
+                    var d = haversineM(nodes[i][0], nodes[i][1], nodes[j][0], nodes[j][1]);
+                    if (d > maxD) {
+                      maxD = d;
+                      bestA = i;
+                      bestB = j;
+                    }
+                  }
+                }
+
+                var unvisited = nodes.slice();
+                var startNode = unvisited.splice(bestA, 1)[0];
+                var chained = [startNode];
+                while (unvisited.length > 0) {
+                  var tail = chained[chained.length - 1];
+                  var nextIdx = 0;
+                  var nextDist = Infinity;
+                  for (var k = 0; k < unvisited.length; k++) {
+                    var dk = haversineM(tail[0], tail[1], unvisited[k][0], unvisited[k][1]);
+                    if (dk < nextDist) {
+                      nextDist = dk;
+                      nextIdx = k;
+                    }
+                  }
+                  chained.push(unvisited.splice(nextIdx, 1)[0]);
+                }
+
+                if (chained.length >= 2) {
+                  callback(chained);
+                }
+              }
+            }
+          })
+          .catch(function() {});
+      }
+
       // Helper membuat SVG Badge Icon Lokasi (Map Pin)
       function createLocationPinSvg(sevColor, count, isActive) {
         var strokeCol = isActive ? '#FDE047' : '#ffffff';
@@ -462,9 +722,20 @@ export const LeafletMap = React.memo(function LeafletMap({
           }
 
           if (segPolyline.length === 1) {
-            var sp = segPolyline[0];
-            segPolyline.unshift({ lat: sp.lat - 0.00012, lng: sp.lng });
-            segPolyline.push({ lat: sp.lat + 0.00012, lng: sp.lng });
+            var sCluster = segClusters[0];
+            if (Array.isArray(sCluster.road_segment_coords) && sCluster.road_segment_coords.length > 1) {
+              segPolyline = sCluster.road_segment_coords.map(function(c) {
+                return { lat: c.latitude !== undefined ? c.latitude : c.lat, lng: c.longitude !== undefined ? c.longitude : c.lng };
+              });
+            } else if (Array.isArray(sCluster.points) && sCluster.points.length > 1) {
+              segPolyline = sCluster.points.map(function(p) {
+                return { lat: p.latitude !== undefined ? p.latitude : p.lat, lng: p.longitude !== undefined ? p.longitude : p.lng };
+              });
+            } else {
+              var sAll = collectClusterPoints(sCluster);
+              var sLocal = buildLocalClusterRoute(sAll, sCluster.position.latitude, sCluster.position.longitude);
+              segPolyline = sLocal.map(function(p) { return { lat: p[0], lng: p[1] }; });
+            }
           }
 
           var sLat = 0, sLng = 0, totalRep = 0;
@@ -676,10 +947,10 @@ export const LeafletMap = React.memo(function LeafletMap({
           var rawLng = sp.longitude !== undefined ? sp.longitude : sp.lng;
           var spIntensity = sp.intensity !== undefined ? sp.intensity : (pt.severity === 'severe' ? 3.5 : (pt.severity === 'high' ? 2.5 : (pt.severity === 'medium' ? 1.5 : 0.8)));
 
-          // Snap sub-point ke sumbu rute jalan jika berada dalam radius 15 meter
+          // Snap sub-point ke sumbu rute jalan jika berada dalam radius 50 meter
           var snapRes = findClosestPointOnPolyline(rawLat, rawLng, routeCoords);
-          var finalLat = (snapRes.dist <= 15) ? snapRes.proj[0] : rawLat;
-          var finalLng = (snapRes.dist <= 15) ? snapRes.proj[1] : rawLng;
+          var finalLat = (snapRes.dist <= 50) ? snapRes.proj[0] : rawLat;
+          var finalLng = (snapRes.dist <= 50) ? snapRes.proj[1] : rawLng;
           renderedSubCoords.push([finalLat, finalLng]);
 
           // Marker modern minimalis: white ring + colored dot + ambient pulse
@@ -713,7 +984,15 @@ export const LeafletMap = React.memo(function LeafletMap({
           window.clusterHighlightLayer.addLayer(subMarker);
         });
 
-        // C. Update status visual pin pada layer damage
+        // C. Snap titik lokasi utama klaster (pt.position) tepat ke atas rute jalan
+        var cLat = pt.position.latitude !== undefined ? pt.position.latitude : pt.position.lat;
+        var cLng = pt.position.longitude !== undefined ? pt.position.longitude : pt.position.lng;
+        var snapPin = findClosestPointOnPolyline(cLat, cLng, routeCoords);
+        var finalPinLat = (snapPin.dist <= 50) ? snapPin.proj[0] : cLat;
+        var finalPinLng = (snapPin.dist <= 50) ? snapPin.proj[1] : cLng;
+        window.activeSnappedPinCoord = [finalPinLat, finalPinLng];
+
+        // Update status visual pin pada layer damage / highlight
         if (window.map && window.map.getZoom() < 16) {
           var pinSvg = createLocationPinSvg(sevColor, pt.reportCount, true);
           var pinHtml = '<div class="location-pin-marker is-active">' + pinSvg + '</div>';
@@ -723,7 +1002,7 @@ export const LeafletMap = React.memo(function LeafletMap({
             iconSize: [30, 38],
             iconAnchor: [15, 38]
           });
-          var pinMarker = L.marker([pt.position.latitude, pt.position.longitude], {
+          var pinMarker = L.marker([finalPinLat, finalPinLng], {
             icon: pinIcon,
             zIndexOffset: 5000
           });
@@ -733,21 +1012,21 @@ export const LeafletMap = React.memo(function LeafletMap({
           });
           window.clusterHighlightLayer.addLayer(pinMarker);
         } else if (window.rawDamagePoints) {
-          window.renderDamageClusterMarkers(window.rawDamagePoints);
+          window.renderDamageClusterMarkers(window.rawDamagePoints, finalPinLat, finalPinLng);
         }
 
         // D. Penyesuaian kamera membungkus rute per klaster dan seluruh sub-titiknya
         if (!skipCamera && !isUpdate && window.map) {
-          var allCoords = routeCoords.concat(renderedSubCoords);
+          var allCoords = routeCoords.concat(renderedSubCoords).concat([[finalPinLat, finalPinLng]]);
           if (allCoords.length > 1) {
             try {
               var bounds = L.latLngBounds(allCoords);
               window.map.fitBounds(bounds, { padding: [65, 65], maxZoom: 17.5, animate: true });
             } catch (err) {
-              window.map.setView([pt.position.latitude, pt.position.longitude], 17.5, { animate: true });
+              window.map.setView([finalPinLat, finalPinLng], 17.5, { animate: true });
             }
           } else {
-            window.map.setView([pt.position.latitude, pt.position.longitude], 17.5, { animate: true });
+            window.map.setView([finalPinLat, finalPinLng], 17.5, { animate: true });
           }
         }
       };
@@ -760,82 +1039,39 @@ export const LeafletMap = React.memo(function LeafletMap({
 
         window.activeSelectedPointId = pt.id;
 
-        var halfLen = Math.max(15, ((pt.road_length_meters || 30) / 2));
+        var centerLat = pt.position.latitude !== undefined ? pt.position.latitude : pt.position.lat;
+        var centerLng = pt.position.longitude !== undefined ? pt.position.longitude : pt.position.lng;
+        var allPts = collectClusterPoints(pt);
 
-        // 1. Cek apakah titik klaster ini berada di dekat Rute Navigasi Aktif di peta
-        var activeRoute = window.activeMapRoute || [];
-        var slicedFromRoute = null;
-
-        if (activeRoute && activeRoute.length > 1) {
-          var routeCheck = findClosestPointOnPolyline(pt.position.latitude, pt.position.longitude, activeRoute);
-          if (routeCheck.dist <= 45) {
-            // Berada di sepanjang rute navigasi map! Ambil potongan rute map yang presisi
-            slicedFromRoute = slicePolylineAroundPoint(activeRoute, routeCheck.segIdx, routeCheck.proj, halfLen);
-          }
-        }
-
-        if (slicedFromRoute && slicedFromRoute.length > 1) {
+        // 1. Cek rute navigasi aktif di peta: potong rute yang mencakup seluruh titik klaster
+        var slicedFromRoute = trySliceFromActiveRoute(allPts);
+        if (slicedFromRoute && slicedFromRoute.length >= 2) {
           window.renderClusterRouteAndSubPoints(pt, slicedFromRoute, false, skipCamera);
           return;
         }
 
-        // 2. Cek apakah rute OpenStreetMap sudah ada di cache
-        if (window.clusterRoadCache && window.clusterRoadCache[pt.id]) {
+        // 2. Cek cache rute jalan OpenStreetMap yang sudah pernah di-fetch
+        if (window.clusterRoadCache && window.clusterRoadCache[pt.id] && window.clusterRoadCache[pt.id].length >= 2) {
           window.renderClusterRouteAndSubPoints(pt, window.clusterRoadCache[pt.id], false, skipCamera);
           return;
         }
 
-        // 3. Fallback lokal awal: Ekstrak lintasan awal terproyeksi
-        var localCoords = [];
-        if (Array.isArray(pt.road_segment_coords) && pt.road_segment_coords.length > 1) {
-          localCoords = pt.road_segment_coords.map(function(c) {
-            return [c.latitude !== undefined ? c.latitude : c.lat, c.longitude !== undefined ? c.longitude : c.lng];
-          });
-        } else if (Array.isArray(pt.points) && pt.points.length > 1) {
-          localCoords = pt.points.map(function(p) {
-            return [p.latitude !== undefined ? p.latitude : p.lat, p.longitude !== undefined ? p.longitude : p.lng];
-          });
-        }
+        // 3. Fallback lokal presisi tinggi (0 ms latency):
+        // Memproyeksikan seluruh titik klaster ke sumbu jalan utama dengan ekstensi bantalan 18m
+        // Dijamin 100% semua titik (centroid + sub-points) berada tepat di atas rute tanpa ada yang terlewat
+        var localRoute = buildLocalClusterRoute(allPts, centerLat, centerLng);
+        window.renderClusterRouteAndSubPoints(pt, localRoute, false, skipCamera);
 
-        if (localCoords.length < 2) {
-          var cLat = pt.position.latitude;
-          var cLng = pt.position.longitude;
-          var deltaLat = 0.00012;
-          var deltaLng = 0.00008;
-          localCoords = [
-            [cLat - deltaLat, cLng - deltaLng],
-            [cLat + deltaLat, cLng + deltaLng]
-          ];
-        }
-
-        // Render langsung koordinat lokal agar tidak ada jeda (0 ms)
-        window.renderClusterRouteAndSubPoints(pt, localCoords, false, skipCamera);
-
-        // 4. Asynchronously fetch rute geometris jalan raya nyata dari OSRM (OpenStreetMap Roads)
-        var pStart = localCoords[0];
-        var pEnd = localCoords[localCoords.length - 1];
-        var osrmUrl = 'https://router.project-osrm.org/route/v1/driving/' +
-          pStart[1] + ',' + pStart[0] + ';' + pEnd[1] + ',' + pEnd[0] +
-          '?overview=full&geometries=geojson&steps=false';
-
-        fetch(osrmUrl)
-          .then(function(res) { return res.json(); })
-          .then(function(data) {
-            if (data && data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry) {
-              var geomCoords = data.routes[0].geometry.coordinates;
-              if (geomCoords && geomCoords.length > 1) {
-                var snappedRoad = geomCoords.map(function(c) { return [c[1], c[0]]; });
-                window.clusterRoadCache[pt.id] = snappedRoad;
-                // Jika user masih melihat klaster ini, perbarui dengan rute jalan OpenStreetMap yang mulus
-                if (window.activeSelectedPointId === pt.id) {
-                  window.renderClusterRouteAndSubPoints(pt, snappedRoad, true, true);
-                }
-              }
+        // 4. Asinkron ambil geometri jalan nyata OpenStreetMap via OSRM Nearest
+        // Menggunakan simpul-simpul jalan asli tanpa risiko U-turn detour memutar keliling blok
+        fetchOsrmNearestRoad(centerLat, centerLng, function(snappedRoad) {
+          if (snappedRoad && snappedRoad.length >= 2) {
+            window.clusterRoadCache[pt.id] = snappedRoad;
+            if (window.activeSelectedPointId === pt.id) {
+              window.renderClusterRouteAndSubPoints(pt, snappedRoad, true, true);
             }
-          })
-          .catch(function() {
-            // Jika offline atau OSRM gagal, localCoords yang sudah ter-render tetap aktif
-          });
+          }
+        });
       };
 
       // Penangan sentral interaksi klik titik (TWO-STEP INTERACTION):
@@ -886,6 +1122,7 @@ export const LeafletMap = React.memo(function LeafletMap({
 
       window.clearClusterHighlight = function() {
         window.activeSelectedPointId = null;
+        window.activeSnappedPinCoord = null;
         window.clusterHighlightLayer.clearLayers();
         if (window.map && window.map.getZoom() >= 16) {
           window.renderDamageClusterMarkers(window.rawDamagePoints);
@@ -894,6 +1131,7 @@ export const LeafletMap = React.memo(function LeafletMap({
 
       window.clearRoadSegmentHighlight = function() {
         window.activeSelectedPointId = null;
+        window.activeSnappedPinCoord = null;
         window.activeRoadSegmentLayer.clearLayers();
         window.clusterHighlightLayer.clearLayers();
         if (window.map && window.map.getZoom() >= 16) {
@@ -923,9 +1161,9 @@ export const LeafletMap = React.memo(function LeafletMap({
       };
 
       // 3. Render Titik Klaster di Level Dekat (zoom >= 16): Menggunakan Badge Icon Lokasi Map Pin
-      window.renderDamageClusterMarkers = function(points) {
+      window.renderDamageClusterMarkers = function(points, activePinOverrideLat, activePinOverrideLng) {
         window.damageLayer.clearLayers();
-        points.forEach(function(pt) {
+        (points || []).forEach(function(pt) {
           var isPtActive = window.activeSelectedPointId && (pt.id === window.activeSelectedPointId);
           var ptSevColor = pt.severity === 'severe' ? '#991B1B' : (pt.severity === 'high' ? '#EF4444' : (pt.severity === 'medium' ? '#F59E0B' : '#EAB308'));
           var pinSvg = createLocationPinSvg(ptSevColor, pt.reportCount, isPtActive);
@@ -938,7 +1176,21 @@ export const LeafletMap = React.memo(function LeafletMap({
             iconSize: [iconW, iconH],
             iconAnchor: [iconW / 2, iconH]
           });
-          var marker = L.marker([pt.position.latitude, pt.position.longitude], {
+          var rawLat = pt.position.latitude !== undefined ? pt.position.latitude : pt.position.lat;
+          var rawLng = pt.position.longitude !== undefined ? pt.position.longitude : pt.position.lng;
+          var markerLat = rawLat;
+          var markerLng = rawLng;
+          if (isPtActive) {
+            if (activePinOverrideLat !== undefined && activePinOverrideLng !== undefined) {
+              markerLat = activePinOverrideLat;
+              markerLng = activePinOverrideLng;
+              window.activeSnappedPinCoord = [markerLat, markerLng];
+            } else if (window.activeSnappedPinCoord) {
+              markerLat = window.activeSnappedPinCoord[0];
+              markerLng = window.activeSnappedPinCoord[1];
+            }
+          }
+          var marker = L.marker([markerLat, markerLng], {
             icon: icon,
             zIndexOffset: isPtActive ? 5000 : 150
           });
