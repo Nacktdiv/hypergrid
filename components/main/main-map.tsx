@@ -7,6 +7,8 @@ import {
   View,
 } from "react-native";
 import {
+  AlertTriangle,
+  ChevronRight,
   Database,
   Layers,
   MapPin,
@@ -41,14 +43,14 @@ type FilterStatus = "all" | PotholeStatus;
  *   - Menampilkan seluruh klaster PostGIS publik dari database (bukan hanya history user)
  *   - Filter chip status klaster (Semua, Aktif, Terverifikasi, Selesai)
  *   - Multi-Level LOD:
- *     * Level Jauh (zoom < 14): Titik Ringkasan Ruas Jalan Makro (~1 km) + Modal Ringkasan Area
- *     * Level Agak Jauh (14 <= zoom < 16): Heatmap Seruas Jalan Saja
+ *     * Level Jauh (zoom < 16): Titik Ringkasan Ruas Jalan Makro (~1 km) + Modal Ringkasan Area
  *     * Level Dekat (zoom >= 16): Titik-titik Klaster Representatif + Modal Road Damage Details
  */
 export type MainMapProps = {
   vehicleId: VehicleId;
   fullBleed?: boolean;
   showOverlayControls?: boolean;
+  bottomOffset?: number;
   onOpenClusterDetail?: (cluster: PotholeCluster) => void;
   currentCoords?: LatLng | null;
   plannedRoute?: LatLng[];
@@ -58,13 +60,13 @@ export function MainMap({
   vehicleId,
   fullBleed = false,
   showOverlayControls = true,
+  bottomOffset,
   onOpenClusterDetail,
   currentCoords: externalCoords,
   plannedRoute,
 }: MainMapProps) {
   const {
     clusters,
-    heatmap,
     isLoading: isClustersLoading,
     fetchClusters,
   } = usePotholeClusters();
@@ -150,13 +152,12 @@ export function MainMap({
       },
       route: { id: "user-route", coordinates: plannedRoute || [] },
       damagePoints: liveDamagePoints,
-      heatmap: heatmap || [],
       activeClusterId: selectedCluster?.id ?? null,
       activeAreaId: selectedArea?.id ?? null,
       userLocation: baseCenter,
       vehiclePosition: baseCenter,
     };
-  }, [filteredClusters, liveCoords, heatmap, selectedCluster?.id, selectedArea?.id, plannedRoute]);
+  }, [filteredClusters, liveCoords, selectedCluster?.id, selectedArea?.id, plannedRoute]);
 
   // Handler KLIK KEDUA (Re-click pada pin yang sedang aktif) -> Baru buka modal Road Damage Details
   const handleMarkerPress = (point: DamagePoint) => {
@@ -272,7 +273,7 @@ export function MainMap({
               <Database size={12} color="#009EFF" />
               <Text className="font-mono text-[10px] text-slate-700">
                 {clusters.length > 0
-                  ? `DBSCAN: ${filteredClusters.length} Clusters • ${heatmap?.length || 0} Heatpoints`
+                  ? `DBSCAN: ${filteredClusters.length} Road Hazard Clusters`
                   : "No Clusters Nearby"}
               </Text>
             </View>
@@ -355,83 +356,104 @@ export function MainMap({
         </View>
       </Modal>
 
-      {/* FLOATING ROAD SEGMENT CARD: Muncul saat Ruas Panjang Jalan Diklik di Peta */}
-      {selectedArea ? (
-        <View className="absolute bottom-12 inset-x-3 rounded-2xl bg-slate-950/95 border border-slate-700/80 p-3.5 shadow-2xl backdrop-blur-md">
-          <View className="flex-row items-center justify-between pb-1.5 border-b border-slate-800">
-            <View className="flex-row items-center gap-2">
-              <View className="rounded-lg bg-sky-500/20 p-1.5">
-                <Layers size={16} color="#009EFF" />
-              </View>
-              <View>
-                <Text className="font-chivo-bold text-sm text-white">
-                  Ruas Jalan: {selectedArea.roadLengthMeters >= 1000 ? `${(selectedArea.roadLengthMeters / 1000).toFixed(1)} km` : `${selectedArea.roadLengthMeters} m`}
-                </Text>
-                <Text className="font-quicksand text-[10px] text-slate-400">
-                  {selectedArea.clusterCount} Titik Kerusakan • {selectedArea.totalReports} Laporan
-                </Text>
-              </View>
-            </View>
-            <View className="flex-row items-center gap-2">
+      {/* COMPACT ROAD HAZARD CALLOUT (Muncul saat titik atau ruas jalan diklik) */}
+      {selectedArea || selectedCluster ? (
+        <View
+          style={{ bottom: bottomOffset ?? (fullBleed ? 124 : 16) }}
+          className="absolute inset-x-4 z-30"
+        >
+          <View className="flex-row items-center justify-between rounded-2xl border border-slate-200/90 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur-md">
+            {/* Left: Info & Tap Target to open details */}
+            <Touchable
+              onPress={() => {
+                if (selectedCluster) {
+                  setIsClusterModalVisible(true);
+                  onOpenClusterDetail?.(selectedCluster);
+                } else if (selectedArea) {
+                  setIsAreaModalVisible(true);
+                }
+              }}
+              className="flex-1 flex-row items-center gap-2.5 mr-2 active:opacity-75"
+            >
               <View
-                className={`rounded-full px-2 py-0.5 ${
-                  selectedArea.worstSeverity === "severe"
-                    ? "bg-red-900/80 border border-red-500"
-                    : selectedArea.worstSeverity === "high"
-                    ? "bg-red-800/80 border border-red-400"
-                    : selectedArea.worstSeverity === "medium"
-                    ? "bg-amber-800/80 border border-amber-400"
-                    : "bg-yellow-800/80 border border-yellow-400"
+                className={`h-8 w-8 rounded-xl items-center justify-center border ${
+                  (selectedCluster?.severity || selectedArea?.worstSeverity) === "severe"
+                    ? "bg-red-50 border-red-200"
+                    : (selectedCluster?.severity || selectedArea?.worstSeverity) === "high"
+                    ? "bg-rose-50 border-rose-200"
+                    : (selectedCluster?.severity || selectedArea?.worstSeverity) === "medium"
+                    ? "bg-amber-50 border-amber-200"
+                    : "bg-yellow-50 border-yellow-200"
                 }`}
               >
-                <Text className="font-quicksand-bold text-[9px] uppercase text-white">
-                  {selectedArea.worstSeverity}
+                <AlertTriangle
+                  size={15}
+                  color={
+                    (selectedCluster?.severity || selectedArea?.worstSeverity) === "severe"
+                      ? "#991B1B"
+                      : (selectedCluster?.severity || selectedArea?.worstSeverity) === "high"
+                      ? "#EF4444"
+                      : (selectedCluster?.severity || selectedArea?.worstSeverity) === "medium"
+                      ? "#F59E0B"
+                      : "#CA8A04"
+                  }
+                />
+              </View>
+
+              <View className="flex-1">
+                <Text
+                  numberOfLines={1}
+                  className="font-chivo-bold text-xs text-slate-900"
+                >
+                  {selectedArea && selectedArea.clusterCount > 1
+                    ? `Ruas Jalan: ${
+                        selectedArea.roadLengthMeters >= 1000
+                          ? `${(selectedArea.roadLengthMeters / 1000).toFixed(1)} km`
+                          : `${selectedArea.roadLengthMeters} m`
+                      }`
+                    : "Titik Bahaya Jalan"}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  className="font-quicksand text-[11px] text-slate-500"
+                >
+                  {selectedCluster
+                    ? `${selectedCluster.detection_count} Laporan • ${selectedCluster.severity.toUpperCase()}`
+                    : selectedArea
+                    ? `${selectedArea.clusterCount} Titik Kerusakan • ${selectedArea.totalReports} Laporan`
+                    : "Ketuk untuk melihat detail"}
                 </Text>
               </View>
-              <Touchable
-                onPress={() => {
-                  setSelectedArea(null);
-                  setSelectedCluster(null);
-                  setIsAreaModalVisible(false);
-                  setIsClusterModalVisible(false);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Tutup highlight ruas jalan"
-              >
-                <View className="rounded-full bg-slate-800 p-1">
-                  <X size={15} color="#94A3B8" />
-                </View>
-              </Touchable>
-            </View>
-          </View>
+            </Touchable>
 
-          <View className="flex-row items-center justify-between pt-2">
-            <Text className="font-quicksand text-[10px] text-sky-400 flex-1 mr-2">
-              📍 Ketuk pin lokasi di ruas jalan untuk melihat detail kerusakan
-            </Text>
+            {/* Right: Inline Action Button & Close */}
             <View className="flex-row items-center gap-1.5">
               <Touchable
-                onPress={() => setIsAreaModalVisible(true)}
-                className="rounded-xl border border-slate-700 bg-slate-900 px-2.5 py-1.5"
-              >
-                <Text className="font-quicksand-bold text-[10px] text-slate-200">
-                  Rincian
-                </Text>
-              </Touchable>
-              <Touchable
                 onPress={() => {
-                  setFocusCoords({
-                    latitude: selectedArea.center.latitude,
-                    longitude: selectedArea.center.longitude,
-                    zoom: 17.5,
-                  });
+                  if (selectedCluster) {
+                    setIsClusterModalVisible(true);
+                    onOpenClusterDetail?.(selectedCluster);
+                  } else if (selectedArea) {
+                    setIsAreaModalVisible(true);
+                  }
                 }}
-                className="flex-row items-center gap-1 rounded-xl bg-custom-primary px-3 py-1.5"
+                className="flex-row items-center gap-1 rounded-xl bg-custom-primary px-3 py-1.5 shadow-xs active:opacity-90"
+                accessibilityRole="button"
+                accessibilityLabel="Lihat detail kerusakan jalan"
               >
-                <ZoomIn size={12} color="#ffffff" />
-                <Text className="font-quicksand-bold text-[10px] text-white">
-                  Perbesar
+                <Text className="font-quicksand-bold text-[11px] text-white">
+                  Detail
                 </Text>
+                <ChevronRight size={13} color="#ffffff" />
+              </Touchable>
+
+              <Touchable
+                onPress={handleClearSelection}
+                className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+                accessibilityRole="button"
+                accessibilityLabel="Tutup informasi"
+              >
+                <X size={13} color="#64748B" />
               </Touchable>
             </View>
           </View>
