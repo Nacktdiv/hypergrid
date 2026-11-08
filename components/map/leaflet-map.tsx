@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import React, { useMemo, useRef, useEffect, useState } from "react";
+import { StyleSheet, View, ActivityIndicator } from "react-native";
 import { WebView } from "react-native-webview";
 import type { AreaSummary, DamagePoint, MapData } from "./map-data";
 import { VEHICLE_MARKER_IMAGES } from "./vehicle-assets-base64";
@@ -13,8 +13,12 @@ export type LeafletMapProps = {
   focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
   /** Callback saat titik kerusakan ditekan */
   onDamagePress?: (point: DamagePoint) => void;
-  /** Callback saat titik ringkasan area makro (~1 km) ditekan */
+  /** Callback saat titik kerusakan ditekan PERTAMA KALI (fokus & area panjang jalan, tanpa modal) */
+  onPointSelected?: (point: DamagePoint, area?: AreaSummary) => void;
+  /** Callback saat titik ringkasan ruas jalan ditekan */
   onAreaSummaryPress?: (area: AreaSummary) => void;
+  /** Callback saat pengguna mengetuk area kosong peta (reset pilihan) */
+  onClearSelection?: () => void;
 };
 
 const WebViewComponent = WebView as any;
@@ -25,14 +29,15 @@ export const LeafletMap = React.memo(function LeafletMap({
   interactive = true,
   focusCoords,
   onDamagePress,
+  onPointSelected,
   onAreaSummaryPress,
+  onClearSelection,
 }: LeafletMapProps) {
   const webViewRef = useRef<any>(null);
   const isMapLoaded = useRef<boolean>(false);
   const lastInjectedPos = useRef<{ lat: number; lng: number } | null>(null);
   const lastRouteLengthRef = useRef<number>(0);
   const lastDamageJsonRef = useRef<string>("");
-  const lastHeatmapJsonRef = useRef<string>("");
   const lastActiveClusterIdRef = useRef<string | null>(null);
 
   // Simpan data awal saat pertama kali mount
@@ -40,14 +45,14 @@ export const LeafletMap = React.memo(function LeafletMap({
 
   // Buat HTML Leaflet sekali dengan titik awal nyata
   const htmlContent = useMemo(() => {
-    const { camera, route, damagePoints, vehiclePosition, heatmap } =
+    const { camera, route, damagePoints, vehiclePosition } =
       initialData;
     const centerLat = camera.latitude;
     const centerLng = camera.longitude;
     const zoomLevel = Math.max(12, Math.min(18, Math.round(camera.zoom)));
 
     const routeCoords = JSON.stringify(
-      route.coordinates.map((c) => [c.latitude, c.longitude]),
+      route.coordinates.map((c) => [c.latitude, c.longitude])
     );
     const damageData = JSON.stringify(damagePoints);
     const vehicleCoord = JSON.stringify([
@@ -63,7 +68,6 @@ export const LeafletMap = React.memo(function LeafletMap({
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #map { height: 100%; width: 100%; background: #f8fafc; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -122,29 +126,25 @@ export const LeafletMap = React.memo(function LeafletMap({
       display: flex;
       align-items: center;
       justify-content: center;
-      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.45));
+      filter: drop-shadow(0 3px 5px rgba(15, 23, 42, 0.35));
       cursor: pointer;
-      transition: transform 0.15s ease;
+      transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
       user-select: none;
     }
     .location-pin-marker:active {
-      transform: scale(1.22) translateY(-2px);
+      transform: scale(1.15) translateY(-2px);
     }
-
-    .road-corridor-glow {
-      animation: pulseCorridor 2.5s infinite ease-in-out;
-    }
-    @keyframes pulseCorridor {
-      0% { opacity: 0.48; }
-      50% { opacity: 0.20; }
-      100% { opacity: 0.48; }
+    .location-pin-marker.is-active {
+      transform: scale(1.22) translateY(-3px);
+      filter: drop-shadow(0 6px 12px rgba(15, 23, 42, 0.5));
+      z-index: 9999 !important;
     }
 
     .user-marker {
       width: 20px !important;
       height: 20px !important;
       border-radius: 50%;
-      background-color: #0040FF;
+      background-color: #009EFF;
       border: 3px solid #ffffff;
       box-shadow: 0 2px 6px rgba(0,0,0,0.35);
     }
@@ -168,32 +168,67 @@ export const LeafletMap = React.memo(function LeafletMap({
       font-size: 9px !important;
       background: rgba(255,255,255,0.7) !important;
     }
+    /* 3. Sub-detection marker: Modern, minimal, pulsating pip */
+    .sub-detection-marker {
+      position: relative;
+      width: 22px !important;
+      height: 22px !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    .sub-detection-pulse {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      opacity: 0.3;
+      transform: scale(0.9);
+      animation: subPointPulse 2.4s ease-out infinite;
+    }
+    @keyframes subPointPulse {
+      0% { transform: scale(0.8); opacity: 0.45; }
+      50% { transform: scale(1.3); opacity: 0.12; }
+      100% { transform: scale(0.8); opacity: 0.45; }
+    }
+    .sub-detection-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      border: 2px solid #ffffff;
+      box-shadow: 0 2px 5px rgba(15, 23, 42, 0.4);
+      z-index: 2;
+      transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .sub-detection-marker:active .sub-detection-dot,
+    .sub-detection-marker:hover .sub-detection-dot {
+      transform: scale(1.4);
+    }
+    .subpoint-tooltip {
+      background: rgba(15, 23, 42, 0.94) !important;
+      backdrop-filter: blur(8px) !important;
+      -webkit-backdrop-filter: blur(8px) !important;
+      color: #ffffff !important;
+      border: 1px solid rgba(255, 255, 255, 0.2) !important;
+      border-radius: 9999px !important;
+      font-size: 11px !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+      font-weight: 700 !important;
+      padding: 3px 9px !important;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
+      white-space: nowrap !important;
+    }
+    .subpoint-tooltip::before {
+      border-top-color: rgba(15, 23, 42, 0.94) !important;
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <script>
     try {
-      // Inisialisasi fallback L.heatLayer jika CDN gagal dimuat saat offline
-      if (typeof L.heatLayer !== 'function') {
-        L.heatLayer = function(latlngs, opts) {
-          var layer = L.layerGroup();
-          var radius = (opts && opts.radius) || 20;
-          latlngs.forEach(function(p) {
-            var lat = p[0], lng = p[1], intensity = p[2] || 0.6;
-            var col = intensity > 0.8 ? '#EF4444' : (intensity > 0.5 ? '#F59E0B' : '#0040FF');
-            var c = L.circleMarker([lat, lng], {
-              radius: radius * 0.4,
-              color: 'transparent',
-              fillColor: col,
-              fillOpacity: Math.min(0.7, intensity * 0.6)
-            });
-            layer.addLayer(c);
-          });
-          return layer;
-        };
-      }
-
       window.map = L.map('map', {
         center: [${centerLat}, ${centerLng}],
         zoom: ${zoomLevel},
@@ -214,9 +249,11 @@ export const LeafletMap = React.memo(function LeafletMap({
       // Route Polyline
       var initialRoute = ${routeCoords};
       window.routePolyline = null;
+      window.activeMapRoute = (initialRoute && initialRoute.length > 0) ? initialRoute : [];
+      window.clusterRoadCache = {};
       if (initialRoute && initialRoute.length > 0) {
         window.routePolyline = L.polyline(initialRoute, {
-          color: '#0040FF',
+          color: '#009EFF',
           weight: 5,
           opacity: 0.85,
           lineJoin: 'round'
@@ -229,18 +266,16 @@ export const LeafletMap = React.memo(function LeafletMap({
       window.map.getPane('vehicleTopPane').style.pointerEvents = 'none';
 
       // 2. State & Layer Groups untuk Multi-Level LOD
-      // LOD 1 (Jauh, zoom < 15): Ruas Panjang Jalan & Badge Makro (Angka & Warna)
-      // LOD 2 (Agak Jauh, 15 <= zoom < 17): Heatmap Seruas Jalan Saja
-      // LOD 3 (Dekat, zoom >= 17): Seluruh Titik Kerusakan dengan Badge Icon Lokasi
+      // LOD 1 (Jauh, zoom < 16): Ruas Panjang Jalan & Badge Makro (Angka & Warna)
+      // LOD 2 (Dekat, zoom >= 16): Seluruh Titik Kerusakan dengan Badge Icon Lokasi
       window.areaSummaryLayer = L.layerGroup().addTo(window.map);
       window.activeRoadSegmentLayer = L.layerGroup().addTo(window.map);
       window.clusterHighlightLayer = L.layerGroup().addTo(window.map);
       window.damageLayer = L.layerGroup().addTo(window.map);
-      window.heatLayer = null;
 
       window.rawDamagePoints = ${damageData} || [];
-      window.rawHeatData = ${JSON.stringify(heatmap || [])};
       window.activeRoadSegments = [];
+      window.activeSnappedPinCoord = null;
 
       function haversineM(lat1, lon1, lat2, lon2) {
         var R = 6371000;
@@ -252,14 +287,379 @@ export const LeafletMap = React.memo(function LeafletMap({
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       }
 
+      function distanceToSegmentMeters(lat, lng, aLat, aLng, bLat, bLng) {
+        var midLatRad = ((aLat + bLat) / 2) * (Math.PI / 180);
+        var cosLat = Math.cos(midLatRad);
+        var DEG_TO_M = 111320;
+        var ax = aLng * DEG_TO_M * cosLat;
+        var ay = aLat * DEG_TO_M;
+        var bx = bLng * DEG_TO_M * cosLat;
+        var by = bLat * DEG_TO_M;
+        var px = lng * DEG_TO_M * cosLat;
+        var py = lat * DEG_TO_M;
+
+        var dx = bx - ax;
+        var dy = by - ay;
+        var lenSq = dx * dx + dy * dy;
+        if (lenSq < 1e-6) {
+          var diffX = px - ax;
+          var diffY = py - ay;
+          return { dist: Math.sqrt(diffX * diffX + diffY * diffY), t: 0, proj: [aLat, aLng] };
+        }
+
+        var t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+        var projX = ax + t * dx;
+        var projY = ay + t * dy;
+        var distX = px - projX;
+        var distY = py - projY;
+        var projLat = projY / DEG_TO_M;
+        var projLng = projX / (DEG_TO_M * cosLat);
+        return { dist: Math.sqrt(distX * distX + distY * distY), t: t, proj: [projLat, projLng] };
+      }
+
+      function findClosestPointOnPolyline(lat, lng, polyline) {
+        if (!polyline || polyline.length < 2) return { dist: Infinity, segIdx: 0, proj: [lat, lng], t: 0 };
+        var bestDist = Infinity;
+        var bestIdx = 0;
+        var bestProj = [lat, lng];
+        var bestT = 0;
+
+        for (var i = 0; i < polyline.length - 1; i++) {
+          var a = polyline[i];
+          var b = polyline[i + 1];
+          var aLat = a.lat !== undefined ? a.lat : a[0];
+          var aLng = a.lng !== undefined ? a.lng : a[1];
+          var bLat = b.lat !== undefined ? b.lat : b[0];
+          var bLng = b.lng !== undefined ? b.lng : b[1];
+
+          var res = distanceToSegmentMeters(lat, lng, aLat, aLng, bLat, bLng);
+          if (res.dist < bestDist) {
+            bestDist = res.dist;
+            bestIdx = i;
+            bestProj = res.proj;
+            bestT = res.t;
+          }
+        }
+        return { dist: bestDist, segIdx: bestIdx, proj: bestProj, t: bestT };
+      }
+
+      function slicePolylineAroundPoint(polyline, segIdx, projPt, halfLenMeters) {
+        var backwardCoords = [projPt];
+        var accumulatedBack = 0;
+        var currBack = projPt;
+        for (var i = segIdx; i >= 0; i--) {
+          var rawV = polyline[i];
+          var v = [rawV.lat !== undefined ? rawV.lat : rawV[0], rawV.lng !== undefined ? rawV.lng : rawV[1]];
+          var d = haversineM(currBack[0], currBack[1], v[0], v[1]);
+          if (accumulatedBack + d >= halfLenMeters) {
+            var remain = halfLenMeters - accumulatedBack;
+            var frac = d > 0 ? (remain / d) : 1;
+            var cutLat = currBack[0] + frac * (v[0] - currBack[0]);
+            var cutLng = currBack[1] + frac * (v[1] - currBack[1]);
+            backwardCoords.push([cutLat, cutLng]);
+            break;
+          } else {
+            accumulatedBack += d;
+            backwardCoords.push(v);
+            currBack = v;
+          }
+        }
+
+        backwardCoords.reverse();
+
+        var forwardCoords = [];
+        var accumulatedFwd = 0;
+        var currFwd = projPt;
+        for (var j = segIdx + 1; j < polyline.length; j++) {
+          var rawW = polyline[j];
+          var w = [rawW.lat !== undefined ? rawW.lat : rawW[0], rawW.lng !== undefined ? rawW.lng : rawW[1]];
+          var df = haversineM(currFwd[0], currFwd[1], w[0], w[1]);
+          if (accumulatedFwd + df >= halfLenMeters) {
+            var remFwd = halfLenMeters - accumulatedFwd;
+            var fracFwd = df > 0 ? (remFwd / df) : 1;
+            var cutFwdLat = currFwd[0] + fracFwd * (w[0] - currFwd[0]);
+            var cutFwdLng = currFwd[1] + fracFwd * (w[1] - currFwd[1]);
+            forwardCoords.push([cutFwdLat, cutFwdLng]);
+            break;
+          } else {
+            accumulatedFwd += df;
+            forwardCoords.push(w);
+            currFwd = w;
+          }
+        }
+
+        return backwardCoords.concat(forwardCoords);
+      }
+
+      function slicePolylineBetweenSegments(polyline, minIdx, maxIdx, padMeters) {
+        if (!polyline || polyline.length < 2) return [];
+        var pad = padMeters || 16;
+        var startIdx = Math.max(0, Math.min(minIdx, maxIdx));
+        var endIdx = Math.min(polyline.length - 1, Math.max(minIdx, maxIdx));
+
+        var pStart = polyline[startIdx];
+        var startLat = pStart.lat !== undefined ? pStart.lat : pStart[0];
+        var startLng = pStart.lng !== undefined ? pStart.lng : pStart[1];
+        var backCoords = [[startLat, startLng]];
+        var accBack = 0;
+        var currBack = [startLat, startLng];
+
+        for (var i = startIdx - 1; i >= 0; i--) {
+          var rawV = polyline[i];
+          var vLat = rawV.lat !== undefined ? rawV.lat : rawV[0];
+          var vLng = rawV.lng !== undefined ? rawV.lng : rawV[1];
+          var d = haversineM(currBack[0], currBack[1], vLat, vLng);
+          if (accBack + d >= pad) {
+            var rem = pad - accBack;
+            var frac = d > 0 ? (rem / d) : 1;
+            var cutLat = currBack[0] + frac * (vLat - currBack[0]);
+            var cutLng = currBack[1] + frac * (vLng - currBack[1]);
+            backCoords.push([cutLat, cutLng]);
+            break;
+          } else {
+            accBack += d;
+            backCoords.push([vLat, vLng]);
+            currBack = [vLat, vLng];
+          }
+        }
+        backCoords.reverse();
+
+        var midCoords = [];
+        for (var k = startIdx; k <= Math.min(endIdx + 1, polyline.length - 1); k++) {
+          var rawM = polyline[k];
+          midCoords.push([rawM.lat !== undefined ? rawM.lat : rawM[0], rawM.lng !== undefined ? rawM.lng : rawM[1]]);
+        }
+
+        var fwdStartIdx = Math.min(endIdx + 1, polyline.length - 1);
+        var pFwdStart = polyline[fwdStartIdx];
+        var fwdStartLat = pFwdStart.lat !== undefined ? pFwdStart.lat : pFwdStart[0];
+        var fwdStartLng = pFwdStart.lng !== undefined ? pFwdStart.lng : pFwdStart[1];
+        var fwdCoords = [];
+        var accFwd = 0;
+        var currFwd = [fwdStartLat, fwdStartLng];
+
+        for (var j = fwdStartIdx + 1; j < polyline.length; j++) {
+          var rawW = polyline[j];
+          var wLat = rawW.lat !== undefined ? rawW.lat : rawW[0];
+          var wLng = rawW.lng !== undefined ? rawW.lng : rawW[1];
+          var df = haversineM(currFwd[0], currFwd[1], wLat, wLng);
+          if (accFwd + df >= pad) {
+            var remF = pad - accFwd;
+            var fracF = df > 0 ? (remF / df) : 1;
+            var cutFLat = currFwd[0] + fracF * (wLat - currFwd[0]);
+            var cutFLng = currFwd[1] + fracF * (wLng - currFwd[1]);
+            fwdCoords.push([cutFLat, cutFLng]);
+            break;
+          } else {
+            accFwd += df;
+            fwdCoords.push([wLat, wLng]);
+            currFwd = [wLat, wLng];
+          }
+        }
+
+        var combined = backCoords.concat(midCoords).concat(fwdCoords);
+        var clean = [];
+        for (var c = 0; c < combined.length; c++) {
+          if (c === 0 || (Math.abs(combined[c][0] - combined[c - 1][0]) > 1e-6 || Math.abs(combined[c][1] - combined[c - 1][1]) > 1e-6)) {
+            clean.push(combined[c]);
+          }
+        }
+        return clean.length >= 2 ? clean : combined;
+      }
+
+      function collectClusterPoints(pt) {
+        var pts = [];
+        if (pt && pt.position) {
+          var pLat = pt.position.latitude !== undefined ? pt.position.latitude : pt.position.lat;
+          var pLng = pt.position.longitude !== undefined ? pt.position.longitude : pt.position.lng;
+          if (pLat != null && pLng != null) pts.push([pLat, pLng]);
+        }
+        if (pt && Array.isArray(pt.points)) {
+          pt.points.forEach(function(p) {
+            var lat = p.latitude !== undefined ? p.latitude : p.lat;
+            var lng = p.longitude !== undefined ? p.longitude : p.lng;
+            if (lat != null && lng != null) pts.push([lat, lng]);
+          });
+        }
+        if (pt && Array.isArray(pt.road_segment_coords)) {
+          pt.road_segment_coords.forEach(function(c) {
+            var lat = c.latitude !== undefined ? c.latitude : c.lat;
+            var lng = c.longitude !== undefined ? c.longitude : c.lng;
+            if (lat != null && lng != null) pts.push([lat, lng]);
+          });
+        }
+        return pts;
+      }
+
+      function trySliceFromActiveRoute(allPts) {
+        var activeRoute = window.activeMapRoute;
+        if (!activeRoute || activeRoute.length < 2 || !allPts || allPts.length === 0) return null;
+
+        var matchedSegIndices = [];
+        for (var i = 0; i < allPts.length; i++) {
+          var check = findClosestPointOnPolyline(allPts[i][0], allPts[i][1], activeRoute);
+          if (check.dist <= 60) {
+            matchedSegIndices.push(check.segIdx);
+          }
+        }
+
+        if (matchedSegIndices.length === 0) return null;
+
+        var minIdx = Math.min.apply(null, matchedSegIndices);
+        var maxIdx = Math.max.apply(null, matchedSegIndices);
+        var sliced = slicePolylineBetweenSegments(activeRoute, minIdx, maxIdx, 22);
+        return (sliced && sliced.length >= 2) ? sliced : null;
+      }
+
+      function buildLocalClusterRoute(allPts, centerLat, centerLng) {
+        var lat0 = centerLat;
+        var lng0 = centerLng;
+        if (!allPts || allPts.length === 0) {
+          return [
+            [lat0 - 0.00015, lng0],
+            [lat0 + 0.00015, lng0]
+          ];
+        }
+
+        var cosLat = Math.cos(lat0 * Math.PI / 180);
+        var DEG_TO_M = 111320;
+
+        var localXY = allPts.map(function(p) {
+          return {
+            x: (p[1] - lng0) * DEG_TO_M * cosLat,
+            y: (p[0] - lat0) * DEG_TO_M,
+            orig: p
+          };
+        });
+
+        var ux = 1, uy = 0;
+        var maxDistSq = 0;
+
+        if (localXY.length >= 2) {
+          for (var i = 0; i < localXY.length; i++) {
+            for (var j = i + 1; j < localXY.length; j++) {
+              var dx = localXY[j].x - localXY[i].x;
+              var dy = localXY[j].y - localXY[i].y;
+              var dSq = dx * dx + dy * dy;
+              if (dSq > maxDistSq) {
+                maxDistSq = dSq;
+                var len = Math.sqrt(dSq);
+                if (len > 0.5) {
+                  ux = dx / len;
+                  uy = dy / len;
+                }
+              }
+            }
+          }
+        }
+
+        if (maxDistSq < 4) {
+          ux = 0.894;
+          uy = 0.447;
+        }
+
+        var projections = localXY.map(function(pt) {
+          var t = pt.x * ux + pt.y * uy;
+          return { t: t, pt: pt };
+        });
+
+        var minT = Infinity;
+        var maxT = -Infinity;
+        projections.forEach(function(p) {
+          if (p.t < minT) minT = p.t;
+          if (p.t > maxT) maxT = p.t;
+        });
+
+        var pad = 18;
+        var startT = minT - pad;
+        var endT = maxT + pad;
+
+        var tValues = [startT];
+        projections.sort(function(a, b) { return a.t - b.t; });
+        projections.forEach(function(p) {
+          if (Math.abs(p.t - tValues[tValues.length - 1]) >= 1.5) {
+            tValues.push(p.t);
+          }
+        });
+        tValues.push(endT);
+
+        var routeResult = tValues.map(function(t) {
+          var rx = t * ux;
+          var ry = t * uy;
+          var rLat = lat0 + (ry / DEG_TO_M);
+          var rLng = lng0 + (rx / (DEG_TO_M * cosLat));
+          return [rLat, rLng];
+        });
+
+        return routeResult.length >= 2 ? routeResult : [
+          [lat0 - 0.00015, lng0],
+          [lat0 + 0.00015, lng0]
+        ];
+      }
+
+      function fetchOsrmNearestRoad(lat, lng, callback) {
+        var url = 'https://router.project-osrm.org/nearest/v1/driving/' + lng + ',' + lat + '?number=8';
+        fetch(url)
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data && data.code === 'Ok' && Array.isArray(data.waypoints) && data.waypoints.length > 0) {
+              var mainName = data.waypoints[0].name || '';
+              var validWaypoints = data.waypoints.filter(function(w) {
+                return (mainName && w.name === mainName) || (w.distance && w.distance <= 40);
+              });
+              if (validWaypoints.length >= 2) {
+                var nodes = validWaypoints.map(function(w) {
+                  return [w.location[1], w.location[0]];
+                });
+
+                var bestA = 0, bestB = 1, maxD = -1;
+                for (var i = 0; i < nodes.length; i++) {
+                  for (var j = i + 1; j < nodes.length; j++) {
+                    var d = haversineM(nodes[i][0], nodes[i][1], nodes[j][0], nodes[j][1]);
+                    if (d > maxD) {
+                      maxD = d;
+                      bestA = i;
+                      bestB = j;
+                    }
+                  }
+                }
+
+                var unvisited = nodes.slice();
+                var startNode = unvisited.splice(bestA, 1)[0];
+                var chained = [startNode];
+                while (unvisited.length > 0) {
+                  var tail = chained[chained.length - 1];
+                  var nextIdx = 0;
+                  var nextDist = Infinity;
+                  for (var k = 0; k < unvisited.length; k++) {
+                    var dk = haversineM(tail[0], tail[1], unvisited[k][0], unvisited[k][1]);
+                    if (dk < nextDist) {
+                      nextDist = dk;
+                      nextIdx = k;
+                    }
+                  }
+                  chained.push(unvisited.splice(nextIdx, 1)[0]);
+                }
+
+                if (chained.length >= 2) {
+                  callback(chained);
+                }
+              }
+            }
+          })
+          .catch(function() {});
+      }
+
       // Helper membuat SVG Badge Icon Lokasi (Map Pin)
-      function createLocationPinSvg(sevColor, count) {
+      function createLocationPinSvg(sevColor, count, isActive) {
+        var strokeCol = isActive ? '#FDE047' : '#ffffff';
+        var strokeW = isActive ? '2.8' : '2';
         var innerContent = (count && count > 1)
           ? '<text x="12" y="15" text-anchor="middle" font-size="8.5" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-weight="900" fill="#ffffff">' + count + '</text>'
           : '<circle cx="12" cy="11.5" r="4.2" fill="#ffffff"/>';
 
-        return '<svg width="26" height="34" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">' +
-          '<path d="M12 0C5.372 0 0 5.372 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.372 18.628 0 12 0Z" fill="' + sevColor + '" stroke="#ffffff" stroke-width="2"/>' +
+        return '<svg width="' + (isActive ? 30 : 26) + '" height="' + (isActive ? 38 : 34) + '" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+          '<path d="M12 0C5.372 0 0 5.372 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.372 18.628 0 12 0Z" fill="' + sevColor + '" stroke="' + strokeCol + '" stroke-width="' + strokeW + '"/>' +
           innerContent +
           '</svg>';
       }
@@ -322,9 +722,20 @@ export const LeafletMap = React.memo(function LeafletMap({
           }
 
           if (segPolyline.length === 1) {
-            var sp = segPolyline[0];
-            segPolyline.unshift({ lat: sp.lat - 0.00012, lng: sp.lng });
-            segPolyline.push({ lat: sp.lat + 0.00012, lng: sp.lng });
+            var sCluster = segClusters[0];
+            if (Array.isArray(sCluster.road_segment_coords) && sCluster.road_segment_coords.length > 1) {
+              segPolyline = sCluster.road_segment_coords.map(function(c) {
+                return { lat: c.latitude !== undefined ? c.latitude : c.lat, lng: c.longitude !== undefined ? c.longitude : c.lng };
+              });
+            } else if (Array.isArray(sCluster.points) && sCluster.points.length > 1) {
+              segPolyline = sCluster.points.map(function(p) {
+                return { lat: p.latitude !== undefined ? p.latitude : p.lat, lng: p.longitude !== undefined ? p.longitude : p.lng };
+              });
+            } else {
+              var sAll = collectClusterPoints(sCluster);
+              var sLocal = buildLocalClusterRoute(sAll, sCluster.position.latitude, sCluster.position.longitude);
+              segPolyline = sLocal.map(function(p) { return { lat: p[0], lng: p[1] }; });
+            }
           }
 
           var sLat = 0, sLng = 0, totalRep = 0;
@@ -365,7 +776,7 @@ export const LeafletMap = React.memo(function LeafletMap({
           blur: 6,
           maxZoom: 18,
           minOpacity: 0.35,
-          gradient: { 0.2: '#0040FF', 0.5: '#EAB308', 0.75: '#F59E0B', 1.0: '#EF4444' }
+          gradient: { 0.2: '#009EFF', 0.5: '#EAB308', 0.75: '#F59E0B', 1.0: '#EF4444' }
         });
       };
 
@@ -387,7 +798,8 @@ export const LeafletMap = React.memo(function LeafletMap({
           });
           marker.on('click', function(e) {
             L.DomEvent.stopPropagation(e);
-            window.highlightRoadSegment(area);
+            window.activeSelectedPointId = null;
+            window.highlightRoadSegment(area, null);
             if (window.ReactNativeWebView) {
               window.ReactNativeWebView.postMessage(JSON.stringify({
                 type: 'AREA_SUMMARY_PRESS',
@@ -400,7 +812,7 @@ export const LeafletMap = React.memo(function LeafletMap({
       };
 
       // 2. Tampilkan Area Panjang Jalan dalam Klaster & Titik-Titik Lokasi Kerusakan dengan Badge Icon Lokasi
-      window.highlightRoadSegment = function(area) {
+      window.highlightRoadSegment = function(area, selectedPointId) {
         window.activeRoadSegmentLayer.clearLayers();
         if (!area) return;
 
@@ -410,75 +822,328 @@ export const LeafletMap = React.memo(function LeafletMap({
         if (area.roadPolyline && area.roadPolyline.length > 1) {
           var polyCoords = area.roadPolyline.map(function(p) { return [p.lat || p.latitude, p.lng || p.longitude]; });
 
-          // Garis Koridor Luar Berdenyut (Road corridor glow buffer)
-          var corridorGlow = L.polyline(polyCoords, {
+          // Garis Koridor Luar Halus
+          var corridorHalo = L.polyline(polyCoords, {
             color: sevColor,
-            weight: 14,
-            opacity: 0.42,
+            weight: 8,
+            opacity: 0.28,
             lineCap: 'round',
-            lineJoin: 'round',
-            className: 'road-corridor-glow'
+            lineJoin: 'round'
           });
-          window.activeRoadSegmentLayer.addLayer(corridorGlow);
+          window.activeRoadSegmentLayer.addLayer(corridorHalo);
 
-          // Garis Inti Jalan (Road center track)
+          // Garis Inti Jalan
           var corridorCore = L.polyline(polyCoords, {
             color: sevColor,
-            weight: 4.5,
+            weight: 3.5,
             opacity: 0.95,
-            dashArray: '8, 6',
             lineCap: 'round',
             lineJoin: 'round'
           });
           window.activeRoadSegmentLayer.addLayer(corridorCore);
 
-          try {
-            window.map.fitBounds(corridorGlow.getBounds(), { padding: [45, 45], maxZoom: 16.5, animate: true });
-          } catch(e) {}
+          // Penyesuaian kamera rapi: jika tampilan jauh, sesuaikan batas. Jika sudah dekat, cukup pan mulus ke titik
+          if (window.map.getZoom() < 16) {
+            try {
+              window.map.fitBounds(corridorHalo.getBounds(), { padding: [40, 40], maxZoom: 16.5, animate: true });
+            } catch(e) {}
+          } else if (selectedPointId && area.clusters) {
+            var selPt = area.clusters.find(function(c) { return c.id === selectedPointId; });
+            if (selPt) {
+              window.map.panTo([selPt.position.latitude, selPt.position.longitude], { animate: true, duration: 0.35 });
+            }
+          }
         }
 
-        // B. Tampilkan Titik-Titik Lokasi Kerusakan dengan Badge Bentuk Icon Lokasi (Map Pin SVG)
-        if (area.clusters && area.clusters.length > 0) {
+        // B. Jika zoom < 16 (tampilan makro), tampilkan pin titik di ruas jalan ini agar langsung terlihat dan bisa diklik
+        if (window.map.getZoom() < 16 && area.clusters && area.clusters.length > 0) {
           area.clusters.forEach(function(pt) {
+            var isPtActive = selectedPointId && (pt.id === selectedPointId);
             var ptSevColor = pt.severity === 'severe' ? '#991B1B' : (pt.severity === 'high' ? '#EF4444' : (pt.severity === 'medium' ? '#F59E0B' : '#EAB308'));
-            var pinSvg = createLocationPinSvg(ptSevColor, pt.reportCount);
-            var pinHtml = '<div class="location-pin-marker">' + pinSvg + '</div>';
+            var pinSvg = createLocationPinSvg(ptSevColor, pt.reportCount, isPtActive);
+            var pinHtml = '<div class="location-pin-marker' + (isPtActive ? ' is-active' : '') + '">' + pinSvg + '</div>';
+            var iconW = isPtActive ? 30 : 26;
+            var iconH = isPtActive ? 38 : 34;
             var pinIcon = L.divIcon({
               className: '',
               html: pinHtml,
-              iconSize: [26, 34],
-              iconAnchor: [13, 34]
+              iconSize: [iconW, iconH],
+              iconAnchor: [iconW / 2, iconH]
             });
             var pinMarker = L.marker([pt.position.latitude, pt.position.longitude], {
               icon: pinIcon,
-              zIndexOffset: 300
+              zIndexOffset: isPtActive ? 600 : 300
             });
 
-            // Ketika icon lokasi dipencet lagi: buka modal Road Damage Details!
             pinMarker.on('click', function(e) {
               L.DomEvent.stopPropagation(e);
-              window.highlightCluster(pt);
-              if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                  type: 'DAMAGE_PRESS',
-                  point: pt
-                }));
-              }
+              window.handlePointInteraction(pt, area);
             });
             window.activeRoadSegmentLayer.addLayer(pinMarker);
           });
         }
       };
 
+      // 2b. Render Rute Jalan Klaster dan Titik-Titik Deteksi Sub-Klaster (Modern & Simple)
+      window.renderClusterRouteAndSubPoints = function(pt, routeCoords, isUpdate, skipCamera) {
+        if (!pt || !routeCoords || routeCoords.length < 2) return;
+        window.clusterHighlightLayer.clearLayers();
+
+        var sevColor = pt.severity === 'severe' ? '#EF4444' : (pt.severity === 'high' ? '#F97316' : (pt.severity === 'medium' ? '#F59E0B' : '#EAB308'));
+
+        // A. Dual-layer Road Corridor (Visual modern & simple mengikuti geometri rute jalan):
+        // 1. Underlay Halo Corridor
+        var routeHalo = L.polyline(routeCoords, {
+          color: sevColor,
+          weight: 10,
+          opacity: 0.25,
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false
+        });
+        window.clusterHighlightLayer.addLayer(routeHalo);
+
+        // 2. Centerline Inti Jalan
+        var routeCore = L.polyline(routeCoords, {
+          color: sevColor,
+          weight: 4.5,
+          opacity: 0.95,
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false
+        });
+        window.clusterHighlightLayer.addLayer(routeCore);
+
+        // 3. Terminal Endpoint Pips (Penanda batas awal & akhir zona bahaya yang rapi & minimalis)
+        var startCap = L.circleMarker(routeCoords[0], {
+          radius: 3.5,
+          color: sevColor,
+          weight: 2,
+          fillColor: '#ffffff',
+          fillOpacity: 1.0,
+          interactive: false
+        });
+        window.clusterHighlightLayer.addLayer(startCap);
+
+        var endCap = L.circleMarker(routeCoords[routeCoords.length - 1], {
+          radius: 3.5,
+          color: sevColor,
+          weight: 2,
+          fillColor: '#ffffff',
+          fillOpacity: 1.0,
+          interactive: false
+        });
+        window.clusterHighlightLayer.addLayer(endCap);
+
+        // B. Render Titik-Titik Highlight Sub-Klaster (Tersnap rapi sepanjang garis jalan)
+        var subPoints = (Array.isArray(pt.points) && pt.points.length > 0)
+          ? pt.points
+          : [{ latitude: pt.position.latitude, longitude: pt.position.longitude, intensity: 1.0 }];
+
+        var renderedSubCoords = [];
+
+        subPoints.forEach(function(sp, idx) {
+          var rawLat = sp.latitude !== undefined ? sp.latitude : sp.lat;
+          var rawLng = sp.longitude !== undefined ? sp.longitude : sp.lng;
+          var spIntensity = sp.intensity !== undefined ? sp.intensity : (pt.severity === 'severe' ? 3.5 : (pt.severity === 'high' ? 2.5 : (pt.severity === 'medium' ? 1.5 : 0.8)));
+
+          // Snap sub-point ke sumbu rute jalan jika berada dalam radius 50 meter
+          var snapRes = findClosestPointOnPolyline(rawLat, rawLng, routeCoords);
+          var finalLat = (snapRes.dist <= 50) ? snapRes.proj[0] : rawLat;
+          var finalLng = (snapRes.dist <= 50) ? snapRes.proj[1] : rawLng;
+          renderedSubCoords.push([finalLat, finalLng]);
+
+          // Marker modern minimalis: white ring + colored dot + ambient pulse
+          var subHtml = '<div class="sub-detection-marker">' +
+            '<div class="sub-detection-pulse" style="background-color: ' + sevColor + ';"></div>' +
+            '<div class="sub-detection-dot" style="background-color: ' + sevColor + ';"></div>' +
+            '</div>';
+
+          var subIcon = L.divIcon({
+            className: '',
+            html: subHtml,
+            iconSize: [22, 22],
+            iconAnchor: [11, 11]
+          });
+
+          var subMarker = L.marker([finalLat, finalLng], {
+            icon: subIcon,
+            zIndexOffset: 850 + idx
+          });
+
+          var tooltipText = '<span style="color:' + sevColor + ';font-weight:800;">#' + (idx + 1) + '</span> ' +
+            '<span style="opacity:0.4;margin:0 3px;">•</span> ' +
+            'Guncangan <span style="font-family:monospace;font-weight:700;">' + (Math.round(spIntensity * 10) / 10) + 'g</span>';
+
+          subMarker.bindTooltip(tooltipText, {
+            direction: 'top',
+            offset: [0, -8],
+            className: 'subpoint-tooltip'
+          });
+
+          window.clusterHighlightLayer.addLayer(subMarker);
+        });
+
+        // C. Snap titik lokasi utama klaster (pt.position) tepat ke atas rute jalan
+        var cLat = pt.position.latitude !== undefined ? pt.position.latitude : pt.position.lat;
+        var cLng = pt.position.longitude !== undefined ? pt.position.longitude : pt.position.lng;
+        var snapPin = findClosestPointOnPolyline(cLat, cLng, routeCoords);
+        var finalPinLat = (snapPin.dist <= 50) ? snapPin.proj[0] : cLat;
+        var finalPinLng = (snapPin.dist <= 50) ? snapPin.proj[1] : cLng;
+        window.activeSnappedPinCoord = [finalPinLat, finalPinLng];
+
+        // Update status visual pin pada layer damage / highlight
+        if (window.map && window.map.getZoom() < 16) {
+          var pinSvg = createLocationPinSvg(sevColor, pt.reportCount, true);
+          var pinHtml = '<div class="location-pin-marker is-active">' + pinSvg + '</div>';
+          var pinIcon = L.divIcon({
+            className: '',
+            html: pinHtml,
+            iconSize: [30, 38],
+            iconAnchor: [15, 38]
+          });
+          var pinMarker = L.marker([finalPinLat, finalPinLng], {
+            icon: pinIcon,
+            zIndexOffset: 5000
+          });
+          pinMarker.on('click', function(e) {
+            L.DomEvent.stopPropagation(e);
+            window.handlePointInteraction(pt, null);
+          });
+          window.clusterHighlightLayer.addLayer(pinMarker);
+        } else if (window.rawDamagePoints) {
+          window.renderDamageClusterMarkers(window.rawDamagePoints, finalPinLat, finalPinLng);
+        }
+
+        // D. Penyesuaian kamera membungkus rute per klaster dan seluruh sub-titiknya
+        if (!skipCamera && !isUpdate && window.map) {
+          var allCoords = routeCoords.concat(renderedSubCoords).concat([[finalPinLat, finalPinLng]]);
+          if (allCoords.length > 1) {
+            try {
+              var bounds = L.latLngBounds(allCoords);
+              window.map.fitBounds(bounds, { padding: [65, 65], maxZoom: 17.5, animate: true });
+            } catch (err) {
+              window.map.setView([finalPinLat, finalPinLng], 17.5, { animate: true });
+            }
+          } else {
+            window.map.setView([finalPinLat, finalPinLng], 17.5, { animate: true });
+          }
+        }
+      };
+
+      // 2c. Highlight Rute Per Klaster: Mengikuti Rute Maps (Active Route / OSRM Snapping / Local)
+      window.highlightClusterDetails = function(pt, options) {
+        if (!pt || !pt.position) return;
+        var opts = options || {};
+        var skipCamera = opts.skipCamera || false;
+
+        window.activeSelectedPointId = pt.id;
+
+        var centerLat = pt.position.latitude !== undefined ? pt.position.latitude : pt.position.lat;
+        var centerLng = pt.position.longitude !== undefined ? pt.position.longitude : pt.position.lng;
+        var allPts = collectClusterPoints(pt);
+
+        // 1. Cek rute navigasi aktif di peta: potong rute yang mencakup seluruh titik klaster
+        var slicedFromRoute = trySliceFromActiveRoute(allPts);
+        if (slicedFromRoute && slicedFromRoute.length >= 2) {
+          window.renderClusterRouteAndSubPoints(pt, slicedFromRoute, false, skipCamera);
+          return;
+        }
+
+        // 2. Cek cache rute jalan OpenStreetMap yang sudah pernah di-fetch
+        if (window.clusterRoadCache && window.clusterRoadCache[pt.id] && window.clusterRoadCache[pt.id].length >= 2) {
+          window.renderClusterRouteAndSubPoints(pt, window.clusterRoadCache[pt.id], false, skipCamera);
+          return;
+        }
+
+        // 3. Fallback lokal presisi tinggi (0 ms latency):
+        // Memproyeksikan seluruh titik klaster ke sumbu jalan utama dengan ekstensi bantalan 18m
+        // Dijamin 100% semua titik (centroid + sub-points) berada tepat di atas rute tanpa ada yang terlewat
+        var localRoute = buildLocalClusterRoute(allPts, centerLat, centerLng);
+        window.renderClusterRouteAndSubPoints(pt, localRoute, false, skipCamera);
+
+        // 4. Asinkron ambil geometri jalan nyata OpenStreetMap via OSRM Nearest
+        // Menggunakan simpul-simpul jalan asli tanpa risiko U-turn detour memutar keliling blok
+        fetchOsrmNearestRoad(centerLat, centerLng, function(snappedRoad) {
+          if (snappedRoad && snappedRoad.length >= 2) {
+            window.clusterRoadCache[pt.id] = snappedRoad;
+            if (window.activeSelectedPointId === pt.id) {
+              window.renderClusterRouteAndSubPoints(pt, snappedRoad, true, true);
+            }
+          }
+        });
+      };
+
+      // Penangan sentral interaksi klik titik (TWO-STEP INTERACTION):
+      // - Klik 1: Tampilkan rute per klaster dan titik-titik highlight sub-klasternya (TANPA BUKA MODAL)
+      // - Klik 2 (Klik LAGI pada icon titiknya): BARU BUKA MODAL Road Damage Details!
+      window.handlePointInteraction = function(pt, areaContext) {
+        if (!pt) return;
+
+        // Cek apakah titik ini SUDAH merupakan titik yang aktif
+        if (window.activeSelectedPointId === pt.id) {
+          // KLIK KEDUA: Buka modal Road Damage Details!
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'DAMAGE_PRESS',
+              point: pt
+            }));
+          }
+          return;
+        }
+
+        // KLIK PERTAMA: Simpan titik aktif, render rute per klaster & seluruh titik highlight sub-klaster
+        window.activeSelectedPointId = pt.id;
+
+        // Cari ruas jalan yang menaungi titik ini untuk konteks area (jika ada)
+        var targetArea = areaContext;
+        if (!targetArea && window.activeRoadSegments) {
+          for (var i = 0; i < window.activeRoadSegments.length; i++) {
+            var seg = window.activeRoadSegments[i];
+            if (seg.clusters && seg.clusters.some(function(c) { return c.id === pt.id; })) {
+              targetArea = seg;
+              break;
+            }
+          }
+        }
+
+        // Tampilkan rute per klaster dan titik-titik highlight sub-klasternya
+        window.highlightClusterDetails(pt, { skipCamera: false });
+
+        // Beritahu React Native bahwa titik telah terpilih (Klik 1 - TANPA BUKA MODAL)
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'POINT_SELECTED',
+            point: pt,
+            area: targetArea
+          }));
+        }
+      };
+
+      window.clearClusterHighlight = function() {
+        window.activeSelectedPointId = null;
+        window.activeSnappedPinCoord = null;
+        window.clusterHighlightLayer.clearLayers();
+        if (window.map && window.map.getZoom() >= 16) {
+          window.renderDamageClusterMarkers(window.rawDamagePoints);
+        }
+      };
+
       window.clearRoadSegmentHighlight = function() {
+        window.activeSelectedPointId = null;
+        window.activeSnappedPinCoord = null;
         window.activeRoadSegmentLayer.clearLayers();
+        window.clusterHighlightLayer.clearLayers();
+        if (window.map && window.map.getZoom() >= 16) {
+          window.renderDamageClusterMarkers(window.rawDamagePoints);
+        }
       };
 
       window.selectRoadSegmentById = function(areaId) {
         if (!window.activeRoadSegments) return;
         for (var i = 0; i < window.activeRoadSegments.length; i++) {
           if (window.activeRoadSegments[i].id === areaId) {
-            window.highlightRoadSegment(window.activeRoadSegments[i]);
+            window.highlightRoadSegment(window.activeRoadSegments[i], null);
             break;
           }
         }
@@ -486,109 +1151,79 @@ export const LeafletMap = React.memo(function LeafletMap({
 
       // Highlight 1 Klaster Spesifik Sepanjang Ruas Jalan
       window.highlightCluster = function(pt) {
-        window.clusterHighlightLayer.clearLayers();
-        if (!pt || !pt.position) return;
-
-        var lat = pt.position.latitude;
-        var lng = pt.position.longitude;
-        var sevColor = pt.severity === 'severe' ? '#991B1B' : (pt.severity === 'high' ? '#EF4444' : (pt.severity === 'medium' ? '#F59E0B' : '#EAB308'));
-
-        var segCoords = [];
-        if (pt.road_segment_coords && pt.road_segment_coords.length > 1) {
-          segCoords = pt.road_segment_coords.map(function(c) { return [c.latitude, c.longitude]; });
-        } else if (pt.points && pt.points.length > 1) {
-          segCoords = pt.points.map(function(c) { return [c.latitude, c.longitude]; });
-        } else {
-          segCoords = [
-            [lat - 0.0001, lng],
-            [lat + 0.0001, lng]
-          ];
+        if (!pt || !pt.position) {
+          window.clearClusterHighlight();
+          return;
         }
 
-        var line = L.polyline(segCoords, {
-          color: sevColor,
-          weight: 7,
-          opacity: 0.88,
-          lineCap: 'round',
-          lineJoin: 'round'
-        });
-        window.clusterHighlightLayer.addLayer(line);
-
-        window.map.panTo([lat, lng], { animate: true, duration: 0.5 });
+        var isAlreadySelected = (window.activeSelectedPointId === pt.id);
+        window.highlightClusterDetails(pt, { skipCamera: isAlreadySelected });
       };
 
-      // 3. Render Titik Klaster di Level Dekat (zoom >= 17): Menggunakan Badge Icon Lokasi Map Pin
-      window.renderDamageClusterMarkers = function(points) {
+      // 3. Render Titik Klaster di Level Dekat (zoom >= 16): Menggunakan Badge Icon Lokasi Map Pin
+      window.renderDamageClusterMarkers = function(points, activePinOverrideLat, activePinOverrideLng) {
         window.damageLayer.clearLayers();
-        points.forEach(function(pt) {
+        (points || []).forEach(function(pt) {
+          var isPtActive = window.activeSelectedPointId && (pt.id === window.activeSelectedPointId);
           var ptSevColor = pt.severity === 'severe' ? '#991B1B' : (pt.severity === 'high' ? '#EF4444' : (pt.severity === 'medium' ? '#F59E0B' : '#EAB308'));
-          var pinSvg = createLocationPinSvg(ptSevColor, pt.reportCount);
-          var pinHtml = '<div class="location-pin-marker">' + pinSvg + '</div>';
+          var pinSvg = createLocationPinSvg(ptSevColor, pt.reportCount, isPtActive);
+          var pinHtml = '<div class="location-pin-marker' + (isPtActive ? ' is-active' : '') + '">' + pinSvg + '</div>';
+          var iconW = isPtActive ? 30 : 26;
+          var iconH = isPtActive ? 38 : 34;
           var icon = L.divIcon({
             className: '',
             html: pinHtml,
-            iconSize: [26, 34],
-            iconAnchor: [13, 34]
+            iconSize: [iconW, iconH],
+            iconAnchor: [iconW / 2, iconH]
           });
-          var marker = L.marker([pt.position.latitude, pt.position.longitude], {
+          var rawLat = pt.position.latitude !== undefined ? pt.position.latitude : pt.position.lat;
+          var rawLng = pt.position.longitude !== undefined ? pt.position.longitude : pt.position.lng;
+          var markerLat = rawLat;
+          var markerLng = rawLng;
+          if (isPtActive) {
+            if (activePinOverrideLat !== undefined && activePinOverrideLng !== undefined) {
+              markerLat = activePinOverrideLat;
+              markerLng = activePinOverrideLng;
+              window.activeSnappedPinCoord = [markerLat, markerLng];
+            } else if (window.activeSnappedPinCoord) {
+              markerLat = window.activeSnappedPinCoord[0];
+              markerLng = window.activeSnappedPinCoord[1];
+            }
+          }
+          var marker = L.marker([markerLat, markerLng], {
             icon: icon,
-            zIndexOffset: 150
+            zIndexOffset: isPtActive ? 5000 : 150
           });
           marker.on('click', function(e) {
             L.DomEvent.stopPropagation(e);
-            window.highlightCluster(pt);
-            if (window.ReactNativeWebView) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'DAMAGE_PRESS',
-                point: pt
-              }));
-            }
+            window.handlePointInteraction(pt, null);
           });
           window.damageLayer.addLayer(marker);
         });
       };
 
       // 4. Logika Master Level of Detail (LOD):
-      // - Dekat: zoom >= 17
-      // - Agak Jauh: 15 <= zoom < 17
-      // - Jauh: zoom < 15
+      // - Jauh (zoom < 16): Ruas Panjang Jalan & Badge Makro (Angka & Warna)
+      // - Dekat (zoom >= 16): Titik-titik Lokasi Klaster Kerusakan
       window.updateLOD = function(zoom) {
         var z = zoom !== undefined ? zoom : window.map.getZoom();
 
-        // 1. Tampilan Jauh (zoom < 15): Ruas Panjang Jalan & Badge Makro (Angka & Warna)
-        if (z < 15) {
+        if (z < 16) {
           if (!window.map.hasLayer(window.areaSummaryLayer)) {
             window.areaSummaryLayer.addTo(window.map);
           }
           window.renderAreaSummaryMarkers(window.activeRoadSegments);
-
-          if (window.heatLayer && window.map.hasLayer(window.heatLayer)) {
-            window.map.removeLayer(window.heatLayer);
-          }
           window.damageLayer.clearLayers();
-          window.clusterHighlightLayer.clearLayers();
-        }
-        // 2. Tampilan Agak Jauh (15 <= zoom < 17): Heatmap Seruas Jalan Saja
-        else if (z >= 15 && z < 17) {
+          // Pertahankan highlight rute & sub-titik jika ada klaster yang sedang aktif
+          if (!window.activeSelectedPointId) {
+            window.clusterHighlightLayer.clearLayers();
+          }
+        } else {
           window.areaSummaryLayer.clearLayers();
-          window.damageLayer.clearLayers();
-          window.clusterHighlightLayer.clearLayers();
-
-          if (!window.heatLayer && window.rawHeatData && window.rawHeatData.length > 0) {
-            window.heatLayer = window.createHeatmapLayer(window.rawHeatData);
+          // Pertahankan highlight rute & sub-titik jika ada klaster yang sedang aktif
+          if (!window.activeSelectedPointId) {
+            window.clusterHighlightLayer.clearLayers();
           }
-          if (window.heatLayer && !window.map.hasLayer(window.heatLayer)) {
-            window.heatLayer.addTo(window.map);
-          }
-        }
-        // 3. Tampilan Dekat (zoom >= 17): Titik-titik Lokasi Klaster dengan Badge Icon Lokasi
-        else {
-          window.areaSummaryLayer.clearLayers();
-
-          if (window.heatLayer && window.map.hasLayer(window.heatLayer)) {
-            window.map.removeLayer(window.heatLayer);
-          }
-
           window.renderDamageClusterMarkers(window.rawDamagePoints);
         }
       };
@@ -598,21 +1233,31 @@ export const LeafletMap = React.memo(function LeafletMap({
         window.updateLOD();
       });
 
+      // Handler Background Map Click: Reset seleksi jika pengguna klik area kosong di peta
+      window.map.on('click', function() {
+        window.clearClusterHighlight();
+        window.clearRoadSegmentHighlight();
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'CLEAR_SELECTION'
+          }));
+        }
+      });
+
       // Pembaruan Titik Klaster
       window.renderDamagePoints = function(points) {
         window.rawDamagePoints = points || [];
         window.activeRoadSegments = computeRoadSegmentAreas(window.rawDamagePoints);
         window.updateLOD();
-      };
-
-      // Pembaruan Heatmap
-      window.updateHeatmap = function(heatData) {
-        window.rawHeatData = heatData || [];
-        if (window.heatLayer) {
-          window.map.removeLayer(window.heatLayer);
-          window.heatLayer = null;
+        if (window.activeSelectedPointId) {
+          var stillActive = window.rawDamagePoints.find(function(p) { return p.id === window.activeSelectedPointId; });
+          if (stillActive) {
+            window.highlightClusterDetails(stillActive, { skipCamera: true });
+          } else {
+            window.activeSelectedPointId = null;
+            window.clusterHighlightLayer.clearLayers();
+          }
         }
-        window.updateLOD();
       };
 
       // Navigasi FlyTo
@@ -664,11 +1309,12 @@ export const LeafletMap = React.memo(function LeafletMap({
 
       window.updateRoute = function(coords) {
         var validCoords = (Array.isArray(coords) && coords.length > 0) ? coords : [];
+        window.activeMapRoute = validCoords;
         if (window.routePolyline) {
           window.routePolyline.setLatLngs(validCoords);
         } else if (validCoords.length > 0) {
           window.routePolyline = L.polyline(validCoords, {
-            color: '#0040FF',
+            color: '#009EFF',
             weight: 5,
             opacity: 0.85,
             lineJoin: 'round'
@@ -739,7 +1385,7 @@ export const LeafletMap = React.memo(function LeafletMap({
     lastRouteLengthRef.current = coords.length;
 
     const routeJson = JSON.stringify(
-      coords.map((c) => [c.latitude, c.longitude]),
+      coords.map((c) => [c.latitude, c.longitude])
     );
     const js = `
       if (window.updateRoute) window.updateRoute(${routeJson});
@@ -765,21 +1411,6 @@ export const LeafletMap = React.memo(function LeafletMap({
     webViewRef.current.injectJavaScript(js);
   }, [data.damagePoints]);
 
-  // 4. Pembaruan data heatmap global secara in-place
-  useEffect(() => {
-    if (!isMapLoaded.current || !webViewRef.current) return;
-
-    const heatJson = JSON.stringify(data.heatmap || []);
-    if (heatJson === lastHeatmapJsonRef.current) return;
-    lastHeatmapJsonRef.current = heatJson;
-
-    const js = `
-      if (window.updateHeatmap) window.updateHeatmap(${heatJson});
-      true;
-    `;
-    webViewRef.current.injectJavaScript(js);
-  }, [data.heatmap]);
-
   // 5. Pembaruan highlight cakupan area klaster saat user memilih klaster
   useEffect(() => {
     if (!isMapLoaded.current || !webViewRef.current) return;
@@ -789,7 +1420,7 @@ export const LeafletMap = React.memo(function LeafletMap({
 
     if (data.activeClusterId) {
       const activePt = data.damagePoints.find(
-        (p) => p.id === data.activeClusterId,
+        (p) => p.id === data.activeClusterId
       );
       const activeJson = JSON.stringify(activePt || null);
       const js = `
@@ -844,13 +1475,12 @@ export const LeafletMap = React.memo(function LeafletMap({
       const payload = JSON.parse(event.nativeEvent.data);
       if (payload.type === "MAP_READY") {
         isMapLoaded.current = true;
-        // Langsung sinkronkan posisi, rute, dan heatmap saat ini begitu map siap
+        // Langsung sinkronkan posisi dan rute saat ini begitu map siap
         const lat = data.vehiclePosition.latitude;
         const lng = data.vehiclePosition.longitude;
         const routeJson = JSON.stringify(
-          data.route.coordinates.map((c) => [c.latitude, c.longitude]),
+          data.route.coordinates.map((c) => [c.latitude, c.longitude])
         );
-        const heatJson = JSON.stringify(data.heatmap || []);
         const activePt = data.activeClusterId
           ? data.damagePoints.find((p) => p.id === data.activeClusterId)
           : null;
@@ -859,10 +1489,13 @@ export const LeafletMap = React.memo(function LeafletMap({
         webViewRef.current?.injectJavaScript(`
           if (window.updatePosition) window.updatePosition(${lat}, ${lng});
           if (window.updateRoute) window.updateRoute(${routeJson});
-          if (window.updateHeatmap) window.updateHeatmap(${heatJson});
           if (${activeJson}) window.highlightCluster(${activeJson});
           true;
         `);
+      } else if (payload.type === "POINT_SELECTED" && onPointSelected) {
+        onPointSelected(payload.point, payload.area);
+      } else if (payload.type === "CLEAR_SELECTION" && onClearSelection) {
+        onClearSelection();
       } else if (payload.type === "AREA_SUMMARY_PRESS" && onAreaSummaryPress) {
         onAreaSummaryPress(payload.area);
       } else if (payload.type === "DAMAGE_PRESS" && onDamagePress) {
@@ -886,7 +1519,7 @@ export const LeafletMap = React.memo(function LeafletMap({
         startInLoadingState={true}
         renderLoading={() => (
           <View style={styles.loader}>
-            <ActivityIndicator size="small" color="#0040FF" />
+            <ActivityIndicator size="small" color="#009EFF" />
           </View>
         )}
       />

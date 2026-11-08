@@ -201,6 +201,7 @@ export interface BoundingBoxFilter {
   severity?: PotholeSeverity;
   limit?: number;
   eps?: number;
+  minPts?: number;
   vehicleType?: string;
 }
 

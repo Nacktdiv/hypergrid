@@ -205,6 +205,7 @@ export default function StartScreen() {
           showOverlayControls={false}
           currentCoords={liveCoords}
           plannedRoute={activeRoute?.coordinates}
+          bottomOffset={activeRoute ? 240 : 124}
         />
       </View>
 
