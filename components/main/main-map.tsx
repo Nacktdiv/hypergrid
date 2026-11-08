@@ -125,21 +125,21 @@ export function MainMap({
     const liveDamagePoints: DamagePoint[] = filteredClusters.map((c) => ({
       id: c.id,
       position: {
-        latitude: c.center_latitude,
-        longitude: c.center_longitude,
+        latitude: c.center_latitude ?? (c as any).centerLatitude,
+        longitude: c.center_longitude ?? (c as any).centerLongitude,
       },
       severity: c.severity,
-      reportCount: c.detection_count,
-      radius_meters: c.radius_meters || 18,
-      road_length_meters: c.road_length_meters || 15,
-      road_segment_coords: c.road_segment_coords?.map((p) => ({
-        latitude: p.latitude,
-        longitude: p.longitude,
+      reportCount: c.detection_count ?? (c as any).detectionCount ?? 1,
+      radius_meters: c.radius_meters || (c as any).radiusMeters || 18,
+      road_length_meters: c.road_length_meters || (c as any).roadLengthMeters || 15,
+      road_segment_coords: (c.road_segment_coords || (c as any).roadSegmentCoords)?.map((p: any) => ({
+        latitude: p.latitude ?? p.lat,
+        longitude: p.longitude ?? p.lng,
       })),
-      userCount: c.user_count || 1,
-      points: c.points?.map((p) => ({
-        latitude: p.latitude,
-        longitude: p.longitude,
+      userCount: c.user_count || (c as any).userCount || 1,
+      points: c.points?.map((p: any) => ({
+        latitude: p.latitude ?? p.lat,
+        longitude: p.longitude ?? p.lng,
         intensity: p.intensity,
       })),
     }));
@@ -411,6 +411,8 @@ export function MainMap({
                           ? `${(selectedArea.roadLengthMeters / 1000).toFixed(1)} km`
                           : `${selectedArea.roadLengthMeters} m`
                       }`
+                    : selectedCluster
+                    ? `Klaster Bahaya Jalan (${selectedCluster.road_length_meters ? `${selectedCluster.road_length_meters}m` : 'Area Klaster'})`
                     : "Titik Bahaya Jalan"}
                 </Text>
                 <Text
@@ -418,7 +420,7 @@ export function MainMap({
                   className="font-quicksand text-[11px] text-slate-500"
                 >
                   {selectedCluster
-                    ? `${selectedCluster.detection_count} Laporan • ${selectedCluster.severity.toUpperCase()}`
+                    ? `${selectedCluster.detection_count} Deteksi Sub-Klaster • ${selectedCluster.severity.toUpperCase()}`
                     : selectedArea
                     ? `${selectedArea.clusterCount} Titik Kerusakan • ${selectedArea.totalReports} Laporan`
                     : "Ketuk untuk melihat detail"}

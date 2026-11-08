@@ -168,6 +168,21 @@ export const LeafletMap = React.memo(function LeafletMap({
       font-size: 9px !important;
       background: rgba(255,255,255,0.7) !important;
     }
+    .subpoint-tooltip {
+      background: rgba(15, 23, 42, 0.92) !important;
+      color: #ffffff !important;
+      border: 1px solid rgba(255, 255, 255, 0.25) !important;
+      border-radius: 8px !important;
+      font-size: 11px !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+      font-weight: 700 !important;
+      padding: 4px 8px !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35) !important;
+      white-space: nowrap !important;
+    }
+    .subpoint-tooltip::before {
+      border-top-color: rgba(15, 23, 42, 0.92) !important;
+    }
   </style>
 </head>
 <body>
@@ -421,26 +436,9 @@ export const LeafletMap = React.memo(function LeafletMap({
               window.map.panTo([selPt.position.latitude, selPt.position.longitude], { animate: true, duration: 0.35 });
             }
           }
-        } else if (area.clusters && area.clusters.length === 1) {
-          // Titik tunggal tanpa polyline bentang: gambar radius zona bahaya rapi (halo lingkaran)
-          var singlePt = area.clusters[0];
-          var circleHalo = L.circle([singlePt.position.latitude, singlePt.position.longitude], {
-            radius: singlePt.radius_meters || 16,
-            color: sevColor,
-            weight: 1.8,
-            opacity: 0.7,
-            fillColor: sevColor,
-            fillOpacity: 0.16
-          });
-          window.activeRoadSegmentLayer.addLayer(circleHalo);
-          if (window.map.getZoom() < 16) {
-            window.map.setView([singlePt.position.latitude, singlePt.position.longitude], 16.5, { animate: true });
-          } else {
-            window.map.panTo([singlePt.position.latitude, singlePt.position.longitude], { animate: true, duration: 0.35 });
-          }
         }
 
-        // B. Jika zoom < 16 (tampilan makro), tampilkan pin titik di ruas jalan ini agar langsung terlihat
+        // B. Jika zoom < 16 (tampilan makro), tampilkan pin titik di ruas jalan ini agar langsung terlihat dan bisa diklik
         if (window.map.getZoom() < 16 && area.clusters && area.clusters.length > 0) {
           area.clusters.forEach(function(pt) {
             var isPtActive = selectedPointId && (pt.id === selectedPointId);
@@ -469,8 +467,156 @@ export const LeafletMap = React.memo(function LeafletMap({
         }
       };
 
+      // 2b. Highlight Rute Per Klaster dan Titik-Titik Deteksi Sub-Klasternya
+      window.highlightClusterDetails = function(pt, options) {
+        if (!pt || !pt.position) return;
+        var opts = options || {};
+        var skipCamera = opts.skipCamera || false;
+
+        window.activeSelectedPointId = pt.id;
+        window.clusterHighlightLayer.clearLayers();
+
+        var sevColor = pt.severity === 'severe' ? '#991B1B' : (pt.severity === 'high' ? '#EF4444' : (pt.severity === 'medium' ? '#F59E0B' : '#EAB308'));
+
+        // 1. Ekstrak koordinat rute / bentang koridor jalan untuk klaster ini (Route per Klaster)
+        var routeCoords = [];
+        if (Array.isArray(pt.road_segment_coords) && pt.road_segment_coords.length > 1) {
+          routeCoords = pt.road_segment_coords.map(function(c) {
+            return [c.latitude !== undefined ? c.latitude : c.lat, c.longitude !== undefined ? c.longitude : c.lng];
+          });
+        } else if (Array.isArray(pt.points) && pt.points.length > 1) {
+          routeCoords = pt.points.map(function(p) {
+            return [p.latitude !== undefined ? p.latitude : p.lat, p.longitude !== undefined ? p.longitude : p.lng];
+          });
+        }
+
+        // Fallback jika titik tunggal: bentang jalan pendek ~25 meter
+        if (routeCoords.length < 2) {
+          var cLat = pt.position.latitude;
+          var cLng = pt.position.longitude;
+          var deltaLat = 0.00012;
+          var deltaLng = 0.00008;
+          routeCoords = [
+            [cLat - deltaLat, cLng - deltaLng],
+            [cLat + deltaLat, cLng + deltaLng]
+          ];
+        }
+
+        // 2. Gambar Garis Polyline Rute Per Klaster (Corridor Halo + Centerline Inti)
+        var routeHalo = L.polyline(routeCoords, {
+          color: sevColor,
+          weight: 9,
+          opacity: 0.35,
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false
+        });
+        window.clusterHighlightLayer.addLayer(routeHalo);
+
+        var routeCore = L.polyline(routeCoords, {
+          color: sevColor,
+          weight: 4,
+          opacity: 0.95,
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false
+        });
+        window.clusterHighlightLayer.addLayer(routeCore);
+
+        // 3. Gambar Titik-Titik Highlight Sub-Klasternya (Individual Detection Points)
+        var subPoints = (Array.isArray(pt.points) && pt.points.length > 0)
+          ? pt.points
+          : [{ latitude: pt.position.latitude, longitude: pt.position.longitude, intensity: 1.0 }];
+
+        subPoints.forEach(function(sp, idx) {
+          var spLat = sp.latitude !== undefined ? sp.latitude : sp.lat;
+          var spLng = sp.longitude !== undefined ? sp.longitude : sp.lng;
+          var spIntensity = sp.intensity !== undefined ? sp.intensity : (pt.severity === 'severe' ? 3.5 : (pt.severity === 'high' ? 2.5 : (pt.severity === 'medium' ? 1.5 : 0.8)));
+
+          // Outer glowing halo aura
+          var subHalo = L.circleMarker([spLat, spLng], {
+            radius: 8.5,
+            color: sevColor,
+            weight: 1.8,
+            opacity: 0.85,
+            fillColor: sevColor,
+            fillOpacity: 0.28,
+            zIndexOffset: 850
+          });
+          window.clusterHighlightLayer.addLayer(subHalo);
+
+          // Inner solid core dot
+          var subDot = L.circleMarker([spLat, spLng], {
+            radius: 4.5,
+            color: '#ffffff',
+            weight: 2,
+            fillColor: sevColor,
+            fillOpacity: 1.0,
+            zIndexOffset: 900
+          });
+
+          var tooltipText = 'Deteksi #' + (idx + 1) + ' • Guncangan: ' + (Math.round(spIntensity * 10) / 10) + 'g';
+          subDot.bindTooltip(tooltipText, {
+            direction: 'top',
+            offset: [0, -6],
+            className: 'subpoint-tooltip'
+          });
+          window.clusterHighlightLayer.addLayer(subDot);
+        });
+
+        // 4. Update status pin pada peta agar pin aktif bertransformasi (.is-active)
+        if (window.map && window.map.getZoom() >= 16) {
+          window.renderDamageClusterMarkers(window.rawDamagePoints);
+        } else if (window.rawDamagePoints) {
+          // Jika saat ini di zoom < 16, sematkan pin aktif ini langsung ke highlight layer
+          var isPtActive = true;
+          var pinSvg = createLocationPinSvg(sevColor, pt.reportCount, isPtActive);
+          var pinHtml = '<div class="location-pin-marker is-active">' + pinSvg + '</div>';
+          var pinIcon = L.divIcon({
+            className: '',
+            html: pinHtml,
+            iconSize: [30, 38],
+            iconAnchor: [15, 38]
+          });
+          var pinMarker = L.marker([pt.position.latitude, pt.position.longitude], {
+            icon: pinIcon,
+            zIndexOffset: 5000
+          });
+          pinMarker.on('click', function(e) {
+            L.DomEvent.stopPropagation(e);
+            window.handlePointInteraction(pt, null);
+          });
+          window.clusterHighlightLayer.addLayer(pinMarker);
+        }
+
+        // 5. Penyesuaian kamera membungkus rute per klaster dan seluruh sub-titiknya
+        if (!skipCamera && window.map) {
+          var allCoords = [];
+          for (var r = 0; r < routeCoords.length; r++) {
+            allCoords.push(routeCoords[r]);
+          }
+          for (var s = 0; s < subPoints.length; s++) {
+            allCoords.push([
+              subPoints[s].latitude !== undefined ? subPoints[s].latitude : subPoints[s].lat,
+              subPoints[s].longitude !== undefined ? subPoints[s].longitude : subPoints[s].lng
+            ]);
+          }
+
+          if (allCoords.length > 1) {
+            try {
+              var bounds = L.latLngBounds(allCoords);
+              window.map.fitBounds(bounds, { padding: [55, 55], maxZoom: 18.0, animate: true });
+            } catch (err) {
+              window.map.setView([pt.position.latitude, pt.position.longitude], 17.5, { animate: true });
+            }
+          } else {
+            window.map.setView([pt.position.latitude, pt.position.longitude], 17.5, { animate: true });
+          }
+        }
+      };
+
       // Penangan sentral interaksi klik titik (TWO-STEP INTERACTION):
-      // - Klik 1: Tampilkan area panjang jalan dan titik-titik kerusakan dalam ruas jalan tersebut (TANPA BUKA MODAL)
+      // - Klik 1: Tampilkan rute per klaster dan titik-titik highlight sub-klasternya (TANPA BUKA MODAL)
       // - Klik 2 (Klik LAGI pada icon titiknya): BARU BUKA MODAL Road Damage Details!
       window.handlePointInteraction = function(pt, areaContext) {
         if (!pt) return;
@@ -487,10 +633,10 @@ export const LeafletMap = React.memo(function LeafletMap({
           return;
         }
 
-        // KLIK PERTAMA: Simpan titik aktif, gambar area panjang jalan & titik-titik kerusakan dalam ruas jalan tersebut
+        // KLIK PERTAMA: Simpan titik aktif, render rute per klaster & seluruh titik highlight sub-klaster
         window.activeSelectedPointId = pt.id;
 
-        // Cari ruas jalan yang menaungi titik ini
+        // Cari ruas jalan yang menaungi titik ini untuk konteks area (jika ada)
         var targetArea = areaContext;
         if (!targetArea && window.activeRoadSegments) {
           for (var i = 0; i < window.activeRoadSegments.length; i++) {
@@ -502,33 +648,8 @@ export const LeafletMap = React.memo(function LeafletMap({
           }
         }
 
-        if (!targetArea) {
-          var polyCoords = [];
-          if (pt.road_segment_coords && pt.road_segment_coords.length > 1) {
-            polyCoords = pt.road_segment_coords.map(function(c) { return { lat: c.latitude, lng: c.longitude }; });
-          } else if (pt.points && pt.points.length > 1) {
-            polyCoords = pt.points.map(function(c) { return { lat: c.latitude, lng: c.longitude }; });
-          }
-
-          targetArea = {
-            id: 'seg-' + pt.id,
-            center: pt.position,
-            roadLengthMeters: pt.road_length_meters || 25,
-            roadPolyline: polyCoords,
-            clusterCount: 1,
-            totalReports: pt.reportCount || 1,
-            worstSeverity: pt.severity,
-            clusters: [pt]
-          };
-        }
-
-        // Tampilkan koridor area panjang jalan + seluruh titik kerusakan di ruas jalan tersebut dengan pin aktif
-        window.highlightRoadSegment(targetArea, pt.id);
-
-        // Jika zoom >= 16, perbarui damageLayer agar status is-active pada pin terpilih ter-update rapi
-        if (window.map && window.map.getZoom() >= 16) {
-          window.renderDamageClusterMarkers(window.rawDamagePoints);
-        }
+        // Tampilkan rute per klaster dan titik-titik highlight sub-klasternya
+        window.highlightClusterDetails(pt, { skipCamera: false });
 
         // Beritahu React Native bahwa titik telah terpilih (Klik 1 - TANPA BUKA MODAL)
         if (window.ReactNativeWebView) {
@@ -540,9 +661,18 @@ export const LeafletMap = React.memo(function LeafletMap({
         }
       };
 
+      window.clearClusterHighlight = function() {
+        window.activeSelectedPointId = null;
+        window.clusterHighlightLayer.clearLayers();
+        if (window.map && window.map.getZoom() >= 16) {
+          window.renderDamageClusterMarkers(window.rawDamagePoints);
+        }
+      };
+
       window.clearRoadSegmentHighlight = function() {
         window.activeSelectedPointId = null;
         window.activeRoadSegmentLayer.clearLayers();
+        window.clusterHighlightLayer.clearLayers();
         if (window.map && window.map.getZoom() >= 16) {
           window.renderDamageClusterMarkers(window.rawDamagePoints);
         }
@@ -560,36 +690,13 @@ export const LeafletMap = React.memo(function LeafletMap({
 
       // Highlight 1 Klaster Spesifik Sepanjang Ruas Jalan
       window.highlightCluster = function(pt) {
-        window.clusterHighlightLayer.clearLayers();
-        if (!pt || !pt.position) return;
-        if (window.activeSelectedPointId === pt.id) return;
-
-        var lat = pt.position.latitude;
-        var lng = pt.position.longitude;
-        var sevColor = pt.severity === 'severe' ? '#991B1B' : (pt.severity === 'high' ? '#EF4444' : (pt.severity === 'medium' ? '#F59E0B' : '#EAB308'));
-
-        var segCoords = [];
-        if (pt.road_segment_coords && pt.road_segment_coords.length > 1) {
-          segCoords = pt.road_segment_coords.map(function(c) { return [c.latitude, c.longitude]; });
-        } else if (pt.points && pt.points.length > 1) {
-          segCoords = pt.points.map(function(c) { return [c.latitude, c.longitude]; });
-        } else {
-          segCoords = [
-            [lat - 0.0001, lng],
-            [lat + 0.0001, lng]
-          ];
+        if (!pt || !pt.position) {
+          window.clearClusterHighlight();
+          return;
         }
 
-        var line = L.polyline(segCoords, {
-          color: sevColor,
-          weight: 5,
-          opacity: 0.9,
-          lineCap: 'round',
-          lineJoin: 'round'
-        });
-        window.clusterHighlightLayer.addLayer(line);
-
-        window.map.panTo([lat, lng], { animate: true, duration: 0.4 });
+        var isAlreadySelected = (window.activeSelectedPointId === pt.id);
+        window.highlightClusterDetails(pt, { skipCamera: isAlreadySelected });
       };
 
       // 3. Render Titik Klaster di Level Dekat (zoom >= 16): Menggunakan Badge Icon Lokasi Map Pin
@@ -610,7 +717,7 @@ export const LeafletMap = React.memo(function LeafletMap({
           });
           var marker = L.marker([pt.position.latitude, pt.position.longitude], {
             icon: icon,
-            zIndexOffset: isPtActive ? 500 : 150
+            zIndexOffset: isPtActive ? 5000 : 150
           });
           marker.on('click', function(e) {
             L.DomEvent.stopPropagation(e);
@@ -632,10 +739,16 @@ export const LeafletMap = React.memo(function LeafletMap({
           }
           window.renderAreaSummaryMarkers(window.activeRoadSegments);
           window.damageLayer.clearLayers();
-          window.clusterHighlightLayer.clearLayers();
+          // Pertahankan highlight rute & sub-titik jika ada klaster yang sedang aktif
+          if (!window.activeSelectedPointId) {
+            window.clusterHighlightLayer.clearLayers();
+          }
         } else {
           window.areaSummaryLayer.clearLayers();
-          window.clusterHighlightLayer.clearLayers();
+          // Pertahankan highlight rute & sub-titik jika ada klaster yang sedang aktif
+          if (!window.activeSelectedPointId) {
+            window.clusterHighlightLayer.clearLayers();
+          }
           window.renderDamageClusterMarkers(window.rawDamagePoints);
         }
       };
@@ -647,6 +760,7 @@ export const LeafletMap = React.memo(function LeafletMap({
 
       // Handler Background Map Click: Reset seleksi jika pengguna klik area kosong di peta
       window.map.on('click', function() {
+        window.clearClusterHighlight();
         window.clearRoadSegmentHighlight();
         if (window.ReactNativeWebView) {
           window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -660,6 +774,15 @@ export const LeafletMap = React.memo(function LeafletMap({
         window.rawDamagePoints = points || [];
         window.activeRoadSegments = computeRoadSegmentAreas(window.rawDamagePoints);
         window.updateLOD();
+        if (window.activeSelectedPointId) {
+          var stillActive = window.rawDamagePoints.find(function(p) { return p.id === window.activeSelectedPointId; });
+          if (stillActive) {
+            window.highlightClusterDetails(stillActive, { skipCamera: true });
+          } else {
+            window.activeSelectedPointId = null;
+            window.clusterHighlightLayer.clearLayers();
+          }
+        }
       };
 
       // Navigasi FlyTo
