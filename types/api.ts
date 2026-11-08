@@ -4,8 +4,49 @@
  */
 
 // Enum Status & Keparahan Kerusakan Jalan
-export type PotholeSeverity = 'low' | 'medium' | 'high' | 'severe';
+export type ClusterSeverity = 'low' | 'medium' | 'high' | 'severe';
+export type PotholeSeverity = ClusterSeverity; // Backward-compatibility alias
 export type PotholeStatus = 'active' | 'verified' | 'repaired' | 'false_positive';
+
+/**
+ * Status Validasi Deteksi (Strict Dual-Filter: Visual + Sensor)
+ * - CONFIRMED: confidence >= 0.70
+ * - CONFIRMED_VIA_SENSOR: 0.50 <= confidence < 0.70 & zAccelPeak >= 2.0
+ * - UNCERTAIN: 0.50 <= confidence < 0.70 & zAccelPeak < 2.0 (butuh konfirmasi DBSCAN multi-laporan)
+ * - REJECTED: confidence < 0.50 atau (speedKmh > 60 & zAccelPeak < 1.2)
+ */
+export type DetectionValidationStatus =
+  | 'CONFIRMED'
+  | 'CONFIRMED_VIA_SENSOR'
+  | 'UNCERTAIN'
+  | 'REJECTED';
+
+/**
+ * Helper parsing & type assertion aman saat membaca field `severity`
+ * dari respons query SQL/Prisma atau backend API agar tidak menimbulkan error tipe data `string`.
+ */
+export function parseClusterSeverity(
+  val: unknown,
+  fallback: ClusterSeverity = 'low'
+): ClusterSeverity {
+  if (typeof val !== 'string') return fallback;
+  const normalized = val.trim().toLowerCase();
+  switch (normalized) {
+    case 'severe':
+    case 'heavy':
+      return 'severe';
+    case 'high':
+      return 'high';
+    case 'medium':
+    case 'moderate':
+      return 'medium';
+    case 'low':
+    case 'light':
+      return 'low';
+    default:
+      return fallback;
+  }
+}
 
 export interface ClusterPointDetail {
   id: string;
@@ -20,6 +61,35 @@ export interface ClusterPointDetail {
 }
 
 /**
+ * Entitas Klaster Terkonsolidasi (DBSCAN Clustering Output).
+ * Mengelompokkan titik-titik deteksi valid dengan properti snake_case & camelCase
+ * agar kompatibel penuh dengan query Prisma/PostGIS backend dan frontend React Native.
+ */
+export interface ConsolidatedCluster {
+  id: string;
+  center_latitude: number;
+  center_longitude: number;
+  centerLatitude?: number;
+  centerLongitude?: number;
+  severity: ClusterSeverity;
+  confidence_avg: number;
+  confidenceAvg?: number;
+  detection_count: number;
+  detectionCount?: number;
+  user_count?: number;
+  userCount?: number;
+  status: PotholeStatus;
+  first_detected_at: string;
+  last_detected_at: string;
+  updated_at: string;
+  distance_meters?: number;
+  radius_meters?: number;
+  radiusMeters?: number;
+  validation_status?: DetectionValidationStatus;
+  points?: ClusterPointDetail[];
+}
+
+/**
  * Entitas Hasil Agregasi Spasial Klaster Pothole (PostGIS & DBSCAN).
  * Format atribut: snake_case sesuai respons SQL backend.
  */
@@ -27,7 +97,7 @@ export interface PotholeCluster {
   id: string;
   center_latitude: number;
   center_longitude: number;
-  severity: PotholeSeverity;
+  severity: ClusterSeverity;
   confidence_avg: number;
   detection_count: number;
   user_count?: number;

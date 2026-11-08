@@ -118,6 +118,10 @@ export function useEdgeAi() {
         if (result.isAnomalyDetected) {
           setDetectedCount((prev) => prev + 1);
           await defaultEdgeDetector.processAndIngest(result, options);
+        } else if (result.validationStatus === 'UNCERTAIN' && result.detectionDto) {
+          // Data UNCERTAIN: dikirim ke pipeline DBSCAN agar dapat dikonfirmasi lintas laporan,
+          // namun tidak memicu alert tunggal di HUD pengemudi
+          await defaultEdgeDetector.processAndIngest(result, options);
         }
 
         return result;

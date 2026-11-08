@@ -1,10 +1,12 @@
 import { apiClient } from './client';
-import type {
-  BoundingBoxFilter,
-  DbscanClustersResponse,
-  PotholeCluster,
-  UpdateClusterDto,
-  UpdateClusterStatusDto,
+import {
+  parseClusterSeverity,
+  type BoundingBoxFilter,
+  type ConsolidatedCluster,
+  type DbscanClustersResponse,
+  type PotholeCluster,
+  type UpdateClusterDto,
+  type UpdateClusterStatusDto,
 } from '@/types/api';
 
 /**
@@ -70,15 +72,25 @@ export const clustersService = {
       let result: DbscanClustersResponse;
       if (Array.isArray(response)) {
         // Fallback jika respons lama berupa array klaster
+        const mappedClusters: PotholeCluster[] = response.map((c) => ({
+          ...c,
+          severity: parseClusterSeverity(c.severity),
+        }));
         result = {
-          clusters: response,
+          clusters: mappedClusters,
           heatmap: response.map((c) => [c.center_latitude, c.center_longitude, c.confidence_avg || 0.6]),
           total_detections: response.reduce((sum, c) => sum + (c.detection_count || 1), 0),
           total_clusters: response.length,
           generated_at: new Date().toISOString(),
         };
       } else {
-        result = response;
+        result = {
+          ...response,
+          clusters: (response.clusters || []).map((c) => ({
+            ...c,
+            severity: parseClusterSeverity(c.severity),
+          })),
+        };
       }
 
       dbscanCache = { data: result, timestamp: now, filterKey };
@@ -102,15 +114,25 @@ export const clustersService = {
 
       let res: DbscanClustersResponse;
       if (Array.isArray(fallback)) {
+        const mappedFallback: PotholeCluster[] = fallback.map((c: any) => ({
+          ...c,
+          severity: parseClusterSeverity(c.severity),
+        }));
         res = {
-          clusters: fallback,
-          heatmap: fallback.map((c) => [c.center_latitude, c.center_longitude, c.confidence_avg || 0.6]),
-          total_detections: fallback.reduce((s, c) => s + (c.detection_count || 1), 0),
+          clusters: mappedFallback,
+          heatmap: fallback.map((c: any) => [c.center_latitude, c.center_longitude, c.confidence_avg || 0.6]),
+          total_detections: fallback.reduce((s: number, c: any) => s + (c.detection_count || 1), 0),
           total_clusters: fallback.length,
           generated_at: new Date().toISOString(),
         };
       } else {
-        res = fallback;
+        res = {
+          ...fallback,
+          clusters: (fallback.clusters || []).map((c: any) => ({
+            ...c,
+            severity: parseClusterSeverity(c.severity),
+          })),
+        };
       }
 
       dbscanCache = { data: res, timestamp: now, filterKey };
@@ -149,7 +171,11 @@ export const clustersService = {
       },
     });
 
-    const clusters = Array.isArray(data) ? data : data?.clusters || [];
+    const rawClusters = Array.isArray(data) ? data : data?.clusters || [];
+    const clusters: PotholeCluster[] = rawClusters.map((c) => ({
+      ...c,
+      severity: parseClusterSeverity(c.severity),
+    }));
     clustersCache = { data: clusters, timestamp: now, filterKey };
     return clusters;
   },
@@ -172,7 +198,11 @@ export const clustersService = {
         radius: radiusMeters,
       },
     });
-    return data || null;
+    if (!data) return null;
+    return {
+      ...data,
+      severity: parseClusterSeverity(data.severity),
+    };
   },
 
   /**
@@ -180,7 +210,11 @@ export const clustersService = {
    * GET /api/pothole-clusters/:id
    */
   async getClusterById(id: string): Promise<PotholeCluster> {
-    return apiClient.get<PotholeCluster>(`/pothole-clusters/${encodeURIComponent(id)}`);
+    const cluster = await apiClient.get<PotholeCluster>(`/pothole-clusters/${encodeURIComponent(id)}`);
+    return {
+      ...cluster,
+      severity: parseClusterSeverity(cluster.severity),
+    };
   },
 
   /**

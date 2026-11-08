@@ -1,5 +1,15 @@
-import type { CreateDetectionDto, PotholeSeverity } from '@/types/api';
-export type { CreateDetectionDto, PotholeSeverity };
+import type {
+  CreateDetectionDto,
+  ClusterSeverity,
+  PotholeSeverity,
+  DetectionValidationStatus,
+} from '@/types/api';
+export type {
+  CreateDetectionDto,
+  ClusterSeverity,
+  PotholeSeverity,
+  DetectionValidationStatus,
+};
 
 export type RoadAnomalyType = 'pothole' | 'bump' | 'crack' | 'normal';
 
@@ -74,4 +84,6 @@ export interface EdgeDetectionResult {
   modelVersion: string;
   /** Payload DTO yang siap dikirim ke backend */
   detectionDto?: CreateDetectionDto;
+  /** Status validasi filter ganda (CONFIRMED | CONFIRMED_VIA_SENSOR | UNCERTAIN | REJECTED) */
+  validationStatus?: DetectionValidationStatus;
 }

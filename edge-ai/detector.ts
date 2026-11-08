@@ -1,7 +1,9 @@
 import {
   EDGE_AI_CONFIG,
+  calculatePhysicalSeverity,
   classifySeverityFromProbability,
   classifySeverityFromZPeak,
+  evaluateDetection,
   getConfidenceTier,
   validateRoadAnomaly,
 } from './model-config';
@@ -19,7 +21,7 @@ import type { CreateDetectionDto, RawDetection } from '@/types/api';
 /**
  * Edge AI Road Damage Detector v2.
  *
- * Mendukung tiga tingkat inferensi:
+ * Mendukung tiga tingkat inferensi dengan Strict Dual-Filter:
  *  A) Full TFLite (SensorWindow) — 47 fitur matematis + model Neural Network
  *  B) Smart Window Heuristic (SensorWindow) — Dekomposisi 3D EMA gravitasi,
  *     Crest Factor, dan rasio vertikal/horizontal saat model TFLite belum ready
@@ -100,8 +102,15 @@ export class EdgeRoadDamageDetector {
     const { isPothole, probability, confidence, confidenceTier } =
       await predict(features);
 
-    // Filter sanity check: model memprediksi pothole dan memang ada lonjakan fisik nyata
-    if (!isPothole || maxVertDyn < 0.6) {
+    // Evaluasi Strict Dual-Filter (Tahap 1: Validasi False Positive, Tahap 2: Severity Fisik)
+    const evaluation = evaluateDetection({
+      confidence,
+      zAccelPeak: maxVertDyn,
+      speedKmh,
+    });
+
+    // Filter sanity check: model harus memprediksi pothole, tidak ditolak filter, dan ada hentakan fisik nyata (>= 0.6G)
+    if (!isPothole || evaluation.isRejected || maxVertDyn < 0.6) {
       return {
         isAnomalyDetected: false,
         anomalyType: 'normal',
@@ -111,10 +120,12 @@ export class EdgeRoadDamageDetector {
         confidenceTier: 'LOW',
         zAccelPeak: 0,
         modelVersion: EDGE_AI_CONFIG.modelVersion,
+        validationStatus: evaluation.status,
       };
     }
 
-    const severity = classifySeverityFromProbability(probability);
+    // Severity dihitung murni dari hentakan fisik (zAccelPeak), BUKAN dari probability (p)
+    const severity = evaluation.severity;
 
     const detectionDto: CreateDetectionDto = {
       deviceId: this.deviceId,
@@ -128,8 +139,12 @@ export class EdgeRoadDamageDetector {
       detectedAt: timestamp,
     };
 
+    // Hanya ditandai valid aktif seketika jika CONFIRMED atau CONFIRMED_VIA_SENSOR.
+    // Jika UNCERTAIN, tetap dikirim ke DTO/queue untuk konfirmasi DBSCAN, tapi bukan alert tunggal.
+    const isSingleConfirmed = evaluation.isValidPothole;
+
     return {
-      isAnomalyDetected: true,
+      isAnomalyDetected: isSingleConfirmed,
       anomalyType: 'pothole',
       estimatedSeverity: severity,
       probability,
@@ -138,6 +153,7 @@ export class EdgeRoadDamageDetector {
       zAccelPeak: maxVertDyn,
       modelVersion: EDGE_AI_CONFIG.modelVersion,
       detectionDto,
+      validationStatus: evaluation.status,
     };
   }
 
@@ -237,12 +253,30 @@ export class EdgeRoadDamageDetector {
     );
 
     const { confidenceScore, confidenceTier } = getConfidenceTier(probability);
-    // Severity terkalibrasi normalisasi kecepatan kendaraan
-    const severity = classifySeverityFromZPeak(
-      maxVertDyn,
-      config?.severityThresholds,
-      speedAvg
-    );
+
+    // Evaluasi Strict Dual-Filter
+    const evaluation = evaluateDetection({
+      confidence: confidenceScore,
+      zAccelPeak: maxVertDyn,
+      speedKmh: speedAvg,
+    });
+
+    if (evaluation.isRejected) {
+      return {
+        isAnomalyDetected: false,
+        anomalyType: 'normal',
+        estimatedSeverity: 'low',
+        probability: 0,
+        confidence: 0,
+        confidenceTier: 'LOW',
+        zAccelPeak: 0,
+        modelVersion: `${EDGE_AI_CONFIG.modelVersion}-heuristic`,
+        validationStatus: evaluation.status,
+      };
+    }
+
+    // Severity murni dari hentakan fisik zAccelPeak
+    const severity = evaluation.severity;
 
     const detectionDto: CreateDetectionDto = {
       deviceId: this.deviceId,
@@ -257,7 +291,7 @@ export class EdgeRoadDamageDetector {
     };
 
     return {
-      isAnomalyDetected: true,
+      isAnomalyDetected: evaluation.isValidPothole,
       anomalyType: 'pothole',
       estimatedSeverity: severity,
       probability,
@@ -266,6 +300,7 @@ export class EdgeRoadDamageDetector {
       zAccelPeak: maxVertDyn,
       modelVersion: `${EDGE_AI_CONFIG.modelVersion}-heuristic`,
       detectionDto,
+      validationStatus: evaluation.status,
     };
   }
 
@@ -309,11 +344,29 @@ export class EdgeRoadDamageDetector {
       Math.max(0.5, ((dynamicZ - 1.1) / 2.0) * 0.5 + 0.5)
     );
     const { confidenceScore, confidenceTier } = getConfidenceTier(probability);
-    const severity = classifySeverityFromZPeak(
-      dynamicZ,
-      undefined,
-      frame.speedKmh
-    );
+
+    // Evaluasi Strict Dual-Filter
+    const evaluation = evaluateDetection({
+      confidence: confidenceScore,
+      zAccelPeak: dynamicZ,
+      speedKmh: frame.speedKmh,
+    });
+
+    if (evaluation.isRejected) {
+      return {
+        isAnomalyDetected: false,
+        anomalyType: 'normal',
+        estimatedSeverity: 'low',
+        probability: 0,
+        confidence: 0,
+        confidenceTier: 'LOW',
+        zAccelPeak: dynamicZ,
+        modelVersion: `${EDGE_AI_CONFIG.modelVersion}-fallback`,
+        validationStatus: evaluation.status,
+      };
+    }
+
+    const severity = evaluation.severity;
 
     const detectionDto: CreateDetectionDto = {
       deviceId: this.deviceId,
@@ -329,7 +382,7 @@ export class EdgeRoadDamageDetector {
     };
 
     return {
-      isAnomalyDetected: true,
+      isAnomalyDetected: evaluation.isValidPothole,
       anomalyType: 'pothole',
       estimatedSeverity: severity,
       probability,
@@ -338,6 +391,7 @@ export class EdgeRoadDamageDetector {
       zAccelPeak: dynamicZ,
       modelVersion: `${EDGE_AI_CONFIG.modelVersion}-fallback`,
       detectionDto,
+      validationStatus: evaluation.status,
     };
   }
 
@@ -346,7 +400,9 @@ export class EdgeRoadDamageDetector {
     result: EdgeDetectionResult,
     options?: { offlineOnly?: boolean }
   ): Promise<void> {
-    if (!result.isAnomalyDetected || !result.detectionDto) return;
+    if (!result.detectionDto) return;
+    // Hanya anomali valid terkonfirmasi atau data UNCERTAIN (untuk konfirmasi DBSCAN) yang diunggah
+    if (!result.isAnomalyDetected && result.validationStatus !== 'UNCERTAIN') return;
 
     const dto = result.detectionDto;
     const localRecord: RawDetection = {
