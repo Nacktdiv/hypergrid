@@ -34,24 +34,31 @@ export type DamagePoint = {
   severity: DamageSeverity
   reportCount: number
   radius_meters?: number
+  road_length_meters?: number
+  road_segment_coords?: LatLng[]
   userCount?: number
   points?: { latitude: number; longitude: number; intensity?: number }[]
 }
 
 /**
- * Ringkasan ruas jalan area makro (~1 km).
- * Ditampilkan ketika peta berada pada level zoom jauh (zoom < 14).
+ * Ringkasan ruas panjang jalan (Road Segment Area).
+ * Menggunakan panjang bentang koridor jalan (bukan radius lingkaran atau rasio grid).
+ * Ditampilkan ketika peta berada pada level zoom jauh (zoom < 15).
  */
-export type AreaSummary = {
-  id: string;
-  center: LatLng;
-  radiusMeters: number;
-  clusterCount: number;
-  totalReports: number;
-  worstSeverity: DamageSeverity;
-  severityCounts: Record<DamageSeverity, number>;
-  clusters: DamagePoint[];
-};
+export type RoadSegmentArea = {
+  id: string
+  center: LatLng
+  roadLengthMeters: number
+  roadPolyline: LatLng[]
+  clusterCount: number
+  totalReports: number
+  worstSeverity: DamageSeverity
+  severityCounts: Record<DamageSeverity, number>
+  clusters: DamagePoint[]
+}
+
+/** Backward-compatibility alias */
+export type AreaSummary = RoadSegmentArea
 
 /** Seluruh data yang dibutuhkan satu layar untuk menggambar peta. */
 export type MapData = {
@@ -68,7 +75,7 @@ export type MapData = {
   heatmap?: [number, number, number][]
   /** ID klaster yang sedang aktif/diklik untuk di-highlight cakupan areanya */
   activeClusterId?: string | null
-  /** ID area makro (~1 km) yang sedang aktif */
+  /** ID area ruas jalan yang sedang aktif */
   activeAreaId?: string | null
   /** Posisi pengguna (titik biru). */
   userLocation: LatLng
@@ -76,30 +83,100 @@ export type MapData = {
   vehiclePosition: LatLng
 }
 
+function getHaversineDistanceMeters(a: LatLng, b: LatLng): number {
+  const R = 6371000;
+  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
+  const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
+  const sinLat = Math.sin(dLat / 2);
+  const sinLon = Math.sin(dLon / 2);
+  const hav =
+    sinLat * sinLat +
+    Math.cos((a.latitude * Math.PI) / 180) *
+      Math.cos((b.latitude * Math.PI) / 180) *
+      sinLon * sinLon;
+  return R * 2 * Math.atan2(Math.sqrt(hav), Math.sqrt(1 - hav));
+}
+
 /**
- * Mengelompokkan titik klaster ke dalam grid spasial ruas jalan makro berukuran ~1 km (~1000m).
- * Digunakan untuk Level of Detail (LOD) peta saat kamera berada pada tampilan jauh (zoom < 14).
+ * Mengelompokkan titik klaster ke dalam ruas-ruas panjang jalan (Road Segments).
+ * Menggunakan jarak panjang jalan (bukan rasio grid bujur sangkar atau radius lingkaran).
+ * Digunakan untuk Level of Detail (LOD) peta saat kamera berada pada tampilan jauh (zoom < 15).
  */
-export function aggregateClustersTo1KmAreas(
+export function aggregateClustersToRoadSegments(
   points: DamagePoint[],
-  cellMeters: number = 1000
-): AreaSummary[] {
+  targetSegmentLengthMeters: number = 1000,
+  maxCorridorGapMeters: number = 250
+): RoadSegmentArea[] {
   if (!points || points.length === 0) return [];
-  // 1 derajat lintang approx 111,320 meter (sekitar 0.009 derajat per 1 km)
-  const degSize = cellMeters / 111320;
-  const grid = new Map<string, DamagePoint[]>();
 
-  for (const pt of points) {
-    const cellLat = Math.floor(pt.position.latitude / degSize);
-    const cellLng = Math.floor(pt.position.longitude / degSize);
-    const key = `${cellLat}:${cellLng}`;
-    const list = grid.get(key) || [];
-    list.push(pt);
-    grid.set(key, list);
-  }
+  const unassigned = [...points];
+  const segments: RoadSegmentArea[] = [];
+  let segmentIndex = 1;
 
-  const areas: AreaSummary[] = [];
-  grid.forEach((group, key) => {
+  while (unassigned.length > 0) {
+    const startPoint = unassigned.shift()!;
+    const segmentClusters: DamagePoint[] = [startPoint];
+    const segmentPolyline: LatLng[] = [startPoint.position];
+    let accumulatedRoadLength = startPoint.road_length_meters || 15;
+
+    let expanded = true;
+    while (expanded && unassigned.length > 0) {
+      expanded = false;
+
+      // Cari titik di unassigned yang paling dekat ke ujung depan atau ujung belakang segmen polyline
+      const head = segmentPolyline[0];
+      const tail = segmentPolyline[segmentPolyline.length - 1];
+
+      let bestIdx = -1;
+      let bestDist = Infinity;
+      let attachToTail = true;
+
+      for (let i = 0; i < unassigned.length; i++) {
+        const candidate = unassigned[i].position;
+        const distTail = getHaversineDistanceMeters(tail, candidate);
+        const distHead = getHaversineDistanceMeters(head, candidate);
+
+        if (distTail < bestDist && distTail <= maxCorridorGapMeters) {
+          bestDist = distTail;
+          bestIdx = i;
+          attachToTail = true;
+        }
+        if (distHead < bestDist && distHead <= maxCorridorGapMeters) {
+          bestDist = distHead;
+          bestIdx = i;
+          attachToTail = false;
+        }
+      }
+
+      if (bestIdx !== -1 && bestDist <= maxCorridorGapMeters) {
+        const nextPoint = unassigned[bestIdx];
+        const additionalLength = bestDist + (nextPoint.road_length_meters || 15);
+
+        // Jika panjang jalan masih dalam batas target ruas (~1 km)
+        if (accumulatedRoadLength + additionalLength <= targetSegmentLengthMeters * 1.35) {
+          unassigned.splice(bestIdx, 1);
+          segmentClusters.push(nextPoint);
+          accumulatedRoadLength += additionalLength;
+
+          if (attachToTail) {
+            segmentPolyline.push(nextPoint.position);
+          } else {
+            segmentPolyline.unshift(nextPoint.position);
+          }
+          expanded = true;
+        }
+      }
+    }
+
+    // Jika hanya ada 1 titik dalam ruas, buat polyline pendek bentang jalan (~25m)
+    if (segmentPolyline.length === 1) {
+      const p = segmentPolyline[0];
+      const offsetLat = 0.00012;
+      segmentPolyline.unshift({ latitude: p.latitude - offsetLat, longitude: p.longitude });
+      segmentPolyline.push({ latitude: p.latitude + offsetLat, longitude: p.longitude });
+    }
+
+    // Hitung pusat representatif ruas jalan (centroid dari titik-titik kerusakan)
     let sumLat = 0;
     let sumLng = 0;
     let totalReports = 0;
@@ -110,12 +187,12 @@ export function aggregateClustersTo1KmAreas(
       low: 0,
     };
 
-    for (const p of group) {
-      sumLat += p.position.latitude;
-      sumLng += p.position.longitude;
-      totalReports += p.reportCount || 1;
-      if (p.severity in severityCounts) {
-        severityCounts[p.severity]++;
+    for (const c of segmentClusters) {
+      sumLat += c.position.latitude;
+      sumLng += c.position.longitude;
+      totalReports += c.reportCount || 1;
+      if (c.severity in severityCounts) {
+        severityCounts[c.severity]++;
       }
     }
 
@@ -124,23 +201,26 @@ export function aggregateClustersTo1KmAreas(
     else if (severityCounts.high > 0) worstSeverity = "high";
     else if (severityCounts.medium > 0) worstSeverity = "medium";
 
-    areas.push({
-      id: `area-1km-${key}`,
+    segments.push({
+      id: `road-seg-${segmentIndex++}`,
       center: {
-        latitude: sumLat / group.length,
-        longitude: sumLng / group.length,
+        latitude: sumLat / segmentClusters.length,
+        longitude: sumLng / segmentClusters.length,
       },
-      radiusMeters: cellMeters,
-      clusterCount: group.length,
+      roadLengthMeters: Math.max(25, Math.round(accumulatedRoadLength)),
+      roadPolyline: segmentPolyline,
+      clusterCount: segmentClusters.length,
       totalReports,
       worstSeverity,
       severityCounts,
-      clusters: group,
+      clusters: segmentClusters,
     });
-  });
+  }
 
-  return areas;
+  return segments;
 }
+
+export const aggregateClustersTo1KmAreas = aggregateClustersToRoadSegments;
 
 /**
  * Warna sesuai design system Figma "Final Page Mobile":

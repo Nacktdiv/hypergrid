@@ -82,6 +82,7 @@ export function MainMap({
     null
   );
   const [selectedArea, setSelectedArea] = useState<AreaSummary | null>(null);
+  const [isAreaModalVisible, setIsAreaModalVisible] = useState(false);
   const [focusCoords, setFocusCoords] = useState<{
     latitude: number;
     longitude: number;
@@ -127,6 +128,11 @@ export function MainMap({
       severity: c.severity,
       reportCount: c.detection_count,
       radius_meters: c.radius_meters || 18,
+      road_length_meters: c.road_length_meters || 15,
+      road_segment_coords: c.road_segment_coords?.map((p) => ({
+        latitude: p.latitude,
+        longitude: p.longitude,
+      })),
       userCount: c.user_count || 1,
       points: c.points?.map((p) => ({
         latitude: p.latitude,
@@ -145,10 +151,11 @@ export function MainMap({
       damagePoints: liveDamagePoints,
       heatmap: heatmap || [],
       activeClusterId: selectedCluster?.id ?? null,
+      activeAreaId: selectedArea?.id ?? null,
       userLocation: baseCenter,
       vehiclePosition: baseCenter,
     };
-  }, [filteredClusters, liveCoords, heatmap, selectedCluster?.id, plannedRoute]);
+  }, [filteredClusters, liveCoords, heatmap, selectedCluster?.id, selectedArea?.id, plannedRoute]);
 
   const handleMarkerPress = (point: DamagePoint) => {
     const found = clusters.find((c) => c.id === point.id);
@@ -324,12 +331,93 @@ export function MainMap({
         </View>
       </Modal>
 
-      {/* 1 KM MACRO ROAD SECTOR SUMMARY MODAL (TAMPILAN JAUH) */}
+      {/* FLOATING ROAD SEGMENT CARD: Muncul saat Ruas Panjang Jalan Diklik di Peta */}
+      {selectedArea ? (
+        <View className="absolute bottom-12 inset-x-3 rounded-2xl bg-slate-950/95 border border-slate-700/80 p-3.5 shadow-2xl backdrop-blur-md">
+          <View className="flex-row items-center justify-between pb-1.5 border-b border-slate-800">
+            <View className="flex-row items-center gap-2">
+              <View className="rounded-lg bg-sky-500/20 p-1.5">
+                <Layers size={16} color="#009EFF" />
+              </View>
+              <View>
+                <Text className="font-chivo-bold text-sm text-white">
+                  Ruas Jalan: {selectedArea.roadLengthMeters >= 1000 ? `${(selectedArea.roadLengthMeters / 1000).toFixed(1)} km` : `${selectedArea.roadLengthMeters} m`}
+                </Text>
+                <Text className="font-quicksand text-[10px] text-slate-400">
+                  {selectedArea.clusterCount} Titik Kerusakan • {selectedArea.totalReports} Laporan
+                </Text>
+              </View>
+            </View>
+            <View className="flex-row items-center gap-2">
+              <View
+                className={`rounded-full px-2 py-0.5 ${
+                  selectedArea.worstSeverity === "severe"
+                    ? "bg-red-900/80 border border-red-500"
+                    : selectedArea.worstSeverity === "high"
+                    ? "bg-red-800/80 border border-red-400"
+                    : selectedArea.worstSeverity === "medium"
+                    ? "bg-amber-800/80 border border-amber-400"
+                    : "bg-yellow-800/80 border border-yellow-400"
+                }`}
+              >
+                <Text className="font-quicksand-bold text-[9px] uppercase text-white">
+                  {selectedArea.worstSeverity}
+                </Text>
+              </View>
+              <Touchable
+                onPress={() => {
+                  setSelectedArea(null);
+                  setIsAreaModalVisible(false);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Tutup highlight ruas jalan"
+              >
+                <View className="rounded-full bg-slate-800 p-1">
+                  <X size={15} color="#94A3B8" />
+                </View>
+              </Touchable>
+            </View>
+          </View>
+
+          <View className="flex-row items-center justify-between pt-2">
+            <Text className="font-quicksand text-[10px] text-sky-400 flex-1 mr-2">
+              📍 Ketuk pin lokasi di ruas jalan untuk melihat detail kerusakan
+            </Text>
+            <View className="flex-row items-center gap-1.5">
+              <Touchable
+                onPress={() => setIsAreaModalVisible(true)}
+                className="rounded-xl border border-slate-700 bg-slate-900 px-2.5 py-1.5"
+              >
+                <Text className="font-quicksand-bold text-[10px] text-slate-200">
+                  Rincian
+                </Text>
+              </Touchable>
+              <Touchable
+                onPress={() => {
+                  setFocusCoords({
+                    latitude: selectedArea.center.latitude,
+                    longitude: selectedArea.center.longitude,
+                    zoom: 17.5,
+                  });
+                }}
+                className="flex-row items-center gap-1 rounded-xl bg-custom-primary px-3 py-1.5"
+              >
+                <ZoomIn size={12} color="#ffffff" />
+                <Text className="font-quicksand-bold text-[10px] text-white">
+                  Perbesar
+                </Text>
+              </Touchable>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      {/* ROAD SEGMENT DETAILED MODAL */}
       <Modal
         animationType="slide"
         transparent
-        visible={Boolean(selectedArea)}
-        onRequestClose={() => setSelectedArea(null)}
+        visible={isAreaModalVisible && Boolean(selectedArea)}
+        onRequestClose={() => setIsAreaModalVisible(false)}
       >
         <View className="flex-1 justify-end bg-black/40">
           <View className="rounded-t-[32px] bg-white p-6 border-t border-slate-200/80 shadow-lg max-h-[85%]">
@@ -343,17 +431,17 @@ export function MainMap({
                     </View>
                     <View>
                       <Text className="font-chivo-bold text-lg text-slate-900">
-                        Ruas Jalan Makro (~1 km)
+                        Ruas Jalan: {selectedArea.roadLengthMeters >= 1000 ? `${(selectedArea.roadLengthMeters / 1000).toFixed(1)} km` : `${selectedArea.roadLengthMeters} m`}
                       </Text>
                       <Text className="font-quicksand text-xs text-slate-500">
-                        Ringkasan sebaran kerusakan jalan di area ini
+                        {selectedArea.clusterCount} titik kerusakan di sepanjang bentang jalan ini
                       </Text>
                     </View>
                   </View>
                   <Touchable
-                    onPress={() => setSelectedArea(null)}
+                    onPress={() => setIsAreaModalVisible(false)}
                     accessibilityRole="button"
-                    accessibilityLabel="Tutup ringkasan area"
+                    accessibilityLabel="Tutup rincian ruas jalan"
                   >
                     <View className="rounded-full bg-slate-100 p-1.5">
                       <X size={18} color="#64748B" />
@@ -505,11 +593,11 @@ export function MainMap({
                 <Touchable
                   onPress={() => {
                     const center = selectedArea.center;
-                    setSelectedArea(null);
+                    setIsAreaModalVisible(false);
                     setFocusCoords({
                       latitude: center.latitude,
                       longitude: center.longitude,
-                      zoom: 16.5,
+                      zoom: 17.5,
                     });
                   }}
                   className="mt-1 flex-row items-center justify-center gap-2 rounded-2xl bg-custom-primary py-3.5 shadow-md active:opacity-90"

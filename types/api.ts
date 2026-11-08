@@ -85,6 +85,8 @@ export interface ConsolidatedCluster {
   distance_meters?: number;
   radius_meters?: number;
   radiusMeters?: number;
+  road_length_meters?: number;
+  road_segment_coords?: Array<{ latitude: number; longitude: number }>;
   validation_status?: DetectionValidationStatus;
   points?: ClusterPointDetail[];
 }
@@ -107,6 +109,8 @@ export interface PotholeCluster {
   updated_at: string;
   distance_meters?: number;
   radius_meters?: number;
+  road_length_meters?: number;
+  road_segment_coords?: Array<{ latitude: number; longitude: number }>;
   points?: ClusterPointDetail[];
 }
 
