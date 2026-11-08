@@ -45,7 +45,7 @@ export function Touchable({
       onPressOut={() => animateTo(1)}
       {...props}
     >
-      <Animated.View style={{ transform: [{ scale }], width: "100%" }}>
+      <Animated.View style={{ transform: [{ scale }] }}>
         {children}
       </Animated.View>
     </Pressable>

@@ -65,15 +65,12 @@ export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
       {/* CARD HEADER */}
       <View className="flex-row items-center justify-between">
         <View>
-          <Text className="font-chivo-bold text-lg text-slate-900">
+          <Text className="font-chivo-bold text-sm text-slate-900">
             Telemetry Radial Index
           </Text>
           <Text className="font-quicksand text-xs text-slate-600 mt-0.5">
             Radial sensor vibration & AI model metrics
           </Text>
-        </View>
-        <View className="h-8 w-8 items-center justify-center rounded-full bg-sky-50 border border-sky-100">
-          <Activity size={16} color={TOKENS.colors.brand.DEFAULT} />
         </View>
       </View>
 

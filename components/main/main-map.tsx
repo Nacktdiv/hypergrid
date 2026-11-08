@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   InteractionManager,
   Modal,
+  Pressable,
   ScrollView,
   Text,
   View,
@@ -364,7 +365,7 @@ export function MainMap({
         >
           <View className="flex-row items-center justify-between rounded-2xl border border-slate-200/90 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur-md">
             {/* Left: Info & Tap Target to open details */}
-            <Touchable
+            <Pressable
               onPress={() => {
                 if (selectedCluster) {
                   setIsClusterModalVisible(true);
@@ -426,11 +427,11 @@ export function MainMap({
                     : "Ketuk untuk melihat detail"}
                 </Text>
               </View>
-            </Touchable>
+            </Pressable>
 
             {/* Right: Inline Action Button & Close */}
-            <View className="flex-row items-center gap-1.5">
-              <Touchable
+            <View className="flex-row items-center gap-1.5 shrink-0">
+              <Pressable
                 onPress={() => {
                   if (selectedCluster) {
                     setIsClusterModalVisible(true);
@@ -447,16 +448,16 @@ export function MainMap({
                   Detail
                 </Text>
                 <ChevronRight size={13} color="#ffffff" />
-              </Touchable>
+              </Pressable>
 
-              <Touchable
+              <Pressable
                 onPress={handleClearSelection}
                 className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
                 accessibilityRole="button"
                 accessibilityLabel="Tutup informasi"
               >
                 <X size={13} color="#64748B" />
-              </Touchable>
+              </Pressable>
             </View>
           </View>
         </View>
