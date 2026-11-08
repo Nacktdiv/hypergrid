@@ -1,5 +1,5 @@
-import React, { useMemo, useRef, useEffect, useState } from "react";
-import { StyleSheet, View, ActivityIndicator } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 import type { AreaSummary, DamagePoint, MapData } from "./map-data";
 import { VEHICLE_MARKER_IMAGES } from "./vehicle-assets-base64";
@@ -47,7 +47,7 @@ export const LeafletMap = React.memo(function LeafletMap({
     const zoomLevel = Math.max(12, Math.min(18, Math.round(camera.zoom)));
 
     const routeCoords = JSON.stringify(
-      route.coordinates.map((c) => [c.latitude, c.longitude])
+      route.coordinates.map((c) => [c.latitude, c.longitude]),
     );
     const damageData = JSON.stringify(damagePoints);
     const vehicleCoord = JSON.stringify([
@@ -144,7 +144,7 @@ export const LeafletMap = React.memo(function LeafletMap({
       width: 20px !important;
       height: 20px !important;
       border-radius: 50%;
-      background-color: #009EFF;
+      background-color: #0040FF;
       border: 3px solid #ffffff;
       box-shadow: 0 2px 6px rgba(0,0,0,0.35);
     }
@@ -181,7 +181,7 @@ export const LeafletMap = React.memo(function LeafletMap({
           var radius = (opts && opts.radius) || 20;
           latlngs.forEach(function(p) {
             var lat = p[0], lng = p[1], intensity = p[2] || 0.6;
-            var col = intensity > 0.8 ? '#EF4444' : (intensity > 0.5 ? '#F59E0B' : '#009EFF');
+            var col = intensity > 0.8 ? '#EF4444' : (intensity > 0.5 ? '#F59E0B' : '#0040FF');
             var c = L.circleMarker([lat, lng], {
               radius: radius * 0.4,
               color: 'transparent',
@@ -216,7 +216,7 @@ export const LeafletMap = React.memo(function LeafletMap({
       window.routePolyline = null;
       if (initialRoute && initialRoute.length > 0) {
         window.routePolyline = L.polyline(initialRoute, {
-          color: '#009EFF',
+          color: '#0040FF',
           weight: 5,
           opacity: 0.85,
           lineJoin: 'round'
@@ -365,7 +365,7 @@ export const LeafletMap = React.memo(function LeafletMap({
           blur: 6,
           maxZoom: 18,
           minOpacity: 0.35,
-          gradient: { 0.2: '#009EFF', 0.5: '#EAB308', 0.75: '#F59E0B', 1.0: '#EF4444' }
+          gradient: { 0.2: '#0040FF', 0.5: '#EAB308', 0.75: '#F59E0B', 1.0: '#EF4444' }
         });
       };
 
@@ -668,7 +668,7 @@ export const LeafletMap = React.memo(function LeafletMap({
           window.routePolyline.setLatLngs(validCoords);
         } else if (validCoords.length > 0) {
           window.routePolyline = L.polyline(validCoords, {
-            color: '#009EFF',
+            color: '#0040FF',
             weight: 5,
             opacity: 0.85,
             lineJoin: 'round'
@@ -739,7 +739,7 @@ export const LeafletMap = React.memo(function LeafletMap({
     lastRouteLengthRef.current = coords.length;
 
     const routeJson = JSON.stringify(
-      coords.map((c) => [c.latitude, c.longitude])
+      coords.map((c) => [c.latitude, c.longitude]),
     );
     const js = `
       if (window.updateRoute) window.updateRoute(${routeJson});
@@ -780,7 +780,6 @@ export const LeafletMap = React.memo(function LeafletMap({
     webViewRef.current.injectJavaScript(js);
   }, [data.heatmap]);
 
-
   // 5. Pembaruan highlight cakupan area klaster saat user memilih klaster
   useEffect(() => {
     if (!isMapLoaded.current || !webViewRef.current) return;
@@ -790,7 +789,7 @@ export const LeafletMap = React.memo(function LeafletMap({
 
     if (data.activeClusterId) {
       const activePt = data.damagePoints.find(
-        (p) => p.id === data.activeClusterId
+        (p) => p.id === data.activeClusterId,
       );
       const activeJson = JSON.stringify(activePt || null);
       const js = `
@@ -849,7 +848,7 @@ export const LeafletMap = React.memo(function LeafletMap({
         const lat = data.vehiclePosition.latitude;
         const lng = data.vehiclePosition.longitude;
         const routeJson = JSON.stringify(
-          data.route.coordinates.map((c) => [c.latitude, c.longitude])
+          data.route.coordinates.map((c) => [c.latitude, c.longitude]),
         );
         const heatJson = JSON.stringify(data.heatmap || []);
         const activePt = data.activeClusterId
@@ -887,7 +886,7 @@ export const LeafletMap = React.memo(function LeafletMap({
         startInLoadingState={true}
         renderLoading={() => (
           <View style={styles.loader}>
-            <ActivityIndicator size="small" color="#009EFF" />
+            <ActivityIndicator size="small" color="#0040FF" />
           </View>
         )}
       />

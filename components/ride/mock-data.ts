@@ -11,15 +11,15 @@
  */
 
 /** Mobil aktif di peta — Figma `Isometric Car Icon 2` #155:165 (vektor) */
-export const CAR_IMAGE = require("@/assets/vehicles/car.png")
+export const CAR_IMAGE = require("@/assets/vehicles/car.png");
 
-export type DriveStatus = "safe" | "warning" | "speeding"
+export type DriveStatus = "safe" | "warning" | "speeding";
 
 /**
  * Status kondisi SenaWA.
  * Figma sendiri tidak punya badge ini — berasal dari spec, jadi warna
  * diambil dari semantic token yang sudah ada di Figma:
- *   - safe     "AMAN"           biru Primary #009EFF
+ *   - safe     "AMAN"           biru Primary #0040FF
  *   - warning  "PERINGATAN"     Semantic/Warning #F59E0B
  *   - speeding "TERLALU CEPAT"  Semantic/Danger #EF4444
  */
@@ -27,22 +27,22 @@ export const STATUS_META: Record<
   DriveStatus,
   { label: string; color: string; textColor: string }
 > = {
-  safe: { label: "SAFE", color: "#009EFF", textColor: "#FFFFFF" },
+  safe: { label: "SAFE", color: "#0040FF", textColor: "#FFFFFF" },
   warning: { label: "WARNING", color: "#F59E0B", textColor: "#000000" },
   speeding: { label: "TOO FAST", color: "#EF4444", textColor: "#FFFFFF" },
-}
+};
 
 /** Status aktif untuk demo */
-export const ACTIVE_STATUS: DriveStatus = "warning"
+export const ACTIVE_STATUS: DriveStatus = "warning";
 
 /** Telemetri utama — kecepatan digital */
 export const SPEED = {
   value: "45",
   unit: "KM/H",
-}
+};
 
 /** Level guncangan (0-100) untuk progress bar */
-export const SHOCK_LEVEL = 62
+export const SHOCK_LEVEL = 62;
 
 /** Detail metrik guncangan untuk expanded state (View 2) */
 export const SHOCK_METRICS = {
@@ -53,13 +53,13 @@ export const SHOCK_METRICS = {
   baselineStatus: "Calibration",
   /** Ambang batas sensitivitas, untuk label slider */
   threshold: "Sensitivity Threshold",
-}
+};
 
 /** Baris telemetry yang tampil di collapsed state (Figma View 1 #114:1417) */
 export const TELEMETRY_ROWS = [
   { id: "vibration", label: "Vibration", value: "100", unit: "m/s2" },
   { id: "speed", label: "Speed", value: "100", unit: "m/s2" },
-]
+];
 
 /** Baris detail tambahan untuk expanded state (Screen 8) */
 export const SHOCK_DETAIL_ROWS = [
@@ -67,4 +67,4 @@ export const SHOCK_DETAIL_ROWS = [
   { id: "avg", label: "Avg Magnitude", value: "3.1", unit: "m/s2" },
   { id: "events", label: "Events Recorded", value: "12", unit: "×" },
   { id: "baseline", label: "Baseline Status", value: "Calibration", unit: "" },
-]
+];

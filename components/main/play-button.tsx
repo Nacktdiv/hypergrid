@@ -1,7 +1,7 @@
-import React, { useState } from "react";
-import { useRouter } from "expo-router";
 import { SlideCommit } from "@/components/ui/slide-commit";
 import type { PlannedRoute } from "@/services/api/routing.service";
+import { useRouter } from "expo-router";
+import { useState } from "react";
 
 export interface PlayButtonProps {
   activeRoute?: PlannedRoute | null;
@@ -45,12 +45,16 @@ export function PlayButton({ activeRoute, onStartRide }: PlayButtonProps) {
   return (
     <SlideCommit
       key={sliderKey}
-      label={activeRoute ? `Slide to Start: ${activeRoute.destinationName}` : "Slide to Start Ride"}
+      label={
+        activeRoute
+          ? `Slide to Start: ${activeRoute.destinationName}`
+          : "Slide to Start Ride"
+      }
       doneLabel="Starting Ride..."
       errorLabel="Cannot start ride"
       onConfirm={handleConfirm}
       onDone={handleDone}
-      trackColor="#009EFF"
+      trackColor="#0040FF"
       handleColor="#FFFFFF"
       successColor="#10B981"
       height={54}

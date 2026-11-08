@@ -1,6 +1,6 @@
+import { useAuth } from "@/contexts/auth-context";
 import { Redirect } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
-import { useAuth } from "@/contexts/auth-context";
 
 /**
  * Root Gateway / Traffic Controller:
@@ -15,7 +15,7 @@ export default function RootIndex() {
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#009EFF" />
+        <ActivityIndicator size="large" color="#0040FF" />
       </View>
     );
   }

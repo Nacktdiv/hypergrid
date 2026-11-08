@@ -1,3 +1,5 @@
+import * as Haptics from "expo-haptics";
+import { Check, ChevronsRight, TriangleAlert } from "lucide-react-native";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -8,8 +10,6 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import * as Haptics from "expo-haptics";
-import { Check, ChevronsRight, TriangleAlert } from "lucide-react-native";
 
 export type SlideCommitPhase = "idle" | "pending" | "done" | "error";
 
@@ -42,7 +42,7 @@ export function SlideCommit({
   onConfirm,
   onDone,
   onError,
-  trackColor = "#009EFF",
+  trackColor = "#0040FF",
   handleColor = "#FFFFFF",
   successColor = "#10B981",
   dangerColor = "#EF4444",
@@ -89,17 +89,41 @@ export function SlideCommit({
         // Abaikan pada device/simulator tanpa haptics
       }
     },
-    []
+    [],
   );
 
   const shakeAnimation = useCallback(() => {
     Animated.sequence([
-      Animated.timing(shakeX, { toValue: -8, duration: 40, useNativeDriver: true }),
-      Animated.timing(shakeX, { toValue: 8, duration: 40, useNativeDriver: true }),
-      Animated.timing(shakeX, { toValue: -6, duration: 40, useNativeDriver: true }),
-      Animated.timing(shakeX, { toValue: 6, duration: 40, useNativeDriver: true }),
-      Animated.timing(shakeX, { toValue: -3, duration: 40, useNativeDriver: true }),
-      Animated.timing(shakeX, { toValue: 0, duration: 40, useNativeDriver: true }),
+      Animated.timing(shakeX, {
+        toValue: -8,
+        duration: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(shakeX, {
+        toValue: 8,
+        duration: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(shakeX, {
+        toValue: -6,
+        duration: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(shakeX, {
+        toValue: 6,
+        duration: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(shakeX, {
+        toValue: -3,
+        duration: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(shakeX, {
+        toValue: 0,
+        duration: 40,
+        useNativeDriver: true,
+      }),
     ]).start();
   }, [shakeX]);
 
@@ -184,13 +208,23 @@ export function SlideCommit({
         }, 1500);
       }, delay);
     }
-  }, [translateX, triggerHaptic, onConfirm, onDone, onError, shakeAnimation, snapHome, resetToIdle]);
+  }, [
+    translateX,
+    triggerHaptic,
+    onConfirm,
+    onDone,
+    onError,
+    shakeAnimation,
+    snapHome,
+    resetToIdle,
+  ]);
 
   const panResponder = useMemo(() => {
     let touchStartX = 0;
 
     return PanResponder.create({
-      onStartShouldSetPanResponder: () => !disabled && !isPendingOrDoneRef.current,
+      onStartShouldSetPanResponder: () =>
+        !disabled && !isPendingOrDoneRef.current,
       onMoveShouldSetPanResponder: (_, gesture) =>
         !disabled && !isPendingOrDoneRef.current && Math.abs(gesture.dx) > 3,
       onPanResponderGrant: () => {
@@ -206,7 +240,10 @@ export function SlideCommit({
       },
       onPanResponderRelease: (_, gesture) => {
         const travel = currentTravelRef.current;
-        const currentX = Math.min(Math.max(0, touchStartX + gesture.dx), travel);
+        const currentX = Math.min(
+          Math.max(0, touchStartX + gesture.dx),
+          travel,
+        );
 
         // Ambang aktivasi: melewati 85% perjalanan atau flick cepat ke kanan
         if (currentX >= travel * 0.85 || gesture.vx > 0.8) {
@@ -238,8 +275,8 @@ export function SlideCommit({
     phase === "done"
       ? successColor
       : phase === "error"
-      ? dangerColor
-      : trackColor;
+        ? dangerColor
+        : trackColor;
 
   return (
     <Animated.View
@@ -297,13 +334,9 @@ export function SlideCommit({
         ]}
       >
         {phase === "idle" ? (
-          icon ?? (
-            <ChevronsRight
-              size={22}
-              color={trackColor}
-              strokeWidth={2.6}
-            />
-          )
+          (icon ?? (
+            <ChevronsRight size={22} color={trackColor} strokeWidth={2.6} />
+          ))
         ) : phase === "pending" ? (
           <ActivityIndicator size="small" color={trackColor} />
         ) : phase === "done" ? (
@@ -324,7 +357,7 @@ const styles = StyleSheet.create({
     padding: PAD,
     overflow: "hidden",
     elevation: 2,
-    shadowColor: "#0F172A",
+    shadowColor: "#fff",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 6,
@@ -337,7 +370,7 @@ const styles = StyleSheet.create({
   },
   labelText: {
     color: "#FFFFFF",
-    fontFamily: "Quicksand_700Bold",
+    fontFamily: "Inter_700Bold",
     fontSize: 15,
     letterSpacing: 0.2,
     textAlign: "center",
@@ -348,7 +381,7 @@ const styles = StyleSheet.create({
     elevation: 4,
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
   },
 });

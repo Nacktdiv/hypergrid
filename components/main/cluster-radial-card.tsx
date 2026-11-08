@@ -1,8 +1,8 @@
-import React from "react";
-import { Text, View } from "react-native";
-import Svg, { Circle, Line, G } from "react-native-svg";
-import { MapPin, Radio } from "lucide-react-native";
 import type { PotholeCluster } from "@/types/api";
+import { TOKENS } from "@/lib/theme/tokens";
+import { MapPin, Radio } from "lucide-react-native";
+import { Text, View } from "react-native";
+import Svg, { Circle, G, Line } from "react-native-svg";
 
 export interface ClusterRadialCardProps {
   cluster: PotholeCluster;
@@ -89,7 +89,9 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
           <View
             className={`px-2 py-0.5 rounded-full border ${severityConfig.bg} ${severityConfig.border}`}
           >
-            <Text className={`font-mono-bold text-[10px] ${severityConfig.text}`}>
+            <Text
+              className={`font-mono-bold text-[10px] ${severityConfig.text}`}
+            >
               {severityConfig.label}
             </Text>
           </View>
@@ -184,7 +186,7 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
               cx={center}
               cy={center}
               r={rMiddle}
-              stroke="#009EFF"
+              stroke={TOKENS.colors.brand.DEFAULT}
               strokeWidth={strokeW}
               fill="none"
               strokeDasharray={`${circMiddle} ${circMiddle}`}
@@ -241,7 +243,7 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
 
           <View className="flex-1 items-center px-1">
             <View className="flex-row items-center gap-1 mb-0.5">
-              <View className="h-2 w-2 rounded-full bg-[#009EFF]" />
+              <View className="h-2 w-2 rounded-full bg-brand" />
               <Text
                 className="font-quicksand-semibold text-[10px] text-slate-600"
                 numberOfLines={1}
@@ -281,7 +283,8 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
             </Text>
           </View>
           <Text className="font-mono-bold text-xs text-slate-900">
-            {cluster.center_latitude.toFixed(4)}, {cluster.center_longitude.toFixed(4)}
+            {cluster.center_latitude.toFixed(4)},{" "}
+            {cluster.center_longitude.toFixed(4)}
           </Text>
         </View>
 
@@ -295,7 +298,8 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
           <View className="flex-row items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 border border-emerald-200/60">
             <View className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             <Text className="font-mono-bold text-[10px] text-emerald-700">
-              ~{cluster.radius_meters || 18}m radius • {cluster.user_count || 1} User(s)
+              ~{cluster.radius_meters || 18}m radius • {cluster.user_count || 1}{" "}
+              User(s)
             </Text>
           </View>
         </View>

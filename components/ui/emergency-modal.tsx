@@ -1,15 +1,4 @@
-import React, { useCallback, useState } from "react";
-import {
-  Alert,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Share,
-  Text,
-  View,
-} from "react-native";
+import * as Haptics from "expo-haptics";
 import {
   AlertTriangle,
   Check,
@@ -25,7 +14,18 @@ import {
   Truck,
   X,
 } from "lucide-react-native";
-import * as Haptics from "expo-haptics";
+import React, { useCallback, useState } from "react";
+import {
+  Alert,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { LatLng } from "@/components/map/map-data";
@@ -269,7 +269,7 @@ export function EmergencyModal({
             <View className="rounded-2xl border border-slate-200/90 bg-slate-50/80 p-4 gap-3">
               <View className="flex-row items-center justify-between">
                 <View className="flex-row items-center gap-2">
-                  <MapPin size={16} color="#009EFF" />
+                  <MapPin size={16} color="#0040FF" />
                   <Text className="font-quicksand-bold text-xs text-slate-700 uppercase tracking-wider">
                     Your Current GPS Position
                   </Text>
@@ -352,7 +352,9 @@ export function EmergencyModal({
                         >
                           <IconComp size={16} color={item.accentColor} />
                         </View>
-                        <View className={`px-2 py-0.5 rounded-md border ${item.badgeBg}`}>
+                        <View
+                          className={`px-2 py-0.5 rounded-md border ${item.badgeBg}`}
+                        >
                           <Text className="font-mono-bold text-[10px]">
                             {item.number}
                           </Text>

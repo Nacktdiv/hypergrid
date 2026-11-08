@@ -1,4 +1,6 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { useRouter } from "expo-router";
+import { Compass, Navigation, RefreshCw } from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   InteractionManager,
   RefreshControl,
@@ -7,22 +9,16 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
-import {
-  Compass,
-  Navigation,
-  RefreshCw,
-} from "lucide-react-native";
 
+import {
+  formatIsoToLongLabel,
+  formatToIsoDate,
+} from "@/components/history/date-utils";
 import { DaySelector } from "@/components/history/day-selector";
 import { HistoryItemCard } from "@/components/history/history-item-card";
 import { MetricsSummary } from "@/components/history/metrics-summary";
-import { RouteMapPreview } from "@/components/history/route-map-preview";
-import {
-  formatToIsoDate,
-  formatIsoToLongLabel,
-} from "@/components/history/date-utils";
 import type { HistoryEntry, Metric } from "@/components/history/mock-data";
+import { RouteMapPreview } from "@/components/history/route-map-preview";
 import type { DamagePoint, LatLng } from "@/components/map/map-data";
 import { AppButton } from "@/components/ui/app-button";
 import { AppCard } from "@/components/ui/app-card";
@@ -30,8 +26,8 @@ import { HistoryContentSkeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { useDetections } from "@/hooks/use-detections";
 import { historyStorage } from "@/services/api/history-storage";
-import { tripStorage, type SavedTripRecord } from "@/services/api/trip-storage";
 import { tokenStorage } from "@/services/api/token-storage";
+import { tripStorage, type SavedTripRecord } from "@/services/api/trip-storage";
 
 /**
  * Screen 7 — Riwayat Perjalanan (Swiss Design & Data Riil Server).
@@ -47,20 +43,23 @@ export default function HistoryScreen() {
 
   // Tanggal terpilih (format ISO: YYYY-MM-DD, default hari ini)
   const [selectedDate, setSelectedDate] = useState<string>(() =>
-    formatToIsoDate(new Date())
+    formatToIsoDate(new Date()),
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSkeletonVisible, setIsSkeletonVisible] = useState<boolean>(
-    () => historyStorage.getMemoryCache() === null
+    () => historyStorage.getMemoryCache() === null,
   );
-  const [savedTrips, setSavedTrips] = useState<SavedTripRecord[]>(() =>
-    tripStorage.getMemoryCache() || []
+  const [savedTrips, setSavedTrips] = useState<SavedTripRecord[]>(
+    () => tripStorage.getMemoryCache() || [],
   );
   const fetchRequestIdRef = useRef(0);
   const dateSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    tripStorage.getTrips().then(setSavedTrips).catch(() => {});
+    tripStorage
+      .getTrips()
+      .then(setSavedTrips)
+      .catch(() => {});
     const unsub = tripStorage.subscribe(setSavedTrips);
     return unsub;
   }, []);
@@ -92,7 +91,7 @@ export default function HistoryScreen() {
         }
       }
     },
-    [fetchDetections, user]
+    [fetchDetections, user],
   );
 
   // Saat masuk ke halaman History:
@@ -159,7 +158,7 @@ export default function HistoryScreen() {
         }
       });
     },
-    [selectedDate, isSkeletonVisible, fetchDetections, user]
+    [selectedDate, isSkeletonVisible, fetchDetections, user],
   );
 
   const handleRefresh = async () => {
@@ -167,8 +166,6 @@ export default function HistoryScreen() {
     await loadDataFromBackend(true);
     setIsRefreshing(false);
   };
-
-
 
   // 1. FILTER DATA PERJALANAN & DETEKSI NYATA KHUSUS PADA TANGGAL YANG DIPILIH
   const tripsOnDate = useMemo(() => {
@@ -223,8 +220,8 @@ export default function HistoryScreen() {
         d.zAccelPeak && d.zAccelPeak >= 2.2
           ? "high"
           : d.zAccelPeak && d.zAccelPeak >= 1.7
-          ? "medium"
-          : "low",
+            ? "medium"
+            : "low",
       reportCount: 1,
     }));
 
@@ -250,7 +247,7 @@ export default function HistoryScreen() {
           label: "Avg AI Confidence",
           value: "0%",
           unit: "AI",
-          accent: "#009EFF",
+          accent: "#0040FF",
         },
         {
           id: "peak",
@@ -275,13 +272,13 @@ export default function HistoryScreen() {
             100
           ).toFixed(0)
         : tripsOnDate.length > 0
-        ? "92"
-        : "0";
+          ? "92"
+          : "0";
 
     const maxPeak = Math.max(
       ...detectionsOnDate.map((d) => d.zAccelPeak || 0),
       ...tripsOnDate.map((t) => t.maxGForce || 0),
-      0
+      0,
     ).toFixed(1);
 
     return [
@@ -297,7 +294,7 @@ export default function HistoryScreen() {
         label: "Avg AI Confidence",
         value: `${avgConfidence}%`,
         unit: "Score",
-        accent: "#009EFF",
+        accent: "#0040FF",
       },
       {
         id: "peak",
@@ -363,7 +360,9 @@ export default function HistoryScreen() {
         const zPeak = det.zAccelPeak
           ? `${det.zAccelPeak.toFixed(2)}G`
           : "Normal";
-        const speed = det.speedKmh ? `${det.speedKmh.toFixed(0)} km/h` : "0 km/h";
+        const speed = det.speedKmh
+          ? `${det.speedKmh.toFixed(0)} km/h`
+          : "0 km/h";
 
         list.push({
           id: det.id,
@@ -384,7 +383,7 @@ export default function HistoryScreen() {
   const showSkeleton = isSkeletonVisible || isDetectionsLoading;
 
   return (
-    <SafeAreaView className="flex-1 bg-surface-canvas" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ScrollView
         className="flex-1"
         contentContainerClassName="gap-5 px-4 pt-2 pb-8"
@@ -393,44 +392,43 @@ export default function HistoryScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={["#009EFF"]}
-            tintColor="#009EFF"
+            colors={["#0040FF"]}
+            tintColor="#0040FF"
           />
         }
       >
         {/* HEADER */}
         <View className="flex-row items-center justify-between">
           <View>
-            <Text className="font-chivo-bold text-2xl text-slate-900">History</Text>
+            <Text className="font-chivo-bold text-2xl text-slate-900">
+              History
+            </Text>
             <Text className="font-quicksand text-xs text-slate-600 mt-0.5">
               Driving telemetry and detected road anomalies
             </Text>
           </View>
-          <AppButton
+          {/* <AppButton
             variant="circle"
             size="sm"
             onPress={handleRefresh}
             loading={isRefreshing}
             iconLeft={<RefreshCw size={18} color="#334155" />}
             accessibilityLabel="Synchronize telemetry data"
-          />
+          /> */}
         </View>
 
         {/* PEMILIH HARI INTUITIF (7 HARI TERAKHIR + TOMBOL KALENDER) */}
         <View className="gap-2">
-          <View className="flex-row items-center justify-between">
-            <Text className="font-mono text-xs font-bold uppercase tracking-wider text-slate-700">
+          {/* <View className="flex-row items-center justify-between">
+            <Text className="text-xs font-bold tracking-wider text-slate-700">
               Select Date:
             </Text>
             <Text className="font-mono text-[11px] text-brand">
               {formatIsoToLongLabel(selectedDate)}
             </Text>
-          </View>
+          </View> */}
 
-          <DaySelector
-            onSelect={handleSelectDate}
-            selectedId={selectedDate}
-          />
+          <DaySelector onSelect={handleSelectDate} selectedId={selectedDate} />
         </View>
 
         {/* TAMPILKAN SKELETON SAAT PINDAH HALAMAN ATAU GANTI TANGGAL & SEDANG FETCH */}
@@ -466,11 +464,13 @@ export default function HistoryScreen() {
                     No Driving Activity Detected
                   </Text>
                   <Text className="font-quicksand text-xs leading-relaxed text-slate-700">
-                    No driving activity or road shock anomaly detections recorded on{" "}
+                    No driving activity or road shock anomaly detections
+                    recorded on{" "}
                     <Text className="font-mono-bold text-slate-900">
                       {formatIsoToLongLabel(selectedDate)}
                     </Text>
-                    . Map preview is hidden as no GPS telemetry routes were logged.
+                    . Map preview is hidden as no GPS telemetry routes were
+                    logged.
                   </Text>
                 </View>
 

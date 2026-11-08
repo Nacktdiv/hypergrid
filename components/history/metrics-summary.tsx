@@ -1,7 +1,6 @@
-import React from "react";
-import { Text, View } from "react-native";
-import Svg, { Circle, Line, G } from "react-native-svg";
 import { Activity, ShieldCheck, Zap } from "lucide-react-native";
+import { Text, View } from "react-native";
+import Svg, { Circle, G, Line } from "react-native-svg";
 
 import { AppCard } from "@/components/ui/app-card";
 import { TOKENS } from "@/lib/theme/tokens";
@@ -12,7 +11,7 @@ import type { Metric } from "./mock-data";
  *
  * Menggantikan 3 kartu kotak menjadi satu kartu visual radial konsentris:
  * - Outer Ring: G-Force Peak (Skala 0.0G - 3.0G) - Deep Blue (#1D4ED8)
- * - Middle Ring: AI Confidence (Skala 0% - 100%) - Brand Blue (#009EFF)
+ * - Middle Ring: AI Confidence (Skala 0% - 100%) - Brand Blue (#0040FF)
  * - Inner Ring: Anomaly Points (Skala 0 - 10+ Lokasi) - Sky Blue (#38BDF8)
  * - Spiderweb Polar Grid: Lingkaran & garis spoke radial halus (#E2E8F0)
  */
@@ -32,9 +31,18 @@ export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
     : 0;
 
   // Normalisasi sudut lingkaran (0.05 minimum agar tetap tampak titik awal jika 0)
-  const outerRatio = Math.min(1, Math.max(peakVal > 0 ? 0.08 : 0.03, peakVal / 3.0));
-  const middleRatio = Math.min(1, Math.max(confidencePct > 0 ? 0.08 : 0.03, confidencePct / 100));
-  const innerRatio = Math.min(1, Math.max(anomalyCount > 0 ? 0.08 : 0.03, anomalyCount / 10));
+  const outerRatio = Math.min(
+    1,
+    Math.max(peakVal > 0 ? 0.08 : 0.03, peakVal / 3.0),
+  );
+  const middleRatio = Math.min(
+    1,
+    Math.max(confidencePct > 0 ? 0.08 : 0.03, confidencePct / 100),
+  );
+  const innerRatio = Math.min(
+    1,
+    Math.max(anomalyCount > 0 ? 0.08 : 0.03, anomalyCount / 10),
+  );
 
   const size = 200;
   const center = size / 2;
@@ -71,7 +79,10 @@ export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
 
       {/* CENTER RADIAL CHART (CONCENTRIC ARCS WITH POLAR GRID) */}
       <View className="items-center justify-center py-2">
-        <View style={{ width: size, height: size }} className="items-center justify-center relative">
+        <View
+          style={{ width: size, height: size }}
+          className="items-center justify-center relative"
+        >
           <Svg width={size} height={size}>
             {/* 1. POLAR SPIDERWEB GRID (RADIAL SPOKES) */}
             <G>
@@ -96,11 +107,46 @@ export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
             </G>
 
             {/* 2. POLAR CONCENTRIC GRID CIRCLES */}
-            <Circle cx={center} cy={center} r={35} stroke="#E2E8F0" strokeWidth={1} fill="none" />
-            <Circle cx={center} cy={center} r={48} stroke="#F1F5F9" strokeWidth={strokeW} fill="none" />
-            <Circle cx={center} cy={center} r={65} stroke="#F1F5F9" strokeWidth={strokeW} fill="none" />
-            <Circle cx={center} cy={center} r={82} stroke="#F1F5F9" strokeWidth={strokeW} fill="none" />
-            <Circle cx={center} cy={center} r={95} stroke="#E2E8F0" strokeWidth={1} fill="none" />
+            <Circle
+              cx={center}
+              cy={center}
+              r={35}
+              stroke="#E2E8F0"
+              strokeWidth={1}
+              fill="none"
+            />
+            <Circle
+              cx={center}
+              cy={center}
+              r={48}
+              stroke="#F1F5F9"
+              strokeWidth={strokeW}
+              fill="none"
+            />
+            <Circle
+              cx={center}
+              cy={center}
+              r={65}
+              stroke="#F1F5F9"
+              strokeWidth={strokeW}
+              fill="none"
+            />
+            <Circle
+              cx={center}
+              cy={center}
+              r={82}
+              stroke="#F1F5F9"
+              strokeWidth={strokeW}
+              fill="none"
+            />
+            <Circle
+              cx={center}
+              cy={center}
+              r={95}
+              stroke="#E2E8F0"
+              strokeWidth={1}
+              fill="none"
+            />
 
             {/* 3. CONCENTRIC COLORED ARCS */}
             {/* INNER RING: Anomaly Points */}
@@ -122,7 +168,7 @@ export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
               cx={center}
               cy={center}
               r={rMiddle}
-              stroke="#009EFF"
+              stroke={TOKENS.colors.brand.DEFAULT}
               strokeWidth={strokeW}
               fill="none"
               strokeDasharray={`${circMiddle} ${circMiddle}`}
@@ -162,7 +208,10 @@ export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
         <View className="flex-1 items-center px-1">
           <View className="flex-row items-center gap-1.5 mb-1">
             <View className="h-2 w-2 rounded-full bg-[#38BDF8]" />
-            <Text className="font-quicksand text-[11px] text-slate-600 font-medium" numberOfLines={1}>
+            <Text
+              className="font-quicksand text-[11px] text-slate-600 font-medium"
+              numberOfLines={1}
+            >
               Anomalies
             </Text>
           </View>
@@ -177,8 +226,11 @@ export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
         {/* Ring 2 Legend */}
         <View className="flex-1 items-center px-1">
           <View className="flex-row items-center gap-1.5 mb-1">
-            <View className="h-2 w-2 rounded-full bg-[#009EFF]" />
-            <Text className="font-quicksand text-[11px] text-slate-600 font-medium" numberOfLines={1}>
+            <View className="h-2 w-2 rounded-full bg-brand" />
+            <Text
+              className="font-quicksand text-[11px] text-slate-600 font-medium"
+              numberOfLines={1}
+            >
               Confidence
             </Text>
           </View>
@@ -194,7 +246,10 @@ export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
         <View className="flex-1 items-center px-1">
           <View className="flex-row items-center gap-1.5 mb-1">
             <View className="h-2 w-2 rounded-full bg-[#1D4ED8]" />
-            <Text className="font-quicksand text-[11px] text-slate-600 font-medium" numberOfLines={1}>
+            <Text
+              className="font-quicksand text-[11px] text-slate-600 font-medium"
+              numberOfLines={1}
+            >
               Peak Shock
             </Text>
           </View>
@@ -217,9 +272,7 @@ export function MetricsSummary({ metrics }: { metrics: Metric[] }) {
               : `${anomalyCount} shock anomaly clusters recorded`}
           </Text>
         </View>
-        <Text className="font-mono text-[10px] text-slate-500">
-          EDGE AI v1
-        </Text>
+        <Text className="font-mono text-[10px] text-slate-500">EDGE AI v1</Text>
       </View>
     </AppCard>
   );

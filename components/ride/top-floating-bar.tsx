@@ -1,6 +1,6 @@
+import { AlertTriangle, ChevronLeft, Navigation } from "lucide-react-native";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
-import { AlertTriangle, ChevronLeft, Navigation } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppButton } from "@/components/ui/app-button";
@@ -33,9 +33,7 @@ export const TopFloatingBar = React.memo(function TopFloatingBar({
         variant="circle"
         size="sm"
         onPress={onBack}
-        iconLeft={
-          <ChevronLeft size={22} color={TOKENS.colors.slate[800]} />
-        }
+        iconLeft={<ChevronLeft size={22} color={TOKENS.colors.slate[800]} />}
         accessibilityLabel="Back to start screen"
       />
 
@@ -44,7 +42,7 @@ export const TopFloatingBar = React.memo(function TopFloatingBar({
         <View className="flex-1 mx-2.5 flex-row items-center justify-between h-11 px-3 rounded-full bg-white/95 border border-slate-200/90 shadow-sm">
           <View className="flex-row items-center gap-1.5 flex-1 pr-1.5">
             <View className="h-6 w-6 rounded-full bg-sky-50 items-center justify-center">
-              <Navigation size={12} color="#009EFF" />
+              <Navigation size={12} color="#0040FF" />
             </View>
             <Text
               className="font-quicksand-bold text-xs text-slate-900 flex-1"
@@ -54,7 +52,8 @@ export const TopFloatingBar = React.memo(function TopFloatingBar({
             </Text>
           </View>
 
-          {remainingDistanceMeters !== null && remainingDistanceMeters !== undefined ? (
+          {remainingDistanceMeters !== null &&
+          remainingDistanceMeters !== undefined ? (
             <View className="px-2 py-0.5 rounded-md bg-sky-50 border border-sky-100">
               <Text className="font-mono-bold text-[10px] text-sky-700">
                 {remainingDistanceMeters >= 1000

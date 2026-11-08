@@ -6,7 +6,7 @@ import { SHOCK_LEVEL } from "./mock-data";
  * Progress bar level guncangan — Figma View 1 `status bar` #114:1428.
  *
  * Tinggi 12px, radius 48px, track Secondary/Light #E2E8F0, border putih 1px.
- * Isi progress Primary #009EFF.
+ * Isi progress Primary #0040FF.
  * Mendukung persentase dinamis dari perhitungan Edge AI (0-100%).
  */
 export function ShockGauge({ level = SHOCK_LEVEL }: { level?: number } = {}) {

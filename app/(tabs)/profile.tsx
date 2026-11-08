@@ -1,13 +1,6 @@
-import { useState } from "react";
-import {
-  Alert,
-  Modal,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
 import { Check, Edit3, X } from "lucide-react-native";
+import { useState } from "react";
+import { Alert, Modal, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LogoutButton } from "@/components/profile/logout-button";
@@ -36,7 +29,7 @@ export default function ProfileScreen() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [nameInput, setNameInput] = useState(user?.name || "Budi Santoso");
   const [phoneInput, setPhoneInput] = useState(
-    (user as any)?.phone || "+62 812-3456-7890"
+    (user as any)?.phone || "+62 812-3456-7890",
   );
   const [isSaving, setIsSaving] = useState(false);
 
@@ -63,7 +56,7 @@ export default function ProfileScreen() {
     } catch (err: any) {
       Alert.alert(
         "Save Failed",
-        err.message || "An error occurred while saving profile."
+        err.message || "An error occurred while saving profile.",
       );
     } finally {
       setIsSaving(false);
@@ -89,7 +82,7 @@ export default function ProfileScreen() {
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -117,10 +110,7 @@ export default function ProfileScreen() {
             {/* Info Cards Container */}
             <View className="gap-3.5 pt-1">
               <SelectedVehicleCard />
-              <PersonalInfoList
-                onEdit={handleOpenEdit}
-                user={user as any}
-              />
+              <PersonalInfoList onEdit={handleOpenEdit} user={user as any} />
               <LogoutButton onPress={handleLogout} />
             </View>
           </>
@@ -138,7 +128,7 @@ export default function ProfileScreen() {
           <View className="rounded-t-sheet bg-white p-6 border-t border-slate-200/80 shadow-lg">
             <View className="mb-4 flex-row items-center justify-between pb-2 border-b border-slate-100">
               <View className="flex-row items-center gap-2">
-                <Edit3 size={20} color="#009EFF" />
+                <Edit3 size={20} color="#0040FF" />
                 <Text className="font-chivo-bold text-xl text-slate-900">
                   Edit Personal Information
                 </Text>

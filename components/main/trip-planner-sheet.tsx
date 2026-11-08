@@ -1,33 +1,39 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import {
-  ActivityIndicator,
-  Keyboard,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import {
-  ArrowRight,
-  Building2,
-  Compass,
-  Landmark,
-  MapPin,
-  Search,
-  Train,
-  Trophy,
-  X,
-} from "lucide-react-native";
 import * as Haptics from "expo-haptics";
+import {
+    ArrowRight,
+    Building2,
+    Compass,
+    Landmark,
+    MapPin,
+    Search,
+    Train,
+    Trophy,
+    X,
+} from "lucide-react-native";
+import React, {
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
+import {
+    ActivityIndicator,
+    Keyboard,
+    Modal,
+    Pressable,
+    ScrollView,
+    Text,
+    TextInput,
+    View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import {
-  routingService,
-  type SearchLocationResult,
-} from "@/services/api/routing.service";
 import type { LatLng } from "@/components/map/map-data";
+import {
+    routingService,
+    type SearchLocationResult,
+} from "@/services/api/routing.service";
 
 export interface TripPlannerSheetProps {
   visible: boolean;
@@ -54,7 +60,8 @@ function calculateHaversineMeters(a: LatLng, b: LatLng): number {
     sinLat * sinLat +
     Math.cos((a.latitude * Math.PI) / 180) *
       Math.cos((b.latitude * Math.PI) / 180) *
-      sinLon * sinLon;
+      sinLon *
+      sinLon;
   return R * 2 * Math.atan2(Math.sqrt(hav), Math.sqrt(1 - hav));
 }
 
@@ -92,7 +99,7 @@ const POPULAR_DESTINATIONS: PopularPlace[] = [
     address: "Kebayoran Baru, South Jakarta",
     category: "Transit Hub",
     icon: Train,
-    coords: { latitude: -6.2443, longitude: 106.8000 },
+    coords: { latitude: -6.2443, longitude: 106.8 },
   },
   {
     name: "Gelora Bung Karno (GBK)",
@@ -125,13 +132,15 @@ export function TripPlannerSheet({
 }: TripPlannerSheetProps) {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchLocationResult[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchLocationResult[]>(
+    [],
+  );
   const [isSearching, setIsSearching] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const defaultStart: LatLng = useMemo(
     () => userCoords || { latitude: -6.2088, longitude: 106.8206 },
-    [userCoords]
+    [userCoords],
   );
 
   // Debounced geocoding search using OpenStreetMap Nominatim
@@ -174,7 +183,7 @@ export function TripPlannerSheet({
       onClose();
       onSelectDestination(name, coords);
     },
-    [onClose, onSelectDestination]
+    [onClose, onSelectDestination],
   );
 
   const formatDistance = (meters: number) => {
@@ -296,7 +305,7 @@ export function TripPlannerSheet({
                         returnKeyType="search"
                       />
                       {isSearching ? (
-                        <ActivityIndicator size="small" color="#009EFF" />
+                        <ActivityIndicator size="small" color="#0040FF" />
                       ) : searchQuery.length > 0 ? (
                         <Pressable
                           onPress={() => setSearchQuery("")}

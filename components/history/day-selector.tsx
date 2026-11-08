@@ -74,10 +74,10 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
         >
           <View
             className={cn(
-              "h-[58px] w-[58px] items-center justify-center rounded-2xl border-2 shadow-sm",
+              "h-[58px] w-[58px] items-center justify-center rounded-xl border shadow-sm",
               isCustomDateSelected
                 ? "border-brand bg-brand"
-                : "border-slate-200/80 bg-white"
+                : "border-gray-200/80 bg-white",
             )}
           >
             <CalendarIcon
@@ -112,14 +112,11 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
         onRequestClose={() => setCalendarModalVisible(false)}
       >
         <View className="flex-1 justify-end bg-black/60">
-          <View className="rounded-t-[32px] border-t-2 border-slate-900 bg-white p-6 shadow-2xl">
+          <View className="rounded-t-[32px] border-t border-gray-100 bg-white p-6 shadow-2xl">
             {/* Header Modal Swiss */}
-            <View className="flex-row items-center justify-between border-b-2 border-slate-900 pb-2">
-              <Text className="font-chivo-bold text-xl tracking-tight text-slate-900">
-                Select History Date
-              </Text>
+            <View className="flex flex-row items-end justify-end">
               <Touchable onPress={() => setCalendarModalVisible(false)}>
-                <View className="rounded-full border border-slate-200 bg-slate-100 p-2">
+                <View className="rounded-full border border-gray-200 bg-gray-100 p-2">
                   <X size={18} color="#0F172A" />
                 </View>
               </Touchable>
@@ -128,26 +125,26 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
             {/* Navigasi Bulan */}
             <View className="my-4 flex-row items-center justify-between">
               <Touchable onPress={handlePrevMonth}>
-                <View className="rounded-lg border border-slate-300 p-2">
+                <View className="rounded-lg bg-gray-100 border border-gray-300 p-2">
                   <ChevronLeft size={16} color="#0F172A" />
                 </View>
               </Touchable>
-              <Text className="font-chivo-bold text-base uppercase text-slate-900">
+              <Text className="font-chivo-bold text-base uppercase text-gray-900">
                 {monthYearLabel}
               </Text>
               <Touchable onPress={handleNextMonth}>
-                <View className="rounded-lg border border-slate-300 p-2">
+                <View className="rounded-lg bg-gray-100 border border-gray-300 p-2">
                   <ChevronRight size={16} color="#0F172A" />
                 </View>
               </Touchable>
             </View>
 
             {/* Nama Hari Grid */}
-            <View className="flex-row justify-between border-b border-slate-200 pb-2">
+            <View className="flex-row justify-between border-b border-gray-200 pb-2">
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((h) => (
                 <Text
                   key={h}
-                  className="w-10 text-center font-mono text-[10px] font-bold text-slate-400"
+                  className="w-10 text-center font-mono text-[10px] font-bold text-gray-400"
                 >
                   {h}
                 </Text>
@@ -167,12 +164,11 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
                 const dateObj = new Date(
                   currentViewDate.getFullYear(),
                   currentViewDate.getMonth(),
-                  dayNum
+                  dayNum,
                 );
                 const isoString = formatToIsoDate(dateObj);
                 const isSelected = selectedId === isoString;
-                const isToday =
-                  formatToIsoDate(new Date()) === isoString;
+                const isToday = formatToIsoDate(new Date()) === isoString;
 
                 return (
                   <View
@@ -190,10 +186,10 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
                         className={cn(
                           "h-full w-full items-center justify-center rounded-lg border",
                           isSelected
-                            ? "border-slate-900 bg-slate-900 text-white"
+                            ? "border-gray-900 bg-gray-900 text-white"
                             : isToday
-                            ? "border-sky-500 bg-sky-50"
-                            : "border-transparent bg-transparent"
+                              ? "border-sky-500 bg-sky-50"
+                              : "border-transparent bg-transparent",
                         )}
                       >
                         <Text
@@ -202,8 +198,8 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
                             isSelected
                               ? "text-white"
                               : isToday
-                              ? "text-sky-600"
-                              : "text-slate-800"
+                                ? "text-sky-600"
+                                : "text-gray-800",
                           )}
                         >
                           {dayNum}
@@ -216,7 +212,7 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
             </View>
 
             {/* Preset Cepat (Swiss Style Bar) */}
-            <View className="mt-6 flex-row gap-2 border-t border-slate-200 pt-4">
+            <View className="mt-6 flex-row gap-2 border-t border-gray-200 pt-4">
               <Touchable
                 className="flex-1"
                 onPress={() => {
@@ -224,8 +220,8 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
                   setCalendarModalVisible(false);
                 }}
               >
-                <View className="items-center justify-center rounded-xl border border-slate-900 bg-white py-2.5">
-                  <Text className="font-mono-bold text-xs uppercase text-slate-900">
+                <View className="items-center justify-center rounded-xl border border-gray-900 bg-white py-2.5">
+                  <Text className="font-mono-bold text-xs uppercase text-gray-900">
                     Today
                   </Text>
                 </View>
@@ -240,7 +236,7 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
                   setCalendarModalVisible(false);
                 }}
               >
-                <View className="items-center justify-center rounded-xl border border-slate-200 bg-slate-100 py-2.5">
+                <View className="items-center justify-center rounded-xl border border-gray-200 bg-gray-100 py-2.5">
                   <Text className="font-mono-bold text-xs uppercase text-custom-black">
                     Yesterday
                   </Text>
@@ -271,16 +267,16 @@ function DayPill({ day, isActive, onPress }: DayPillProps) {
     >
       <View
         className={cn(
-          "w-[56px] items-center justify-center gap-0.5 rounded-2xl border-2 py-2 shadow-sm",
+          "w-[56px] items-center justify-center gap-0.5 rounded-xl border py-2 shadow-sm",
           isActive
             ? "border-brand bg-brand"
-            : "border-slate-200/80 bg-white"
+            : "border-gray-200/80 bg-white"
         )}
       >
         <Text
           className={cn(
-            "font-mono text-[10px] font-bold uppercase",
-            isActive ? "text-white" : "text-slate-700"
+            "text-[10px] font-bold uppercase",
+            isActive ? "text-white" : "text-gray-700"
           )}
         >
           {day.short}
@@ -288,7 +284,7 @@ function DayPill({ day, isActive, onPress }: DayPillProps) {
         <Text
           className={cn(
             "font-mono-bold text-base",
-            isActive ? "text-white" : "text-slate-900"
+            isActive ? "text-white" : "text-gray-900"
           )}
         >
           {day.date}
