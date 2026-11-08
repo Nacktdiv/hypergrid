@@ -81,6 +81,7 @@ export function MainMap({
   const [selectedCluster, setSelectedCluster] = useState<PotholeCluster | null>(
     null
   );
+  const [isClusterModalVisible, setIsClusterModalVisible] = useState(false);
   const [selectedArea, setSelectedArea] = useState<AreaSummary | null>(null);
   const [isAreaModalVisible, setIsAreaModalVisible] = useState(false);
   const [focusCoords, setFocusCoords] = useState<{
@@ -95,7 +96,7 @@ export function MainMap({
 
   const loadInitialClusters = useCallback(async () => {
     try {
-      await fetchClusters({ limit: 500, eps: 100, vehicleType: vehicleId });
+      await fetchClusters({ limit: 500, eps: 100, minPts: 2, vehicleType: vehicleId });
     } finally {
       setHasFetchedInitial(true);
     }
@@ -157,12 +158,33 @@ export function MainMap({
     };
   }, [filteredClusters, liveCoords, heatmap, selectedCluster?.id, selectedArea?.id, plannedRoute]);
 
+  // Handler KLIK KEDUA (Re-click pada pin yang sedang aktif) -> Baru buka modal Road Damage Details
   const handleMarkerPress = (point: DamagePoint) => {
     const found = clusters.find((c) => c.id === point.id);
     if (found) {
       setSelectedCluster(found);
+      setIsClusterModalVisible(true);
       onOpenClusterDetail?.(found);
     }
+  };
+
+  // Handler KLIK PERTAMA (Pemilihan titik pertama kali) -> Tampilkan koridor ruas jalan & pin kerusakan TANPA buka modal
+  const handlePointSelected = (point: DamagePoint, area?: AreaSummary) => {
+    const found = clusters.find((c) => c.id === point.id);
+    if (found) {
+      setSelectedCluster(found);
+    }
+    if (area) {
+      setSelectedArea(area);
+    }
+  };
+
+  // Handler Reset Seleksi saat user klik di area kosong peta
+  const handleClearSelection = () => {
+    setSelectedCluster(null);
+    setSelectedArea(null);
+    setIsAreaModalVisible(false);
+    setIsClusterModalVisible(false);
   };
 
   if (!liveCoords || (!hasFetchedInitial && isClustersLoading)) {
@@ -211,6 +233,8 @@ export function MainMap({
         vehicleType={vehicleId}
         focusCoords={focusCoords}
         onDamagePress={handleMarkerPress}
+        onPointSelected={handlePointSelected}
+        onClearSelection={handleClearSelection}
         onAreaSummaryPress={(area) => setSelectedArea(area)}
       />
 
@@ -284,8 +308,8 @@ export function MainMap({
       <Modal
         animationType="slide"
         transparent
-        visible={Boolean(selectedCluster)}
-        onRequestClose={() => setSelectedCluster(null)}
+        visible={isClusterModalVisible && Boolean(selectedCluster)}
+        onRequestClose={() => setIsClusterModalVisible(false)}
       >
         <View className="flex-1 justify-end bg-black/40">
           <View className="rounded-t-[32px] bg-white p-6 border-t border-slate-200/80 shadow-lg">
@@ -300,7 +324,7 @@ export function MainMap({
                     </Text>
                   </View>
                   <Touchable
-                    onPress={() => setSelectedCluster(null)}
+                    onPress={() => setIsClusterModalVisible(false)}
                     accessibilityRole="button"
                     accessibilityLabel="Close road damage details"
                   >
@@ -367,7 +391,9 @@ export function MainMap({
               <Touchable
                 onPress={() => {
                   setSelectedArea(null);
+                  setSelectedCluster(null);
                   setIsAreaModalVisible(false);
+                  setIsClusterModalVisible(false);
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="Tutup highlight ruas jalan"
@@ -543,6 +569,7 @@ export function MainMap({
                             if (found) {
                               setSelectedArea(null);
                               setSelectedCluster(found);
+                              setIsClusterModalVisible(true);
                               onOpenClusterDetail?.(found);
                             }
                           }}

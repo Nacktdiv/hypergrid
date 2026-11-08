@@ -13,8 +13,12 @@ export type LeafletMapProps = {
   focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
   /** Callback saat titik kerusakan ditekan */
   onDamagePress?: (point: DamagePoint) => void;
-  /** Callback saat titik ringkasan area makro (~1 km) ditekan */
+  /** Callback saat titik kerusakan ditekan PERTAMA KALI (fokus & area panjang jalan, tanpa modal) */
+  onPointSelected?: (point: DamagePoint, area?: AreaSummary) => void;
+  /** Callback saat titik ringkasan ruas jalan ditekan */
   onAreaSummaryPress?: (area: AreaSummary) => void;
+  /** Callback saat pengguna mengetuk area kosong peta (reset pilihan) */
+  onClearSelection?: () => void;
 };
 
 const WebViewComponent = WebView as any;
@@ -25,7 +29,9 @@ export const LeafletMap = React.memo(function LeafletMap({
   interactive = true,
   focusCoords,
   onDamagePress,
+  onPointSelected,
   onAreaSummaryPress,
+  onClearSelection,
 }: LeafletMapProps) {
   const webViewRef = useRef<any>(null);
   const isMapLoaded = useRef<boolean>(false);
@@ -124,11 +130,16 @@ export const LeafletMap = React.memo(function LeafletMap({
       justify-content: center;
       filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.45));
       cursor: pointer;
-      transition: transform 0.15s ease;
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
       user-select: none;
     }
     .location-pin-marker:active {
       transform: scale(1.22) translateY(-2px);
+    }
+    .location-pin-marker.is-active {
+      transform: scale(1.28) translateY(-4px);
+      filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 10px rgba(255, 255, 255, 0.9));
+      z-index: 9999 !important;
     }
 
     .road-corridor-glow {
@@ -253,13 +264,15 @@ export const LeafletMap = React.memo(function LeafletMap({
       }
 
       // Helper membuat SVG Badge Icon Lokasi (Map Pin)
-      function createLocationPinSvg(sevColor, count) {
+      function createLocationPinSvg(sevColor, count, isActive) {
+        var strokeCol = isActive ? '#FDE047' : '#ffffff';
+        var strokeW = isActive ? '2.8' : '2';
         var innerContent = (count && count > 1)
           ? '<text x="12" y="15" text-anchor="middle" font-size="8.5" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-weight="900" fill="#ffffff">' + count + '</text>'
           : '<circle cx="12" cy="11.5" r="4.2" fill="#ffffff"/>';
 
-        return '<svg width="26" height="34" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">' +
-          '<path d="M12 0C5.372 0 0 5.372 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.372 18.628 0 12 0Z" fill="' + sevColor + '" stroke="#ffffff" stroke-width="2"/>' +
+        return '<svg width="' + (isActive ? 30 : 26) + '" height="' + (isActive ? 38 : 34) + '" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+          '<path d="M12 0C5.372 0 0 5.372 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.372 18.628 0 12 0Z" fill="' + sevColor + '" stroke="' + strokeCol + '" stroke-width="' + strokeW + '"/>' +
           innerContent +
           '</svg>';
       }
@@ -387,7 +400,8 @@ export const LeafletMap = React.memo(function LeafletMap({
           });
           marker.on('click', function(e) {
             L.DomEvent.stopPropagation(e);
-            window.highlightRoadSegment(area);
+            window.activeSelectedPointId = null;
+            window.highlightRoadSegment(area, null);
             if (window.ReactNativeWebView) {
               window.ReactNativeWebView.postMessage(JSON.stringify({
                 type: 'AREA_SUMMARY_PRESS',
@@ -400,7 +414,7 @@ export const LeafletMap = React.memo(function LeafletMap({
       };
 
       // 2. Tampilkan Area Panjang Jalan dalam Klaster & Titik-Titik Lokasi Kerusakan dengan Badge Icon Lokasi
-      window.highlightRoadSegment = function(area) {
+      window.highlightRoadSegment = function(area, selectedPointId) {
         window.activeRoadSegmentLayer.clearLayers();
         if (!area) return;
 
@@ -414,7 +428,7 @@ export const LeafletMap = React.memo(function LeafletMap({
           var corridorGlow = L.polyline(polyCoords, {
             color: sevColor,
             weight: 14,
-            opacity: 0.42,
+            opacity: 0.45,
             lineCap: 'round',
             lineJoin: 'round',
             className: 'road-corridor-glow'
@@ -433,52 +447,124 @@ export const LeafletMap = React.memo(function LeafletMap({
           window.activeRoadSegmentLayer.addLayer(corridorCore);
 
           try {
-            window.map.fitBounds(corridorGlow.getBounds(), { padding: [45, 45], maxZoom: 16.5, animate: true });
+            window.map.fitBounds(corridorGlow.getBounds(), { padding: [45, 45], maxZoom: 17.0, animate: true });
           } catch(e) {}
         }
 
         // B. Tampilkan Titik-Titik Lokasi Kerusakan dengan Badge Bentuk Icon Lokasi (Map Pin SVG)
         if (area.clusters && area.clusters.length > 0) {
           area.clusters.forEach(function(pt) {
+            var isPtActive = selectedPointId && (pt.id === selectedPointId);
             var ptSevColor = pt.severity === 'severe' ? '#991B1B' : (pt.severity === 'high' ? '#EF4444' : (pt.severity === 'medium' ? '#F59E0B' : '#EAB308'));
-            var pinSvg = createLocationPinSvg(ptSevColor, pt.reportCount);
-            var pinHtml = '<div class="location-pin-marker">' + pinSvg + '</div>';
+            var pinSvg = createLocationPinSvg(ptSevColor, pt.reportCount, isPtActive);
+            var pinHtml = '<div class="location-pin-marker' + (isPtActive ? ' is-active' : '') + '">' + pinSvg + '</div>';
+            var iconW = isPtActive ? 30 : 26;
+            var iconH = isPtActive ? 38 : 34;
             var pinIcon = L.divIcon({
               className: '',
               html: pinHtml,
-              iconSize: [26, 34],
-              iconAnchor: [13, 34]
+              iconSize: [iconW, iconH],
+              iconAnchor: [iconW / 2, iconH]
             });
             var pinMarker = L.marker([pt.position.latitude, pt.position.longitude], {
               icon: pinIcon,
-              zIndexOffset: 300
+              zIndexOffset: isPtActive ? 600 : 300
             });
 
-            // Ketika icon lokasi dipencet lagi: buka modal Road Damage Details!
+            // Klik pada pin lokasi: panggil penangan klik dua tahap
             pinMarker.on('click', function(e) {
               L.DomEvent.stopPropagation(e);
-              window.highlightCluster(pt);
-              if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                  type: 'DAMAGE_PRESS',
-                  point: pt
-                }));
-              }
+              window.handlePointInteraction(pt, area);
             });
             window.activeRoadSegmentLayer.addLayer(pinMarker);
           });
         }
       };
 
+      // Penangan sentral interaksi klik titik (TWO-STEP INTERACTION):
+      // - Klik 1: Tampilkan area panjang jalan dan titik-titik kerusakan dalam ruas jalan tersebut (TANPA BUKA MODAL)
+      // - Klik 2 (Klik LAGI pada icon titiknya): BARU BUKA MODAL Road Damage Details!
+      window.handlePointInteraction = function(pt, areaContext) {
+        if (!pt) return;
+
+        // Cek apakah titik ini SUDAH merupakan titik yang aktif
+        if (window.activeSelectedPointId === pt.id) {
+          // KLIK KEDUA: Buka modal Road Damage Details!
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'DAMAGE_PRESS',
+              point: pt
+            }));
+          }
+          return;
+        }
+
+        // KLIK PERTAMA: Simpan titik aktif, gambar area panjang jalan & titik-titik kerusakan dalam ruas jalan tersebut
+        window.activeSelectedPointId = pt.id;
+
+        // Cari ruas jalan yang menaungi titik ini
+        var targetArea = areaContext;
+        if (!targetArea && window.activeRoadSegments) {
+          for (var i = 0; i < window.activeRoadSegments.length; i++) {
+            var seg = window.activeRoadSegments[i];
+            if (seg.clusters && seg.clusters.some(function(c) { return c.id === pt.id; })) {
+              targetArea = seg;
+              break;
+            }
+          }
+        }
+
+        if (!targetArea) {
+          var polyCoords = [];
+          if (pt.road_segment_coords && pt.road_segment_coords.length > 1) {
+            polyCoords = pt.road_segment_coords.map(function(c) { return { lat: c.latitude, lng: c.longitude }; });
+          } else if (pt.points && pt.points.length > 1) {
+            polyCoords = pt.points.map(function(c) { return { lat: c.latitude, lng: c.longitude }; });
+          } else {
+            polyCoords = [
+              { lat: pt.position.latitude - 0.00015, lng: pt.position.longitude },
+              { lat: pt.position.latitude + 0.00015, lng: pt.position.longitude }
+            ];
+          }
+
+          targetArea = {
+            id: 'seg-' + pt.id,
+            center: pt.position,
+            roadLengthMeters: pt.road_length_meters || 30,
+            roadPolyline: polyCoords,
+            clusterCount: 1,
+            totalReports: pt.reportCount || 1,
+            worstSeverity: pt.severity,
+            clusters: [pt]
+          };
+        }
+
+        // Tampilkan koridor area panjang jalan + seluruh titik kerusakan di ruas jalan tersebut dengan pin aktif
+        window.highlightRoadSegment(targetArea, pt.id);
+
+        // Beritahu React Native bahwa titik telah terpilih (Klik 1 - TANPA BUKA MODAL)
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'POINT_SELECTED',
+            point: pt,
+            area: targetArea
+          }));
+        }
+      };
+
       window.clearRoadSegmentHighlight = function() {
+        window.activeSelectedPointId = null;
         window.activeRoadSegmentLayer.clearLayers();
+        if (window.map && window.map.getZoom() >= 17) {
+          window.renderDamageClusterMarkers(window.rawDamagePoints);
+        }
       };
 
       window.selectRoadSegmentById = function(areaId) {
         if (!window.activeRoadSegments) return;
         for (var i = 0; i < window.activeRoadSegments.length; i++) {
           if (window.activeRoadSegments[i].id === areaId) {
-            window.highlightRoadSegment(window.activeRoadSegments[i]);
+            window.highlightRoadSegment(window.activeRoadSegments[i], null);
             break;
           }
         }
@@ -488,6 +574,7 @@ export const LeafletMap = React.memo(function LeafletMap({
       window.highlightCluster = function(pt) {
         window.clusterHighlightLayer.clearLayers();
         if (!pt || !pt.position) return;
+        if (window.activeSelectedPointId === pt.id) return;
 
         var lat = pt.position.latitude;
         var lng = pt.position.longitude;
@@ -521,28 +608,25 @@ export const LeafletMap = React.memo(function LeafletMap({
       window.renderDamageClusterMarkers = function(points) {
         window.damageLayer.clearLayers();
         points.forEach(function(pt) {
+          var isPtActive = window.activeSelectedPointId && (pt.id === window.activeSelectedPointId);
           var ptSevColor = pt.severity === 'severe' ? '#991B1B' : (pt.severity === 'high' ? '#EF4444' : (pt.severity === 'medium' ? '#F59E0B' : '#EAB308'));
-          var pinSvg = createLocationPinSvg(ptSevColor, pt.reportCount);
-          var pinHtml = '<div class="location-pin-marker">' + pinSvg + '</div>';
+          var pinSvg = createLocationPinSvg(ptSevColor, pt.reportCount, isPtActive);
+          var pinHtml = '<div class="location-pin-marker' + (isPtActive ? ' is-active' : '') + '">' + pinSvg + '</div>';
+          var iconW = isPtActive ? 30 : 26;
+          var iconH = isPtActive ? 38 : 34;
           var icon = L.divIcon({
             className: '',
             html: pinHtml,
-            iconSize: [26, 34],
-            iconAnchor: [13, 34]
+            iconSize: [iconW, iconH],
+            iconAnchor: [iconW / 2, iconH]
           });
           var marker = L.marker([pt.position.latitude, pt.position.longitude], {
             icon: icon,
-            zIndexOffset: 150
+            zIndexOffset: isPtActive ? 500 : 150
           });
           marker.on('click', function(e) {
             L.DomEvent.stopPropagation(e);
-            window.highlightCluster(pt);
-            if (window.ReactNativeWebView) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'DAMAGE_PRESS',
-                point: pt
-              }));
-            }
+            window.handlePointInteraction(pt, null);
           });
           window.damageLayer.addLayer(marker);
         });
@@ -596,6 +680,16 @@ export const LeafletMap = React.memo(function LeafletMap({
       // Handler Zoom End
       window.map.on('zoomend', function() {
         window.updateLOD();
+      });
+
+      // Handler Background Map Click: Reset seleksi jika pengguna klik area kosong di peta
+      window.map.on('click', function() {
+        window.clearRoadSegmentHighlight();
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'CLEAR_SELECTION'
+          }));
+        }
       });
 
       // Pembaruan Titik Klaster
@@ -864,6 +958,10 @@ export const LeafletMap = React.memo(function LeafletMap({
           if (${activeJson}) window.highlightCluster(${activeJson});
           true;
         `);
+      } else if (payload.type === "POINT_SELECTED" && onPointSelected) {
+        onPointSelected(payload.point, payload.area);
+      } else if (payload.type === "CLEAR_SELECTION" && onClearSelection) {
+        onClearSelection();
       } else if (payload.type === "AREA_SUMMARY_PRESS" && onAreaSummaryPress) {
         onAreaSummaryPress(payload.area);
       } else if (payload.type === "DAMAGE_PRESS" && onDamagePress) {
