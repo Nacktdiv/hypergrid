@@ -16,7 +16,7 @@ export function Touchable({
   disabled,
   ...props
 }: TouchableProps) {
-  const scale = React.useRef(new Animated.Value(1)).current;
+  const [scale] = React.useState(() => new Animated.Value(1));
   const isMountedRef = React.useRef(true);
 
   React.useEffect(() => {

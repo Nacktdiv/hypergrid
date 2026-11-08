@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useEffect, useState } from "react";
 import { StyleSheet, View, ActivityIndicator } from "react-native";
 import { WebView } from "react-native-webview";
-import type { DamagePoint, MapData } from "./map-data";
+import type { AreaSummary, DamagePoint, MapData } from "./map-data";
 import { VEHICLE_MARKER_IMAGES } from "./vehicle-assets-base64";
 
 export type LeafletMapProps = {
@@ -9,8 +9,12 @@ export type LeafletMapProps = {
   vehicleType?: "car" | "motor" | "bicycle";
   /** Matikan gestur pan/zoom — untuk peta ringkas di riwayat */
   interactive?: boolean;
+  /** Koordinat untuk fokus/flyTo ke lokasi tertentu */
+  focusCoords?: { latitude: number; longitude: number; zoom?: number } | null;
   /** Callback saat titik kerusakan ditekan */
   onDamagePress?: (point: DamagePoint) => void;
+  /** Callback saat titik ringkasan area makro (~1 km) ditekan */
+  onAreaSummaryPress?: (area: AreaSummary) => void;
 };
 
 const WebViewComponent = WebView as any;
@@ -19,7 +23,9 @@ export const LeafletMap = React.memo(function LeafletMap({
   data,
   vehicleType = "car",
   interactive = true,
+  focusCoords,
   onDamagePress,
+  onAreaSummaryPress,
 }: LeafletMapProps) {
   const webViewRef = useRef<any>(null);
   const isMapLoaded = useRef<boolean>(false);
@@ -34,7 +40,7 @@ export const LeafletMap = React.memo(function LeafletMap({
 
   // Buat HTML Leaflet sekali dengan titik awal nyata
   const htmlContent = useMemo(() => {
-    const { camera, route, damagePoints, vehiclePosition, heatmap, activeClusterId } =
+    const { camera, route, damagePoints, vehiclePosition, heatmap } =
       initialData;
     const centerLat = camera.latitude;
     const centerLng = camera.longitude;
@@ -83,6 +89,30 @@ export const LeafletMap = React.memo(function LeafletMap({
     .severity-high { background-color: #EF4444; }
     .severity-medium { background-color: #F59E0B; }
     .severity-low { background-color: #EAB308; color: #1e293b; }
+
+    .area-summary-marker {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 5px 11px;
+      border-radius: 9999px;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 11px;
+      line-height: 1;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+      border: 2px solid #ffffff;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: transform 0.15s ease;
+    }
+    .area-summary-marker:active {
+      transform: scale(1.1);
+    }
+    .area-highlight-circle {
+      animation: pulseRadarArea 2.5s infinite ease-in-out;
+    }
 
     @keyframes pulseRadarArea {
       0% { fill-opacity: 0.35; stroke-opacity: 0.9; stroke-width: 2px; }
@@ -181,28 +211,129 @@ export const LeafletMap = React.memo(function LeafletMap({
       window.map.getPane('vehicleTopPane').style.zIndex = '999';
       window.map.getPane('vehicleTopPane').style.pointerEvents = 'none';
 
-      // 2. Global Heatmap Layer (Visualisasi sebaran intensitas kerusakan jalan)
-      window.heatLayer = null;
-      window.updateHeatmap = function(heatData) {
-        if (window.heatLayer) {
-          window.map.removeLayer(window.heatLayer);
-          window.heatLayer = null;
-        }
-        if (heatData && heatData.length > 0 && typeof L.heatLayer === 'function') {
-          window.heatLayer = L.heatLayer(heatData, {
-            radius: 25,
-            blur: 16,
-            maxZoom: 18,
-            minOpacity: 0.35,
-            gradient: { 0.2: '#009EFF', 0.5: '#EAB308', 0.75: '#F59E0B', 1.0: '#EF4444' }
-          }).addTo(window.map);
-        }
-      };
-      var initialHeat = ${JSON.stringify(heatmap || [])};
-      window.updateHeatmap(initialHeat);
-
-      // 3. Cluster Area Highlight Layer (Highlight area heatmap & radius cakupan 1 klaster saat diklik)
+      // 2. State & Layer Groups untuk Multi-Level LOD
+      // LOD 1 (Jauh, zoom < 14): Titik Ringkasan Ruas Jalan Makro (~1 km)
+      // LOD 2 (Agak Jauh, 14 <= zoom < 16): Heatmap Seruas Jalan Saja
+      // LOD 3 (Dekat, zoom >= 16): Titik-titik Klaster Representatif Nyata
+      window.areaSummaryLayer = L.layerGroup().addTo(window.map);
+      window.areaHighlightLayer = L.layerGroup().addTo(window.map);
       window.clusterHighlightLayer = L.layerGroup().addTo(window.map);
+      window.damageLayer = L.layerGroup().addTo(window.map);
+      window.heatLayer = null;
+
+      window.rawDamagePoints = ${damageData} || [];
+      window.rawHeatData = ${JSON.stringify(heatmap || [])};
+      window.active1KmAreas = [];
+
+      // Algoritma grid spasial untuk mengelompokkan titik klaster per ~1 km ruas jalan
+      function compute1KmAreas(points) {
+        if (!points || points.length === 0) return [];
+        var degSize = 1000 / 111320; // ~0.00898 derajat (standar ~1 km)
+        var grid = {};
+        for (var i = 0; i < points.length; i++) {
+          var pt = points[i];
+          if (!pt.position) continue;
+          var cLat = Math.floor(pt.position.latitude / degSize);
+          var cLng = Math.floor(pt.position.longitude / degSize);
+          var key = cLat + ':' + cLng;
+          if (!grid[key]) grid[key] = [];
+          grid[key].push(pt);
+        }
+        var areas = [];
+        for (var k in grid) {
+          var grp = grid[k];
+          var sLat = 0, sLng = 0, totalRep = 0;
+          var counts = { severe: 0, high: 0, medium: 0, low: 0 };
+          for (var j = 0; j < grp.length; j++) {
+            var p = grp[j];
+            sLat += p.position.latitude;
+            sLng += p.position.longitude;
+            totalRep += (p.reportCount || 1);
+            if (counts[p.severity] !== undefined) counts[p.severity]++;
+          }
+          var worst = 'low';
+          if (counts.severe > 0) worst = 'severe';
+          else if (counts.high > 0) worst = 'high';
+          else if (counts.medium > 0) worst = 'medium';
+
+          areas.push({
+            id: 'area-1km-' + k,
+            center: { latitude: sLat / grp.length, longitude: sLng / grp.length },
+            radiusMeters: 1000,
+            clusterCount: grp.length,
+            totalReports: totalRep,
+            worstSeverity: worst,
+            severityCounts: counts,
+            clusters: grp
+          });
+        }
+        return areas;
+      }
+
+      // Pembuatan Layer Heatmap Ringkas Seruas Jalan (radius: 11, blur: 6)
+      window.createHeatmapLayer = function(heatData) {
+        if (!heatData || heatData.length === 0 || typeof L.heatLayer !== 'function') return null;
+        return L.heatLayer(heatData, {
+          radius: 11,
+          blur: 6,
+          maxZoom: 18,
+          minOpacity: 0.35,
+          gradient: { 0.2: '#009EFF', 0.5: '#EAB308', 0.75: '#F59E0B', 1.0: '#EF4444' }
+        });
+      };
+
+      // Render Titik Ringkasan Area Makro (~1 km)
+      window.renderAreaSummaryMarkers = function(areas) {
+        window.areaSummaryLayer.clearLayers();
+        areas.forEach(function(area) {
+          var sevClass = area.worstSeverity === 'severe' ? 'severity-severe' : (area.worstSeverity === 'high' ? 'severity-high' : (area.worstSeverity === 'medium' ? 'severity-medium' : 'severity-low'));
+          var html = '<div class="area-summary-marker ' + sevClass + '">' +
+            '<span>📍 ~1km • ' + area.clusterCount + ' klaster (' + area.totalReports + ' lap)</span>' +
+            '</div>';
+          var icon = L.divIcon({
+            className: '',
+            html: html,
+            iconSize: [140, 26],
+            iconAnchor: [70, 13]
+          });
+          var marker = L.marker([area.center.latitude, area.center.longitude], {
+            icon: icon,
+            zIndexOffset: 50
+          });
+          marker.on('click', function() {
+            window.highlightArea(area);
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'AREA_SUMMARY_PRESS',
+                area: area
+              }));
+            }
+          });
+          window.areaSummaryLayer.addLayer(marker);
+        });
+      };
+
+      // Highlight Radius Area Makro (~1 km)
+      window.highlightArea = function(area) {
+        window.areaHighlightLayer.clearLayers();
+        if (!area || !area.center) return;
+        var lat = area.center.latitude;
+        var lng = area.center.longitude;
+        var sevColor = area.worstSeverity === 'severe' ? '#991B1B' : (area.worstSeverity === 'high' ? '#EF4444' : (area.worstSeverity === 'medium' ? '#F59E0B' : '#EAB308'));
+        var circle = L.circle([lat, lng], {
+          radius: area.radiusMeters || 1000,
+          color: sevColor,
+          weight: 2,
+          opacity: 0.85,
+          fillColor: sevColor,
+          fillOpacity: 0.14,
+          dashArray: '6, 6',
+          className: 'area-highlight-circle'
+        });
+        window.areaHighlightLayer.addLayer(circle);
+      };
+
+      // Highlight 1 Klaster Spesifik
       window.highlightCluster = function(pt) {
         window.clusterHighlightLayer.clearLayers();
         if (!pt || !pt.position) return;
@@ -212,7 +343,6 @@ export const LeafletMap = React.memo(function LeafletMap({
         var radius = pt.radius_meters || 18;
         var sevColor = pt.severity === 'severe' ? '#991B1B' : (pt.severity === 'high' ? '#EF4444' : (pt.severity === 'medium' ? '#F59E0B' : '#EAB308'));
 
-        // Lingkaran radar area cakupan klaster
         var circle = L.circle([lat, lng], {
           radius: radius,
           color: sevColor,
@@ -225,7 +355,6 @@ export const LeafletMap = React.memo(function LeafletMap({
         });
         window.clusterHighlightLayer.addLayer(circle);
 
-        // Titik-titik mikro penyusun klaster (jika ada data points)
         if (pt.points && pt.points.length > 0) {
           pt.points.forEach(function(sub) {
             var dot = L.circleMarker([sub.latitude, sub.longitude], {
@@ -242,9 +371,8 @@ export const LeafletMap = React.memo(function LeafletMap({
         window.map.panTo([lat, lng], { animate: true, duration: 0.5 });
       };
 
-      // 4. Damage Clusters Layer (Titik Tunggal Representatif Hasil DBSCAN)
-      window.damageLayer = L.layerGroup().addTo(window.map);
-      window.renderDamagePoints = function(points) {
+      // Render Titik Klaster Representatif Individu (Level Dekat)
+      window.renderDamageClusterMarkers = function(points) {
         window.damageLayer.clearLayers();
         points.forEach(function(pt) {
           var sevClass = pt.severity === 'severe' ? 'severity-severe' : (pt.severity === 'high' ? 'severity-high' : (pt.severity === 'medium' ? 'severity-medium' : 'severity-low'));
@@ -260,7 +388,6 @@ export const LeafletMap = React.memo(function LeafletMap({
             zIndexOffset: 100
           });
           marker.on('click', function() {
-            // Highlight area cakupan klaster langsung di map
             window.highlightCluster(pt);
             if (window.ReactNativeWebView) {
               window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -272,7 +399,81 @@ export const LeafletMap = React.memo(function LeafletMap({
           window.damageLayer.addLayer(marker);
         });
       };
-      window.renderDamagePoints(${damageData});
+
+      // Logika Master Level of Detail (LOD)
+      window.updateLOD = function(zoom) {
+        var z = zoom !== undefined ? zoom : window.map.getZoom();
+
+        // 1. Tampilan Jauh (zoom < 14): Ringkasan Area Makro Ruas Jalan (~1 km)
+        if (z < 14) {
+          if (!window.map.hasLayer(window.areaSummaryLayer)) {
+            window.areaSummaryLayer.addTo(window.map);
+          }
+          window.renderAreaSummaryMarkers(window.active1KmAreas);
+
+          if (window.heatLayer && window.map.hasLayer(window.heatLayer)) {
+            window.map.removeLayer(window.heatLayer);
+          }
+          window.damageLayer.clearLayers();
+          window.clusterHighlightLayer.clearLayers();
+        }
+        // 2. Tampilan Agak Jauh (14 <= zoom < 16): Heatmap Seruas Jalan Saja
+        else if (z >= 14 && z < 16) {
+          window.areaSummaryLayer.clearLayers();
+          window.areaHighlightLayer.clearLayers();
+          window.damageLayer.clearLayers();
+          window.clusterHighlightLayer.clearLayers();
+
+          if (!window.heatLayer && window.rawHeatData && window.rawHeatData.length > 0) {
+            window.heatLayer = window.createHeatmapLayer(window.rawHeatData);
+          }
+          if (window.heatLayer && !window.map.hasLayer(window.heatLayer)) {
+            window.heatLayer.addTo(window.map);
+          }
+        }
+        // 3. Tampilan Dekat (zoom >= 16): Titik-titik Lokasi Klaster
+        else {
+          window.areaSummaryLayer.clearLayers();
+          window.areaHighlightLayer.clearLayers();
+
+          if (window.heatLayer && window.map.hasLayer(window.heatLayer)) {
+            window.map.removeLayer(window.heatLayer);
+          }
+
+          window.renderDamageClusterMarkers(window.rawDamagePoints);
+        }
+      };
+
+      // Handler Zoom End
+      window.map.on('zoomend', function() {
+        window.updateLOD();
+      });
+
+      // Pembaruan Titik Klaster
+      window.renderDamagePoints = function(points) {
+        window.rawDamagePoints = points || [];
+        window.active1KmAreas = compute1KmAreas(window.rawDamagePoints);
+        window.updateLOD();
+      };
+
+      // Pembaruan Heatmap
+      window.updateHeatmap = function(heatData) {
+        window.rawHeatData = heatData || [];
+        if (window.heatLayer) {
+          window.map.removeLayer(window.heatLayer);
+          window.heatLayer = null;
+        }
+        window.updateLOD();
+      };
+
+      // Navigasi FlyTo
+      window.flyToLocation = function(lat, lng, zoomLevel) {
+        window.map.flyTo([lat, lng], zoomLevel || 16, { animate: true, duration: 0.8 });
+      };
+
+      // Inisialisasi awal LOD
+      window.active1KmAreas = compute1KmAreas(window.rawDamagePoints);
+      window.updateLOD();
 
       // Vehicle graphic markers (placed in vehicleTopPane & highest zIndexOffset so never covered by clusters)
       var vehicleImages = ${JSON.stringify(VEHICLE_MARKER_IMAGES)};
@@ -457,6 +658,17 @@ export const LeafletMap = React.memo(function LeafletMap({
     }
   }, [data.activeClusterId, data.damagePoints]);
 
+  // 6. Pembaruan fokus / navigasi flyTo programatik
+  useEffect(() => {
+    if (!isMapLoaded.current || !webViewRef.current || !focusCoords) return;
+    const { latitude, longitude, zoom = 16 } = focusCoords;
+    const js = `
+      if (window.flyToLocation) window.flyToLocation(${latitude}, ${longitude}, ${zoom});
+      true;
+    `;
+    webViewRef.current.injectJavaScript(js);
+  }, [focusCoords]);
+
   const handleMessage = (event: any) => {
     try {
       const payload = JSON.parse(event.nativeEvent.data);
@@ -481,6 +693,8 @@ export const LeafletMap = React.memo(function LeafletMap({
           if (${activeJson}) window.highlightCluster(${activeJson});
           true;
         `);
+      } else if (payload.type === "AREA_SUMMARY_PRESS" && onAreaSummaryPress) {
+        onAreaSummaryPress(payload.area);
       } else if (payload.type === "DAMAGE_PRESS" && onDamagePress) {
         onDamagePress(payload.point);
       }

@@ -12,7 +12,6 @@ import {
 import { useRouter } from "expo-router";
 import {
   AlertTriangle,
-  ArrowRight,
   ChevronDown,
   ChevronUp,
   MapPin,

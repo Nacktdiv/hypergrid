@@ -2,7 +2,6 @@ import { apiClient } from './client';
 import {
   parseClusterSeverity,
   type BoundingBoxFilter,
-  type ConsolidatedCluster,
   type DbscanClustersResponse,
   type PotholeCluster,
   type UpdateClusterDto,
@@ -56,8 +55,9 @@ export const clustersService = {
         '/pothole-clusters/dbscan',
         {
           params: {
-            eps: filter?.eps ?? 25,
+            eps: filter?.eps ?? 100,
             minPts: filter?.minPts ?? 1,
+            vehicleType: filter?.vehicleType,
             minLat: filter?.minLat,
             minLon: filter?.minLon,
             maxLat: filter?.maxLat,

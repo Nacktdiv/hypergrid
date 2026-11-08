@@ -54,6 +54,8 @@ export default function AuthCallback() {
     return () => {
       mounted = false;
     };
+    // Run exactly once on mount to finalize OAuth redirect callback
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

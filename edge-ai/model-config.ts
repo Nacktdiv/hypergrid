@@ -93,11 +93,96 @@ export function getConfidenceTier(
   return { confidenceScore, confidenceTier };
 }
 
+export type VehicleType = 'car' | 'motor' | 'bicycle';
+
+/**
+ * Konfigurasi ambang batas hentakan minimum dan severity per jenis kendaraan:
+ * - Car (Family MPV / Sedan): Suspensi lembut meredam getaran kabin.
+ * - Motor (Sepeda Motor): Stang motor terhubung langsung ke suspensi teleskopik & getaran mesin.
+ * - Bicycle (Sepeda): Tanpa mesin, kecepatan rendah, getaran jalan langsung terasa di frame.
+ */
+export const VEHICLE_SHOCK_PROFILES: Record<
+  VehicleType,
+  {
+    minShockThreshold: number;
+    severityThresholds: { severe: number; high: number; medium: number };
+  }
+> = {
+  car: {
+    minShockThreshold: 1.10,
+    severityThresholds: { severe: 2.20, high: 1.60, medium: 1.10 },
+  },
+  motor: {
+    minShockThreshold: 1.45,
+    severityThresholds: { severe: 2.80, high: 2.00, medium: 1.45 },
+  },
+  bicycle: {
+    minShockThreshold: 1.15,
+    severityThresholds: { severe: 2.30, high: 1.70, medium: 1.15 },
+  },
+};
+
+export const DEFAULT_PHYSICAL_SEVERITY_THRESHOLDS = {
+  minShockThreshold: 1.20,
+  severe: 2.50,
+  high: 1.80,
+  medium: 1.20,
+};
+
+export function getVehicleShockConfig(
+  vehicleOrThresholds?:
+    | VehicleType
+    | { severe: number; high: number; medium: number; minShockThreshold?: number }
+    | string
+    | null
+) {
+  if (!vehicleOrThresholds) return DEFAULT_PHYSICAL_SEVERITY_THRESHOLDS;
+  if (typeof vehicleOrThresholds === 'object') {
+    return {
+      minShockThreshold:
+        vehicleOrThresholds.minShockThreshold ??
+        vehicleOrThresholds.medium ??
+        DEFAULT_PHYSICAL_SEVERITY_THRESHOLDS.minShockThreshold,
+      severe: vehicleOrThresholds.severe,
+      high: vehicleOrThresholds.high,
+      medium: vehicleOrThresholds.medium,
+    };
+  }
+
+  const key = vehicleOrThresholds.toLowerCase().trim();
+  if (key === 'car' || key === 'mobil') {
+    return {
+      minShockThreshold: VEHICLE_SHOCK_PROFILES.car.minShockThreshold,
+      ...VEHICLE_SHOCK_PROFILES.car.severityThresholds,
+    };
+  }
+  if (key === 'motor' || key === 'motorcycle' || key === 'motorbike') {
+    return {
+      minShockThreshold: VEHICLE_SHOCK_PROFILES.motor.minShockThreshold,
+      ...VEHICLE_SHOCK_PROFILES.motor.severityThresholds,
+    };
+  }
+  if (key === 'bicycle' || key === 'sepeda' || key === 'bike') {
+    return {
+      minShockThreshold: VEHICLE_SHOCK_PROFILES.bicycle.minShockThreshold,
+      ...VEHICLE_SHOCK_PROFILES.bicycle.severityThresholds,
+    };
+  }
+  return DEFAULT_PHYSICAL_SEVERITY_THRESHOLDS;
+}
+
 /** Parameter input evaluasi Strict Dual-Filter */
 export interface DetectionFilterCriteria {
   confidence: number;
   zAccelPeak?: number | null;
   speedKmh?: number | null;
+  vehicleType?: VehicleType | string | null;
+  vehicleThresholds?: {
+    severe: number;
+    high: number;
+    medium: number;
+    minShockThreshold?: number;
+  } | null;
 }
 
 /** Hasil evaluasi Strict Dual-Filter */
@@ -112,23 +197,24 @@ export interface DetectionFilterEvaluation {
 }
 
 /**
- * 1. Tahap Klasifikasi & Validasi (Mencegah False Positive) — Strict Dual-Filter:
+ * 1. Tahap Klasifikasi & Validasi (Mencegah False Positive) — Strict Dual-Filter Adaptif Kendaraan:
  * - CONFIRMED (Lolos Utama): confidence >= 0.70
- * - CONFIRMED VIA SENSOR: 0.50 <= confidence < 0.70 DAN zAccelPeak >= 2.0
- * - UNCERTAIN (Butuh Konfirmasi DBSCAN): 0.50 <= confidence < 0.70 DAN zAccelPeak < 2.0
- * - REJECTED (Noise/Bukan Lubang): confidence < 0.50 ATAU (speedKmh > 60 dan zAccelPeak < 1.2)
+ * - CONFIRMED VIA SENSOR: 0.50 <= confidence < 0.70 DAN zAccelPeak >= sensorShockThreshold (disesuaikan jenis kendaraan)
+ * - UNCERTAIN (Butuh Konfirmasi DBSCAN): 0.50 <= confidence < 0.70 DAN zAccelPeak < sensorShockThreshold
+ * - REJECTED (Noise/Bukan Lubang): confidence < 0.50 ATAU (speedKmh > 60 dan zAccelPeak < minShockThreshold)
  */
 export function evaluateDetectionStatus(
   input: DetectionFilterCriteria
 ): DetectionValidationStatus {
-  const { confidence, zAccelPeak, speedKmh } = input;
+  const { confidence, zAccelPeak, speedKmh, vehicleType, vehicleThresholds } = input;
   const peak = zAccelPeak != null && !isNaN(zAccelPeak) ? Math.abs(zAccelPeak) : 0;
+  const cfg = getVehicleShockConfig(vehicleThresholds || vehicleType);
 
   // 1. REJECTED:
-  // Jika confidence < 0.50 ATAU (kecepatan > 60 km/h tanpa hentakan nyata < 1.2G)
+  // Jika confidence < 0.50 ATAU (kecepatan > 60 km/h tanpa hentakan nyata di bawah batas getaran kendaraan)
   if (
     confidence < 0.50 ||
-    (speedKmh != null && speedKmh > 60.0 && peak < 1.20)
+    (speedKmh != null && speedKmh > 60.0 && peak < cfg.minShockThreshold)
   ) {
     return 'REJECTED';
   }
@@ -139,12 +225,14 @@ export function evaluateDetectionStatus(
   }
 
   // 3. CONFIRMED VIA SENSOR:
-  if (confidence >= 0.50 && peak >= 2.0) {
+  // Gunakan threshold hentakan sensor terkalibrasi per kendaraan (default: 2.0G, motor: 2.0G, car: 1.6G)
+  const sensorShockThreshold = Math.min(2.0, cfg.high);
+  if (confidence >= 0.50 && peak >= sensorShockThreshold) {
     return 'CONFIRMED_VIA_SENSOR';
   }
 
   // 4. UNCERTAIN (Butuh Konfirmasi DBSCAN):
-  if (confidence >= 0.50 && peak < 2.0) {
+  if (confidence >= 0.50 && peak < sensorShockThreshold) {
     return 'UNCERTAIN';
   }
 
@@ -152,24 +240,31 @@ export function evaluateDetectionStatus(
 }
 
 /**
- * 2. Tahap Penentuan Severity (Berdasarkan Hentakan Fisik zAccelPeak):
+ * 2. Tahap Penentuan Severity Fleksibel (Berdasarkan Hentakan Fisik zAccelPeak & Jenis Kendaraan):
  * Hitung keparahan HANYA untuk data yang lolos sebagai pothole:
- * - severe: zAccelPeak >= 2.5
- * - high: 1.8 <= zAccelPeak < 2.5
- * - medium: 1.2 <= zAccelPeak < 1.8
- * - low: zAccelPeak < 1.2 (atau jika zAccelPeak bernilai null/default)
+ * - severe: zAccelPeak >= severeThresh
+ * - high: highThresh <= zAccelPeak < severeThresh
+ * - medium: mediumThresh <= zAccelPeak < highThresh
+ * - low: zAccelPeak < mediumThresh
  */
 export function calculatePhysicalSeverity(
-  zAccelPeak?: number | null
+  zAccelPeak?: number | null,
+  vehicleOrThresholds?:
+    | VehicleType
+    | { severe: number; high: number; medium: number }
+    | string
+    | null
 ): ClusterSeverity {
   if (zAccelPeak == null || isNaN(zAccelPeak)) {
     return 'low';
   }
 
   const peak = Math.abs(zAccelPeak);
-  if (peak >= 2.50) return 'severe';
-  if (peak >= 1.80) return 'high';
-  if (peak >= 1.20) return 'medium';
+  const cfg = getVehicleShockConfig(vehicleOrThresholds);
+
+  if (peak >= cfg.severe) return 'severe';
+  if (peak >= cfg.high) return 'high';
+  if (peak >= cfg.medium) return 'medium';
   return 'low';
 }
 
@@ -181,18 +276,19 @@ export function evaluateDetection(
 ): DetectionFilterEvaluation {
   const status = evaluateDetectionStatus(input);
   const isValidPothole = status === 'CONFIRMED' || status === 'CONFIRMED_VIA_SENSOR';
-  const severity = calculatePhysicalSeverity(input.zAccelPeak);
+  const cfg = getVehicleShockConfig(input.vehicleThresholds || input.vehicleType);
+  const severity = calculatePhysicalSeverity(input.zAccelPeak, cfg);
 
   let reason = 'Deteksi terkonfirmasi lolos kriteria utama (confidence >= 0.70)';
   if (status === 'CONFIRMED_VIA_SENSOR') {
-    reason = 'Terkonfirmasi via sensor suspensi (0.50 <= conf < 0.70 & zAccelPeak >= 2.0G)';
+    reason = `Terkonfirmasi via sensor suspensi (0.50 <= conf < 0.70 & zAccelPeak >= ${Math.min(2.0, cfg.high).toFixed(1)}G)`;
   } else if (status === 'UNCERTAIN') {
-    reason = 'Data uncertain: perlu konfirmasi akumulasi DBSCAN (0.50 <= conf < 0.70 & zAccelPeak < 2.0G)';
+    reason = 'Data uncertain: perlu konfirmasi akumulasi DBSCAN';
   } else if (status === 'REJECTED') {
     reason =
       input.confidence < 0.50
         ? 'Ditolak: confidence < 0.50'
-        : 'Ditolak: kecepatan > 60 km/h tanpa hentakan fisik (zAccelPeak < 1.2G)';
+        : `Ditolak: kecepatan > 60 km/h tanpa hentakan fisik (zAccelPeak < ${cfg.minShockThreshold.toFixed(1)}G)`;
   }
 
   return {

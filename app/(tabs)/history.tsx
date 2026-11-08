@@ -103,12 +103,6 @@ export default function HistoryScreen() {
     const isCacheFresh =
       hasMemoryCache && Date.now() - historyStorage.getLastSyncedAt() < 25_000;
 
-    if (!hasMemoryCache) {
-      setIsSkeletonVisible(true);
-    } else {
-      setIsSkeletonVisible(false);
-    }
-
     const task = InteractionManager.runAfterInteractions(() => {
       if (!isCacheFresh) {
         loadDataFromBackend(!hasMemoryCache);

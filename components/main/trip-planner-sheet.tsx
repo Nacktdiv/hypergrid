@@ -129,10 +129,10 @@ export function TripPlannerSheet({
   const [isSearching, setIsSearching] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const defaultStart: LatLng = userCoords || {
-    latitude: -6.2088,
-    longitude: 106.8206,
-  };
+  const defaultStart: LatLng = useMemo(
+    () => userCoords || { latitude: -6.2088, longitude: 106.8206 },
+    [userCoords]
+  );
 
   // Debounced geocoding search using OpenStreetMap Nominatim
   useEffect(() => {
@@ -141,13 +141,15 @@ export function TripPlannerSheet({
     }
 
     if (searchQuery.trim().length < 2) {
-      setSearchResults([]);
-      setIsSearching(false);
+      searchTimeoutRef.current = setTimeout(() => {
+        setSearchResults([]);
+        setIsSearching(false);
+      }, 0);
       return;
     }
 
-    setIsSearching(true);
     searchTimeoutRef.current = setTimeout(async () => {
+      setIsSearching(true);
       try {
         const results = await routingService.searchLocation(searchQuery);
         setSearchResults(results);

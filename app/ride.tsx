@@ -83,8 +83,8 @@ export default function RideScreen() {
   );
 
   const startCoordsRef = useRef<LatLng | null>(null);
-  const startLocationNameRef = useRef<string>("Origin Location");
-  const tripStartTimeRef = useRef<number>(Date.now());
+  const [startLocationName, setStartLocationName] = useState<string>("Origin Location");
+  const [tripStartTime] = useState<number>(() => Date.now());
 
   useEffect(() => {
     defaultEdgeDetector.setUserId(user?.id ?? null);
@@ -209,7 +209,7 @@ export default function RideScreen() {
       routingService
         .reverseGeocode(liveCoords)
         .then((name) => {
-          if (name) startLocationNameRef.current = name;
+          if (name) setStartLocationName(name);
         })
         .catch(() => {});
     }
@@ -219,7 +219,7 @@ export default function RideScreen() {
   const remainingDistanceMeters = useMemo(() => {
     if (!destination?.coords || !liveCoords) return null;
     return haversineMeters(liveCoords, destination.coords);
-  }, [destination?.coords, liveCoords]);
+  }, [destination, liveCoords]);
 
   // Kecepatan spidometer terkalibrasi secara dinamis sesuai profil kendaraan
   const currentSpeed = useMemo(() => {
@@ -660,7 +660,7 @@ export default function RideScreen() {
 
     const tripRecord: SavedTripRecord = {
       id: `trip_${Date.now()}`,
-      startTime: new Date(tripStartTimeRef.current).toISOString(),
+      startTime: new Date(tripStartTime).toISOString(),
       endTime: new Date().toISOString(),
       elapsedSeconds,
       distanceMeters: totalDistanceMeters,
@@ -672,7 +672,7 @@ export default function RideScreen() {
       vehicleName: vehicleProfile.name,
       vehiclePlate: vehicleProfile.plate,
       vehicleType: vehicleProfile.type,
-      startLocationName: startLocationNameRef.current,
+      startLocationName,
       destinationName: finalDest,
       startCoords: startCoordsRef.current,
       destinationCoords: destination?.coords || finalEndCoords,
@@ -716,7 +716,7 @@ export default function RideScreen() {
 
       const tripRecord: SavedTripRecord = {
         id: `trip_${Date.now()}`,
-        startTime: new Date(tripStartTimeRef.current).toISOString(),
+        startTime: new Date(tripStartTime).toISOString(),
         endTime: new Date().toISOString(),
         elapsedSeconds,
         distanceMeters: totalDistanceMeters,
@@ -725,7 +725,7 @@ export default function RideScreen() {
         vehicleName: vehicleProfile.name,
         vehiclePlate: vehicleProfile.plate,
         vehicleType: vehicleProfile.type,
-        startLocationName: startLocationNameRef.current,
+        startLocationName,
         destinationName: finalDest,
         startCoords: startCoordsRef.current,
         destinationCoords: destination?.coords || finalEndCoords,
@@ -750,6 +750,8 @@ export default function RideScreen() {
     vehicleProfile.name,
     vehicleProfile.plate,
     vehicleProfile.type,
+    startLocationName,
+    tripStartTime,
   ]);
 
   // Tangani tombol hardware Back Android agar konsisten menyimpan data & langsung ke Main Page
@@ -811,7 +813,7 @@ export default function RideScreen() {
           confidencePercent: confPercent,
           confidenceTier: confTier,
           destinationName: resolvedDestinationName || destination?.name,
-          startLocationName: startLocationNameRef.current,
+          startLocationName,
         }}
         onViewHistory={() => {
           setIsFinished(false);

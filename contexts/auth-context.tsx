@@ -97,7 +97,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Inisialisasi awal & mendengarkan event 401 Session Expired dari API client
   useEffect(() => {
-    checkSession();
+    const timer = setTimeout(() => {
+      void checkSession();
+    }, 0);
 
     // Dengarkan event session expired dari interceptor API
     const unsubscribe = authEvents.subscribe((reason) => {
@@ -107,6 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => {
+      clearTimeout(timer);
       unsubscribe();
     };
   }, [checkSession]);

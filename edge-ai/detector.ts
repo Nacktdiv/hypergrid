@@ -1,8 +1,5 @@
 import {
   EDGE_AI_CONFIG,
-  calculatePhysicalSeverity,
-  classifySeverityFromProbability,
-  classifySeverityFromZPeak,
   evaluateDetection,
   getConfidenceTier,
   validateRoadAnomaly,
@@ -62,7 +59,13 @@ export class EdgeRoadDamageDetector {
       probability: number;
       confidence: number;
       confidenceTier: 'HIGH' | 'MEDIUM' | 'LOW';
-    }>
+    }>,
+    vehicleConfig?: {
+      vehicleType?: string;
+      zShockThreshold?: number;
+      minMovingSpeed?: number;
+      severityThresholds?: { severe: number; high: number; medium: number };
+    }
   ): Promise<EdgeDetectionResult> {
     const { samples, latitude, longitude, timestamp } = window;
 
@@ -102,11 +105,13 @@ export class EdgeRoadDamageDetector {
     const { isPothole, probability, confidence, confidenceTier } =
       await predict(features);
 
-    // Evaluasi Strict Dual-Filter (Tahap 1: Validasi False Positive, Tahap 2: Severity Fisik)
+    // Evaluasi Strict Dual-Filter (Tahap 1: Validasi False Positive, Tahap 2: Severity Fisik Adaptif Kendaraan)
     const evaluation = evaluateDetection({
       confidence,
       zAccelPeak: maxVertDyn,
       speedKmh,
+      vehicleType: vehicleConfig?.vehicleType,
+      vehicleThresholds: vehicleConfig?.severityThresholds,
     });
 
     // Filter sanity check: model harus memprediksi pothole, tidak ditolak filter, dan ada hentakan fisik nyata (>= 0.6G)
@@ -173,6 +178,7 @@ export class EdgeRoadDamageDetector {
   public inferWindowHeuristic(
     window: SensorWindow,
     config?: {
+      vehicleType?: string;
       zShockThreshold?: number;
       minMovingSpeed?: number;
       severityThresholds?: { severe: number; high: number; medium: number };
@@ -254,11 +260,13 @@ export class EdgeRoadDamageDetector {
 
     const { confidenceScore, confidenceTier } = getConfidenceTier(probability);
 
-    // Evaluasi Strict Dual-Filter
+    // Evaluasi Strict Dual-Filter (Adaptif Kendaraan)
     const evaluation = evaluateDetection({
       confidence: confidenceScore,
       zAccelPeak: maxVertDyn,
       speedKmh: speedAvg,
+      vehicleType: config?.vehicleType,
+      vehicleThresholds: config?.severityThresholds,
     });
 
     if (evaluation.isRejected) {
@@ -308,9 +316,17 @@ export class EdgeRoadDamageDetector {
    * Mode C: Fallback frame tunggal terkalibrasi (backward compatibility).
    * Mencegah false positive dari getaran kecil saat hanya 1 frame yang tersedia.
    */
-  public inferLegacy(frame: SensorFrame): EdgeDetectionResult {
+  public inferLegacy(
+    frame: SensorFrame,
+    vehicleConfig?: {
+      vehicleType?: string;
+      zShockThreshold?: number;
+      minMovingSpeed?: number;
+      severityThresholds?: { severe: number; high: number; medium: number };
+    }
+  ): EdgeDetectionResult {
     // 1. Kecepatan minimal
-    if (frame.speedKmh != null && frame.speedKmh < 8.0) {
+    if (frame.speedKmh != null && frame.speedKmh < (vehicleConfig?.minMovingSpeed ?? 8.0)) {
       return this._notAnomaly([], frame.latitude, frame.longitude);
     }
 
@@ -323,8 +339,9 @@ export class EdgeRoadDamageDetector {
       return this._notAnomaly([], frame.latitude, frame.longitude);
     }
 
-    // Hanya picu anomali jika deviasi guncangan dinamis murni >= 1.10G
-    const isAnomaly = dynamicZ >= 1.10;
+    const shockThresh = vehicleConfig?.zShockThreshold ?? 1.10;
+    // Hanya picu anomali jika deviasi guncangan dinamis murni >= shockThresh
+    const isAnomaly = dynamicZ >= shockThresh;
 
     if (!isAnomaly) {
       return {
@@ -341,15 +358,17 @@ export class EdgeRoadDamageDetector {
 
     const probability = Math.min(
       1.0,
-      Math.max(0.5, ((dynamicZ - 1.1) / 2.0) * 0.5 + 0.5)
+      Math.max(0.5, ((dynamicZ - shockThresh) / 2.0) * 0.5 + 0.5)
     );
     const { confidenceScore, confidenceTier } = getConfidenceTier(probability);
 
-    // Evaluasi Strict Dual-Filter
+    // Evaluasi Strict Dual-Filter (Adaptif Kendaraan)
     const evaluation = evaluateDetection({
       confidence: confidenceScore,
       zAccelPeak: dynamicZ,
       speedKmh: frame.speedKmh,
+      vehicleType: vehicleConfig?.vehicleType,
+      vehicleThresholds: vehicleConfig?.severityThresholds,
     });
 
     if (evaluation.isRejected) {

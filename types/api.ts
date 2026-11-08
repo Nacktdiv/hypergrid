@@ -115,7 +115,7 @@ export interface PotholeCluster {
  */
 export interface DbscanClustersResponse {
   clusters: PotholeCluster[];
-  heatmap: Array<[number, number, number]>; // [lat, lon, intensity 0..1]
+  heatmap: [number, number, number][]; // [lat, lon, intensity 0..1]
   total_detections: number;
   total_clusters: number;
   generated_at: string;
@@ -196,6 +196,8 @@ export interface BoundingBoxFilter {
   status?: PotholeStatus;
   severity?: PotholeSeverity;
   limit?: number;
+  eps?: number;
+  vehicleType?: string;
 }
 
 /**

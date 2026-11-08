@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { Animated, View, type ViewProps } from "react-native";
 import { cn } from "@/lib/utils";
 import { AppCard } from "./app-card";
@@ -12,7 +12,7 @@ export interface SkeletonProps extends ViewProps {
  * Komponen dasar Skeleton Pulse yang ringan (Native Driver 60fps).
  */
 export function Skeleton({ className, style, dark = false, ...props }: SkeletonProps) {
-  const opacity = useRef(new Animated.Value(0.45)).current;
+  const [opacity] = useState(() => new Animated.Value(0.45));
 
   useEffect(() => {
     const loop = Animated.loop(

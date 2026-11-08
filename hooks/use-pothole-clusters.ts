@@ -7,7 +7,7 @@ import type {
 } from '@/types/api';
 
 let memoryClustersCache: PotholeCluster[] | null = null;
-let memoryHeatmapCache: Array<[number, number, number]> = [];
+let memoryHeatmapCache: [number, number, number][] = [];
 let lastClustersFetchMs = 0;
 
 /**
@@ -18,7 +18,7 @@ export function usePotholeClusters() {
   const [clusters, setClusters] = useState<PotholeCluster[]>(
     () => memoryClustersCache ?? []
   );
-  const [heatmap, setHeatmap] = useState<Array<[number, number, number]>>(
+  const [heatmap, setHeatmap] = useState<[number, number, number][]>(
     () => memoryHeatmapCache ?? []
   );
   const [nearbyCluster, setNearbyCluster] = useState<PotholeCluster | null>(null);

@@ -2,18 +2,22 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   InteractionManager,
   Modal,
+  ScrollView,
   Text,
   View,
 } from "react-native";
 import {
   Database,
+  Layers,
   MapPin,
   ShieldAlert,
   X,
+  ZoomIn,
 } from "lucide-react-native";
 
 import { LeafletMap } from "@/components/map/leaflet-map";
 import {
+  type AreaSummary,
   type DamagePoint,
   type LatLng,
   type MapData,
@@ -36,7 +40,10 @@ type FilterStatus = "all" | PotholeStatus;
  *   - Ikon lokasi marker dinamis (Mobil / Motor / Sepeda)
  *   - Menampilkan seluruh klaster PostGIS publik dari database (bukan hanya history user)
  *   - Filter chip status klaster (Semua, Aktif, Terverifikasi, Selesai)
- *   - Modal detail informasi klaster (read-only untuk pengguna mobile)
+ *   - Multi-Level LOD:
+ *     * Level Jauh (zoom < 14): Titik Ringkasan Ruas Jalan Makro (~1 km) + Modal Ringkasan Area
+ *     * Level Agak Jauh (14 <= zoom < 16): Heatmap Seruas Jalan Saja
+ *     * Level Dekat (zoom >= 16): Titik-titik Klaster Representatif + Modal Road Damage Details
  */
 export type MainMapProps = {
   vehicleId: VehicleId;
@@ -74,17 +81,24 @@ export function MainMap({
   const [selectedCluster, setSelectedCluster] = useState<PotholeCluster | null>(
     null
   );
+  const [selectedArea, setSelectedArea] = useState<AreaSummary | null>(null);
+  const [focusCoords, setFocusCoords] = useState<{
+    latitude: number;
+    longitude: number;
+    zoom?: number;
+  } | null>(null);
+
   const [hasFetchedInitial, setHasFetchedInitial] = useState(
     () => clusters.length > 0 || !isClustersLoading
   );
 
   const loadInitialClusters = useCallback(async () => {
     try {
-      await fetchClusters({ limit: 500 });
+      await fetchClusters({ limit: 500, eps: 100, vehicleType: vehicleId });
     } finally {
       setHasFetchedInitial(true);
     }
-  }, [fetchClusters]);
+  }, [fetchClusters, vehicleId]);
 
   // Ambil seluruh klaster lubang jalan nyata di database setelah transisi halaman selesai
   useEffect(() => {
@@ -188,7 +202,9 @@ export function MainMap({
       <LeafletMap
         data={mapData}
         vehicleType={vehicleId}
+        focusCoords={focusCoords}
         onDamagePress={handleMarkerPress}
+        onAreaSummaryPress={(area) => setSelectedArea(area)}
       />
 
       {showOverlayControls ? (
@@ -302,6 +318,207 @@ export function MainMap({
                     Verification, work orders, and road repairs are managed exclusively by the Public Works Department (Dinas PU) via the Web Admin Dashboard.
                   </Text>
                 </View>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      {/* 1 KM MACRO ROAD SECTOR SUMMARY MODAL (TAMPILAN JAUH) */}
+      <Modal
+        animationType="slide"
+        transparent
+        visible={Boolean(selectedArea)}
+        onRequestClose={() => setSelectedArea(null)}
+      >
+        <View className="flex-1 justify-end bg-black/40">
+          <View className="rounded-t-[32px] bg-white p-6 border-t border-slate-200/80 shadow-lg max-h-[85%]">
+            {selectedArea ? (
+              <View className="gap-4">
+                {/* Header */}
+                <View className="flex-row items-center justify-between pb-1">
+                  <View className="flex-row items-center gap-2.5">
+                    <View className="rounded-xl bg-sky-100 p-2">
+                      <Layers size={20} color="#009EFF" />
+                    </View>
+                    <View>
+                      <Text className="font-chivo-bold text-lg text-slate-900">
+                        Ruas Jalan Makro (~1 km)
+                      </Text>
+                      <Text className="font-quicksand text-xs text-slate-500">
+                        Ringkasan sebaran kerusakan jalan di area ini
+                      </Text>
+                    </View>
+                  </View>
+                  <Touchable
+                    onPress={() => setSelectedArea(null)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Tutup ringkasan area"
+                  >
+                    <View className="rounded-full bg-slate-100 p-1.5">
+                      <X size={18} color="#64748B" />
+                    </View>
+                  </Touchable>
+                </View>
+
+                {/* 3 Metrics Overview */}
+                <View className="flex-row gap-2.5">
+                  <View className="flex-1 rounded-2xl bg-slate-50 p-3 border border-slate-200/80">
+                    <Text className="font-quicksand text-[11px] text-slate-500">
+                      Total Klaster
+                    </Text>
+                    <Text className="font-chivo-bold text-xl text-slate-900 mt-0.5">
+                      {selectedArea.clusterCount}
+                    </Text>
+                  </View>
+                  <View className="flex-1 rounded-2xl bg-slate-50 p-3 border border-slate-200/80">
+                    <Text className="font-quicksand text-[11px] text-slate-500">
+                      Total Laporan
+                    </Text>
+                    <Text className="font-chivo-bold text-xl text-slate-900 mt-0.5">
+                      {selectedArea.totalReports}
+                    </Text>
+                  </View>
+                  <View className="flex-1 rounded-2xl bg-slate-50 p-3 border border-slate-200/80">
+                    <Text className="font-quicksand text-[11px] text-slate-500">
+                      Status Terparah
+                    </Text>
+                    <Text
+                      className={`font-chivo-bold text-sm uppercase mt-1 ${
+                        selectedArea.worstSeverity === "severe"
+                          ? "text-red-700"
+                          : selectedArea.worstSeverity === "high"
+                          ? "text-rose-600"
+                          : selectedArea.worstSeverity === "medium"
+                          ? "text-amber-600"
+                          : "text-yellow-600"
+                      }`}
+                    >
+                      {selectedArea.worstSeverity}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Breakdown Severity Distribution */}
+                <View className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-3.5 gap-2">
+                  <Text className="font-quicksand-bold text-xs text-slate-700">
+                    Distribusi Tingkat Keparahan
+                  </Text>
+                  <View className="flex-row items-center justify-between gap-1.5">
+                    <View className="flex-1 items-center rounded-xl bg-red-100/80 py-1.5 px-2">
+                      <Text className="font-quicksand-bold text-[10px] text-red-800">
+                        Severe
+                      </Text>
+                      <Text className="font-chivo-bold text-sm text-red-900">
+                        {selectedArea.severityCounts.severe}
+                      </Text>
+                    </View>
+                    <View className="flex-1 items-center rounded-xl bg-orange-100/80 py-1.5 px-2">
+                      <Text className="font-quicksand-bold text-[10px] text-orange-800">
+                        High
+                      </Text>
+                      <Text className="font-chivo-bold text-sm text-orange-900">
+                        {selectedArea.severityCounts.high}
+                      </Text>
+                    </View>
+                    <View className="flex-1 items-center rounded-xl bg-amber-100/80 py-1.5 px-2">
+                      <Text className="font-quicksand-bold text-[10px] text-amber-800">
+                        Medium
+                      </Text>
+                      <Text className="font-chivo-bold text-sm text-amber-900">
+                        {selectedArea.severityCounts.medium}
+                      </Text>
+                    </View>
+                    <View className="flex-1 items-center rounded-xl bg-yellow-100/80 py-1.5 px-2">
+                      <Text className="font-quicksand-bold text-[10px] text-yellow-800">
+                        Low
+                      </Text>
+                      <Text className="font-chivo-bold text-sm text-yellow-900">
+                        {selectedArea.severityCounts.low}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* List of Clusters in Area */}
+                <View className="gap-1.5">
+                  <Text className="font-quicksand-bold text-xs text-slate-700">
+                    Daftar Titik Klaster di Ruas Ini ({selectedArea.clusters.length})
+                  </Text>
+                  <ScrollView className="max-h-40" showsVerticalScrollIndicator={true}>
+                    <View className="gap-1.5">
+                      {selectedArea.clusters.map((pt, idx) => (
+                        <Touchable
+                          key={pt.id || idx}
+                          onPress={() => {
+                            const found = clusters.find((c) => c.id === pt.id);
+                            if (found) {
+                              setSelectedArea(null);
+                              setSelectedCluster(found);
+                              onOpenClusterDetail?.(found);
+                            }
+                          }}
+                        >
+                          <View className="flex-row items-center justify-between rounded-xl border border-slate-200/90 bg-white px-3 py-2 shadow-sm">
+                            <View className="flex-row items-center gap-2">
+                              <View
+                                className={`h-2.5 w-2.5 rounded-full ${
+                                  pt.severity === "severe"
+                                    ? "bg-red-700"
+                                    : pt.severity === "high"
+                                    ? "bg-red-500"
+                                    : pt.severity === "medium"
+                                    ? "bg-amber-500"
+                                    : "bg-yellow-400"
+                                }`}
+                              />
+                              <Text className="font-mono text-[11px] text-slate-800">
+                                {pt.position.latitude.toFixed(4)}, {pt.position.longitude.toFixed(4)}
+                              </Text>
+                            </View>
+                            <View className="flex-row items-center gap-1.5">
+                              <Text className="font-quicksand text-[11px] text-slate-500">
+                                {pt.reportCount} lap
+                              </Text>
+                              <Text
+                                className={`font-quicksand-bold text-[10px] uppercase ${
+                                  pt.severity === "severe"
+                                    ? "text-red-700"
+                                    : pt.severity === "high"
+                                    ? "text-rose-600"
+                                    : pt.severity === "medium"
+                                    ? "text-amber-600"
+                                    : "text-yellow-600"
+                                }`}
+                              >
+                                {pt.severity}
+                              </Text>
+                            </View>
+                          </View>
+                        </Touchable>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
+
+                {/* Primary Action Button: Zoom in to area */}
+                <Touchable
+                  onPress={() => {
+                    const center = selectedArea.center;
+                    setSelectedArea(null);
+                    setFocusCoords({
+                      latitude: center.latitude,
+                      longitude: center.longitude,
+                      zoom: 16.5,
+                    });
+                  }}
+                  className="mt-1 flex-row items-center justify-center gap-2 rounded-2xl bg-custom-primary py-3.5 shadow-md active:opacity-90"
+                >
+                  <ZoomIn size={18} color="#ffffff" />
+                  <Text className="font-quicksand-bold text-sm text-white">
+                    Perbesar & Lihat Klaster di Peta
+                  </Text>
+                </Touchable>
               </View>
             ) : null}
           </View>

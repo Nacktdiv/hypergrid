@@ -1,6 +1,11 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import * as Location from "expo-location";
 import type { LatLng } from "@/components/map/map-data";
+import {
+  backgroundTrackingService,
+  getCachedLocation,
+  updateCachedLocation,
+} from "@/services/background-tracking";
 
 export interface UserLocationState {
   coords: LatLng | null;
@@ -14,12 +19,6 @@ export interface UserLocationState {
   permissionGranted: boolean;
   errorMsg: string | null;
 }
-
-import {
-  backgroundTrackingService,
-  getCachedLocation,
-  updateCachedLocation,
-} from "@/services/background-tracking";
 
 /**
  * Low-pass EMA filter untuk kecepatan GPS.

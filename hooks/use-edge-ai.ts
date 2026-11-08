@@ -90,7 +90,7 @@ export function useEdgeAi() {
 
         if (modelReady && snapshot.length >= EDGE_AI_CONFIG.minSamplesForInference) {
           // ── Mode A: Full TFLite (47 fitur matematis dari window) ───────────
-          result = await defaultEdgeDetector.inferWindow(window, predict);
+          result = await defaultEdgeDetector.inferWindow(window, predict, vehicleConfig);
         } else if (snapshot.length >= 3) {
           // ── Mode B: Smart Window Heuristic (3D EMA Gravitasi + Crest Factor) ─
           result = defaultEdgeDetector.inferWindowHeuristic(window, vehicleConfig);
@@ -110,7 +110,7 @@ export function useEdgeAi() {
             speedKmh: speedAvg,
             timestamp: new Date().toISOString(),
           };
-          result = defaultEdgeDetector.inferLegacy(frame);
+          result = defaultEdgeDetector.inferLegacy(frame, vehicleConfig);
         }
 
         setLastResult(result);

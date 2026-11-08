@@ -35,8 +35,23 @@ export type DamagePoint = {
   reportCount: number
   radius_meters?: number
   userCount?: number
-  points?: Array<{ latitude: number; longitude: number; intensity?: number }>
+  points?: { latitude: number; longitude: number; intensity?: number }[]
 }
+
+/**
+ * Ringkasan ruas jalan area makro (~1 km).
+ * Ditampilkan ketika peta berada pada level zoom jauh (zoom < 14).
+ */
+export type AreaSummary = {
+  id: string;
+  center: LatLng;
+  radiusMeters: number;
+  clusterCount: number;
+  totalReports: number;
+  worstSeverity: DamageSeverity;
+  severityCounts: Record<DamageSeverity, number>;
+  clusters: DamagePoint[];
+};
 
 /** Seluruh data yang dibutuhkan satu layar untuk menggambar peta. */
 export type MapData = {
@@ -50,13 +65,81 @@ export type MapData = {
   /** Titik kerusakan jalan yang tampil di peta. */
   damagePoints: DamagePoint[]
   /** Data heatmap sebaran intensitas kerusakan jalan [lat, lon, intensity 0..1]. */
-  heatmap?: Array<[number, number, number]>
+  heatmap?: [number, number, number][]
   /** ID klaster yang sedang aktif/diklik untuk di-highlight cakupan areanya */
   activeClusterId?: string | null
+  /** ID area makro (~1 km) yang sedang aktif */
+  activeAreaId?: string | null
   /** Posisi pengguna (titik biru). */
   userLocation: LatLng
   /** Posisi kendaraan aktif (ikon kendaraan). */
   vehiclePosition: LatLng
+}
+
+/**
+ * Mengelompokkan titik klaster ke dalam grid spasial ruas jalan makro berukuran ~1 km (~1000m).
+ * Digunakan untuk Level of Detail (LOD) peta saat kamera berada pada tampilan jauh (zoom < 14).
+ */
+export function aggregateClustersTo1KmAreas(
+  points: DamagePoint[],
+  cellMeters: number = 1000
+): AreaSummary[] {
+  if (!points || points.length === 0) return [];
+  // 1 derajat lintang approx 111,320 meter (sekitar 0.009 derajat per 1 km)
+  const degSize = cellMeters / 111320;
+  const grid = new Map<string, DamagePoint[]>();
+
+  for (const pt of points) {
+    const cellLat = Math.floor(pt.position.latitude / degSize);
+    const cellLng = Math.floor(pt.position.longitude / degSize);
+    const key = `${cellLat}:${cellLng}`;
+    const list = grid.get(key) || [];
+    list.push(pt);
+    grid.set(key, list);
+  }
+
+  const areas: AreaSummary[] = [];
+  grid.forEach((group, key) => {
+    let sumLat = 0;
+    let sumLng = 0;
+    let totalReports = 0;
+    const severityCounts: Record<DamageSeverity, number> = {
+      severe: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+    };
+
+    for (const p of group) {
+      sumLat += p.position.latitude;
+      sumLng += p.position.longitude;
+      totalReports += p.reportCount || 1;
+      if (p.severity in severityCounts) {
+        severityCounts[p.severity]++;
+      }
+    }
+
+    let worstSeverity: DamageSeverity = "low";
+    if (severityCounts.severe > 0) worstSeverity = "severe";
+    else if (severityCounts.high > 0) worstSeverity = "high";
+    else if (severityCounts.medium > 0) worstSeverity = "medium";
+
+    areas.push({
+      id: `area-1km-${key}`,
+      center: {
+        latitude: sumLat / group.length,
+        longitude: sumLng / group.length,
+      },
+      radiusMeters: cellMeters,
+      clusterCount: group.length,
+      totalReports,
+      worstSeverity,
+      severityCounts,
+      clusters: group,
+    });
+  });
+
+  return areas;
 }
 
 /**
