@@ -125,33 +125,42 @@ export const MainMap = React.memo(function MainMap({
     return clusters.filter((c) => c.status === activeFilter);
   }, [clusters, activeFilter]);
 
+  const liveDamagePoints = useMemo<DamagePoint[]>(
+    () =>
+      filteredClusters.map((c) => ({
+        id: c.id,
+        position: {
+          latitude: c.center_latitude ?? (c as any).centerLatitude,
+          longitude: c.center_longitude ?? (c as any).centerLongitude,
+        },
+        severity: c.severity,
+        reportCount: c.detection_count ?? (c as any).detectionCount ?? 1,
+        radius_meters: c.radius_meters || (c as any).radiusMeters || 18,
+        road_length_meters:
+          c.road_length_meters || (c as any).roadLengthMeters || 15,
+        road_segment_coords: (
+          c.road_segment_coords || (c as any).roadSegmentCoords
+        )?.map((p: any) => ({
+          latitude: p.latitude ?? p.lat,
+          longitude: p.longitude ?? p.lng,
+        })),
+        userCount: c.user_count || (c as any).userCount || 1,
+        points: c.points?.map((p: any) => ({
+          latitude: p.latitude ?? p.lat,
+          longitude: p.longitude ?? p.lng,
+          intensity: p.intensity,
+        })),
+      })),
+    [filteredClusters],
+  );
+
+  const routeObj = useMemo(
+    () => ({ id: "user-route", coordinates: plannedRoute || [] }),
+    [plannedRoute],
+  );
+
   const mapData: MapData = useMemo(() => {
     const baseCenter = liveCoords || { latitude: -6.2088, longitude: 106.8456 };
-
-    const liveDamagePoints: DamagePoint[] = filteredClusters.map((c) => ({
-      id: c.id,
-      position: {
-        latitude: c.center_latitude ?? (c as any).centerLatitude,
-        longitude: c.center_longitude ?? (c as any).centerLongitude,
-      },
-      severity: c.severity,
-      reportCount: c.detection_count ?? (c as any).detectionCount ?? 1,
-      radius_meters: c.radius_meters || (c as any).radiusMeters || 18,
-      road_length_meters:
-        c.road_length_meters || (c as any).roadLengthMeters || 15,
-      road_segment_coords: (
-        c.road_segment_coords || (c as any).roadSegmentCoords
-      )?.map((p: any) => ({
-        latitude: p.latitude ?? p.lat,
-        longitude: p.longitude ?? p.lng,
-      })),
-      userCount: c.user_count || (c as any).userCount || 1,
-      points: c.points?.map((p: any) => ({
-        latitude: p.latitude ?? p.lat,
-        longitude: p.longitude ?? p.lng,
-        intensity: p.intensity,
-      })),
-    }));
 
     return {
       camera: {
@@ -159,7 +168,7 @@ export const MainMap = React.memo(function MainMap({
         longitude: baseCenter.longitude,
         zoom: 15,
       },
-      route: { id: "user-route", coordinates: plannedRoute || [] },
+      route: routeObj,
       damagePoints: liveDamagePoints,
       activeClusterId: selectedCluster?.id ?? null,
       activeAreaId: selectedArea?.id ?? null,
@@ -167,11 +176,11 @@ export const MainMap = React.memo(function MainMap({
       vehiclePosition: baseCenter,
     };
   }, [
-    filteredClusters,
+    liveDamagePoints,
+    routeObj,
     liveCoords,
     selectedCluster?.id,
     selectedArea?.id,
-    plannedRoute,
   ]);
 
   const handleMarkerPress = useCallback(

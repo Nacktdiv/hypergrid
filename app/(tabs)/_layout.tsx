@@ -13,7 +13,7 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         lazy: true,
-        freezeOnBlur: true,
+        freezeOnBlur: false,
         animation: "none",
         sceneStyle: { backgroundColor: colors.canvas },
         tabBarStyle: {
@@ -62,6 +62,7 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: "Profile",
+          lazy: false,
           tabBarAccessibilityLabel: "Profile Tab",
           tabBarIcon: ({ color, focused }) => (
             <User size={22} color={color} strokeWidth={focused ? 2.4 : 1.9} />
@@ -72,6 +73,7 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: "Settings",
+          lazy: false,
           tabBarAccessibilityLabel: "Settings Tab",
           tabBarIcon: ({ color, focused }) => (
             <Settings

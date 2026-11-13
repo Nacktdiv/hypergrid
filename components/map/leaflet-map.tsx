@@ -3,7 +3,7 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 
 import { useOptionalTheme } from "@/contexts/theme-context";
-import type { AreaSummary, DamagePoint, MapData } from "./map-data";
+import type { AreaSummary, DamagePoint, LatLng, MapData } from "./map-data";
 
 const TILE_URLS = {
   light: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -45,18 +45,19 @@ export const LeafletMap = React.memo(function LeafletMap({
   const { resolvedTheme } = useOptionalTheme();
   const activeMapTheme = mapTheme ?? resolvedTheme;
 
-  const webViewRef = useRef<any>(null);
-  const isMapLoaded = useRef<boolean>(false);
-  const lastInjectedPos = useRef<{ lat: number; lng: number } | null>(null);
-  const lastRouteLengthRef = useRef<number>(0);
-  const lastDamageJsonRef = useRef<string>("");
-  const lastActiveClusterIdRef = useRef<string | null>(null);
-
-  // Simpan data & tema awal saat pertama kali mount agar WebView tidak reload saat tema berubah
   const [initialData] = useState<MapData>(data);
   const [initialTheme] = useState<"light" | "dark">(activeMapTheme);
   const activeMapThemeRef = useRef<"light" | "dark">(activeMapTheme);
   activeMapThemeRef.current = activeMapTheme;
+
+  const webViewRef = useRef<any>(null);
+  const isMapLoaded = useRef<boolean>(false);
+  const lastInjectedPos = useRef<{ lat: number; lng: number } | null>(null);
+  const lastRouteCoordsRef = useRef<LatLng[] | null>(initialData.route.coordinates);
+  const lastRouteLengthRef = useRef<number>(initialData.route.coordinates.length);
+  const lastDamagePointsRef = useRef<DamagePoint[] | null>(initialData.damagePoints);
+  const lastDamageJsonRef = useRef<string>("");
+  const lastActiveClusterIdRef = useRef<string | null>(null);
 
   // Buat HTML Leaflet sekali dengan titik awal nyata
   const htmlContent = useMemo(() => {
@@ -1399,14 +1400,19 @@ export const LeafletMap = React.memo(function LeafletMap({
     webViewRef.current.injectJavaScript(js);
   }, [data.vehiclePosition.latitude, data.vehiclePosition.longitude]);
 
-  // 2. Pembaruan jejak rute perjalanan (hanya dieksekusi saat titik rute bertambah)
+  // 2. Pembaruan jejak rute perjalanan (hanya dieksekusi saat titik rute berubah)
   useEffect(() => {
     if (!isMapLoaded.current || !webViewRef.current) return;
 
     const coords = data.route.coordinates;
-    if (coords.length === lastRouteLengthRef.current && coords.length > 0) {
+    if (coords === lastRouteCoordsRef.current) {
       return;
     }
+    if (coords.length === 0 && lastRouteLengthRef.current === 0) {
+      lastRouteCoordsRef.current = coords;
+      return;
+    }
+    lastRouteCoordsRef.current = coords;
     lastRouteLengthRef.current = coords.length;
 
     const routeJson = JSON.stringify(
@@ -1422,6 +1428,11 @@ export const LeafletMap = React.memo(function LeafletMap({
   // 3. Pembaruan titik klaster kerusakan jalan (HANYA saat data kerusakan berubah)
   useEffect(() => {
     if (!isMapLoaded.current || !webViewRef.current) return;
+
+    if (data.damagePoints === lastDamagePointsRef.current) {
+      return;
+    }
+    lastDamagePointsRef.current = data.damagePoints;
 
     const damageJson = JSON.stringify(data.damagePoints);
     if (damageJson === lastDamageJsonRef.current) {
@@ -1513,6 +1524,10 @@ export const LeafletMap = React.memo(function LeafletMap({
         // Langsung sinkronkan posisi, tema tile, dan rute saat ini begitu map siap
         const lat = data.vehiclePosition.latitude;
         const lng = data.vehiclePosition.longitude;
+        lastInjectedPos.current = { lat, lng };
+        lastRouteCoordsRef.current = data.route.coordinates;
+        lastRouteLengthRef.current = data.route.coordinates.length;
+
         const routeJson = JSON.stringify(
           data.route.coordinates.map((c) => [c.latitude, c.longitude]),
         );
@@ -1521,10 +1536,19 @@ export const LeafletMap = React.memo(function LeafletMap({
           : null;
         const activeJson = JSON.stringify(activePt || null);
 
+        let damageScript = "";
+        if (data.damagePoints !== lastDamagePointsRef.current) {
+          lastDamagePointsRef.current = data.damagePoints;
+          const damageJson = JSON.stringify(data.damagePoints);
+          lastDamageJsonRef.current = damageJson;
+          damageScript = `if (window.renderDamagePoints) window.renderDamagePoints(${damageJson});`;
+        }
+
         webViewRef.current?.injectJavaScript(`
           if (window.setMapTheme) window.setMapTheme('${activeMapThemeRef.current}');
           if (window.updatePosition) window.updatePosition(${lat}, ${lng});
           if (window.updateRoute) window.updateRoute(${routeJson});
+          ${damageScript}
           if (${activeJson}) window.highlightCluster(${activeJson});
           true;
         `);

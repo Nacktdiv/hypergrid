@@ -1,15 +1,24 @@
 import * as Haptics from "expo-haptics";
 import { Check, ChevronsRight, TriangleAlert } from "lucide-react-native";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
-  PanResponder,
   StyleSheet,
   Text,
   View,
   type LayoutChangeEvent,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 
 import { useOptionalTheme } from "@/contexts/theme-context";
 
@@ -36,7 +45,6 @@ export interface SlideCommitProps {
 }
 
 const PAD = 4;
-const MIN_PENDING_MS = 350;
 
 export function SlideCommit({
   label = "Slide to start ride",
@@ -72,18 +80,24 @@ export function SlideCommit({
   const r = radius !== undefined ? radius : height / 2;
   const gripRadius = Math.max(0, r - PAD);
 
-  // Animated values
-  const [translateX] = useState(() => new Animated.Value(0));
-  const [shakeX] = useState(() => new Animated.Value(0));
-
-  const currentTravelRef = useRef(0);
-  const isPendingOrDoneRef = useRef(false);
-  isPendingOrDoneRef.current = phase === "pending" || phase === "done";
-
-  // Dynamic travel distance based on measured width
   const actualWidth = width || containerWidth;
   const TRAVEL = Math.max(1, actualWidth - PAD * 2 - GRIP);
-  currentTravelRef.current = TRAVEL;
+
+  const translateX = useSharedValue(0);
+  const dragStartX = useSharedValue(0);
+  const shakeX = useSharedValue(0);
+  const travelSV = useSharedValue(TRAVEL);
+  const widthSV = useSharedValue(Math.max(GRIP + PAD * 2, actualWidth));
+  const lockedSV = useSharedValue(disabled);
+
+  useEffect(() => {
+    travelSV.set(TRAVEL);
+    widthSV.set(Math.max(GRIP + PAD * 2, actualWidth));
+  }, [TRAVEL, GRIP, actualWidth, travelSV, widthSV]);
+
+  useEffect(() => {
+    lockedSV.set(disabled || phase === "pending" || phase === "done");
+  }, [disabled, phase, lockedSV]);
 
   const triggerHaptic = useCallback(
     (type: "light" | "medium" | "success" | "error") => {
@@ -98,70 +112,55 @@ export function SlideCommit({
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
       } catch {
-        // Abaikan pada device/simulator tanpa haptics
+        // Ignore on devices/simulators without haptic hardware
       }
     },
-    [],
+    []
   );
 
   const shakeAnimation = useCallback(() => {
-    Animated.sequence([
-      Animated.timing(shakeX, {
-        toValue: -8,
-        duration: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(shakeX, {
-        toValue: 8,
-        duration: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(shakeX, {
-        toValue: -6,
-        duration: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(shakeX, {
-        toValue: 6,
-        duration: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(shakeX, {
-        toValue: -3,
-        duration: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(shakeX, {
-        toValue: 0,
-        duration: 40,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    shakeX.set(
+      withSequence(
+        withTiming(-8, { duration: 40 }),
+        withTiming(8, { duration: 40 }),
+        withTiming(-6, { duration: 40 }),
+        withTiming(6, { duration: 40 }),
+        withTiming(-3, { duration: 40 }),
+        withTiming(0, { duration: 40 })
+      )
+    );
   }, [shakeX]);
 
   const snapHome = useCallback(() => {
-    Animated.spring(translateX, {
-      toValue: 0,
-      useNativeDriver: false,
-      bounciness: 4,
-      speed: 16,
-    }).start();
+    translateX.set(
+      withSpring(0, {
+        damping: 18,
+        stiffness: 260,
+        mass: 0.7,
+      })
+    );
   }, [translateX]);
 
   const resetToIdle = useCallback(() => {
-    translateX.stopAnimation();
-    translateX.setValue(0);
+    translateX.set(0);
     setPhase("idle");
   }, [translateX]);
 
-  const commit = useCallback(async () => {
-    const travelDistance = currentTravelRef.current;
-    Animated.timing(translateX, {
-      toValue: travelDistance,
-      duration: 100,
-      useNativeDriver: false,
-    }).start();
+  useEffect(() => {
+    if (phase === "done") {
+      const timer = setTimeout(resetToIdle, 350);
+      return () => clearTimeout(timer);
+    }
+    if (phase === "error") {
+      const timer = setTimeout(() => {
+        snapHome();
+        setPhase("idle");
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [phase, resetToIdle, snapHome]);
 
+  const commit = useCallback(async () => {
     triggerHaptic("medium");
 
     let result: void | Promise<unknown>;
@@ -172,99 +171,87 @@ export function SlideCommit({
       setPhase("error");
       onError?.(err);
       shakeAnimation();
-      setTimeout(() => {
-        snapHome();
-        setPhase("idle");
-      }, 1500);
       return;
     }
 
-    const isPromise = result && typeof (result as any).then === "function";
+    const isPromise =
+      result && typeof (result as Promise<unknown>).then === "function";
 
     if (!isPromise) {
       triggerHaptic("success");
       setPhase("done");
       onDone?.();
-      setTimeout(() => {
-        resetToIdle();
-      }, 300);
       return;
     }
 
     setPhase("pending");
-    const t0 = Date.now();
-
     try {
       await result;
-      const elapsed = Date.now() - t0;
-      const delay = Math.max(0, MIN_PENDING_MS - elapsed);
-      setTimeout(() => {
-        triggerHaptic("success");
-        setPhase("done");
-        onDone?.();
-        setTimeout(() => {
-          resetToIdle();
-        }, 300);
-      }, delay);
+      triggerHaptic("success");
+      setPhase("done");
+      onDone?.();
     } catch (err) {
-      const elapsed = Date.now() - t0;
-      const delay = Math.max(0, MIN_PENDING_MS - elapsed);
-      setTimeout(() => {
-        triggerHaptic("error");
-        setPhase("error");
-        onError?.(err);
-        shakeAnimation();
-        setTimeout(() => {
-          snapHome();
-          setPhase("idle");
-        }, 1500);
-      }, delay);
+      triggerHaptic("error");
+      setPhase("error");
+      onError?.(err);
+      shakeAnimation();
     }
-  }, [
-    translateX,
-    triggerHaptic,
-    onConfirm,
-    onDone,
-    onError,
-    shakeAnimation,
-    snapHome,
-    resetToIdle,
-  ]);
+  }, [triggerHaptic, onConfirm, onDone, onError, shakeAnimation]);
 
-  const panResponder = useMemo(() => {
-    let touchStartX = 0;
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(!disabled && phase !== "pending" && phase !== "done")
+        .activeOffsetX([-3, 3])
+        .onStart(() => {
+          "worklet";
+          if (lockedSV.get()) return;
+          dragStartX.set(translateX.get());
+          scheduleOnRN(triggerHaptic, "light");
+        })
+        .onUpdate((event) => {
+          "worklet";
+          if (lockedSV.get()) return;
+          const travel = travelSV.get();
+          const nextX = Math.min(
+            Math.max(0, dragStartX.get() + event.translationX),
+            travel
+          );
+          translateX.set(nextX);
+        })
+        .onEnd((event) => {
+          "worklet";
+          if (lockedSV.get()) return;
+          const travel = travelSV.get();
+          const currentX = Math.min(
+            Math.max(0, dragStartX.get() + event.translationX),
+            travel
+          );
 
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () =>
-        !disabled && !isPendingOrDoneRef.current,
-      onMoveShouldSetPanResponder: (_, gesture) =>
-        !disabled && !isPendingOrDoneRef.current && Math.abs(gesture.dx) > 3,
-      onPanResponderGrant: () => {
-        translateX.stopAnimation((value) => {
-          touchStartX = value;
-        });
-        triggerHaptic("light");
-      },
-      onPanResponderMove: (_, gesture) => {
-        const travel = currentTravelRef.current;
-        const nextX = Math.min(Math.max(0, touchStartX + gesture.dx), travel);
-        translateX.setValue(nextX);
-      },
-      onPanResponderRelease: (_, gesture) => {
-        const travel = currentTravelRef.current;
-        const currentX = Math.min(
-          Math.max(0, touchStartX + gesture.dx),
-          travel,
-        );
-
-        if (currentX >= travel * 0.85 || gesture.vx > 0.8) {
-          commit();
-        } else {
-          snapHome();
-        }
-      },
-    });
-  }, [disabled, translateX, triggerHaptic, commit, snapHome]);
+          if (currentX >= travel * 0.85 || event.velocityX > 800) {
+            translateX.set(withTiming(travel, { duration: 75 }));
+            scheduleOnRN(commit);
+          } else {
+            translateX.set(
+              withSpring(0, {
+                damping: 18,
+                stiffness: 260,
+                mass: 0.7,
+              })
+            );
+          }
+        }),
+    [
+      disabled,
+      phase,
+      lockedSV,
+      dragStartX,
+      translateX,
+      travelSV,
+      triggerHaptic,
+      commit,
+    ]
+  );
 
   const handleLayout = (e: LayoutChangeEvent) => {
     const { width: measuredWidth } = e.nativeEvent.layout;
@@ -273,21 +260,31 @@ export function SlideCommit({
     }
   };
 
-  const fillWidth = useMemo(() => {
-    return translateX.interpolate({
-      inputRange: [0, Math.max(1, TRAVEL)],
-      outputRange: [GRIP + PAD * 2, actualWidth],
-      extrapolate: "clamp",
-    });
-  }, [translateX, TRAVEL, GRIP, actualWidth]);
+  const containerAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: shakeX.get() }],
+  }));
 
-  const labelOpacity = useMemo(() => {
-    return translateX.interpolate({
-      inputRange: [0, Math.max(1, TRAVEL * 0.35)],
-      outputRange: [1, 0],
-      extrapolate: "clamp",
-    });
-  }, [translateX, TRAVEL]);
+  const fillAnimatedStyle = useAnimatedStyle(() => ({
+    width: interpolate(
+      translateX.get(),
+      [0, travelSV.get()],
+      [GRIP + PAD * 2, widthSV.get()],
+      Extrapolation.CLAMP
+    ),
+  }));
+
+  const labelAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      translateX.get(),
+      [0, travelSV.get() * 0.35],
+      [1, 0],
+      Extrapolation.CLAMP
+    ),
+  }));
+
+  const handleAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.get() }],
+  }));
 
   const baseBgColor =
     phase === "done"
@@ -306,11 +303,11 @@ export function SlideCommit({
       onLayout={handleLayout}
       style={[
         styles.outerContainer,
+        containerAnimatedStyle,
         {
           height,
           borderRadius: r,
           backgroundColor: baseBgColor,
-          transform: [{ translateX: shakeX }],
           opacity: disabled ? 0.55 : 1,
         },
       ]}
@@ -324,8 +321,8 @@ export function SlideCommit({
           pointerEvents="none"
           style={[
             styles.activeTrackFill,
+            fillAnimatedStyle,
             {
-              width: fillWidth,
               backgroundColor: resolvedTrackColor,
               borderRadius: r,
             },
@@ -339,7 +336,8 @@ export function SlideCommit({
           <Animated.Text
             style={[
               styles.labelText,
-              { color: colors.textSecondary, opacity: labelOpacity },
+              { color: colors.textSecondary },
+              labelAnimatedStyle,
             ]}
             numberOfLines={1}
           >
@@ -370,31 +368,32 @@ export function SlideCommit({
       </View>
 
       {/* DRAGGABLE SLIDE HANDLE */}
-      <Animated.View
-        {...panResponder.panHandlers}
-        style={[
-          styles.handle,
-          {
-            width: GRIP,
-            height: GRIP,
-            borderRadius: gripRadius,
-            backgroundColor: resolvedHandleColor,
-            transform: [{ translateX }],
-          },
-        ]}
-      >
-        {phase === "idle" ? (
-          (icon ?? (
-            <ChevronsRight size={22} color={handleIconColor} strokeWidth={2.6} />
-          ))
-        ) : phase === "pending" ? (
-          <ActivityIndicator size="small" color={handleIconColor} />
-        ) : phase === "done" ? (
-          <Check size={22} color={handleIconColor} strokeWidth={3} />
-        ) : (
-          <TriangleAlert size={22} color={handleIconColor} strokeWidth={2.6} />
-        )}
-      </Animated.View>
+      <GestureDetector gesture={panGesture}>
+        <Animated.View
+          style={[
+            styles.handle,
+            handleAnimatedStyle,
+            {
+              width: GRIP,
+              height: GRIP,
+              borderRadius: gripRadius,
+              backgroundColor: resolvedHandleColor,
+            },
+          ]}
+        >
+          {phase === "idle" ? (
+            (icon ?? (
+              <ChevronsRight size={22} color={handleIconColor} strokeWidth={2.6} />
+            ))
+          ) : phase === "pending" ? (
+            <ActivityIndicator size="small" color={handleIconColor} />
+          ) : phase === "done" ? (
+            <Check size={22} color={handleIconColor} strokeWidth={3} />
+          ) : (
+            <TriangleAlert size={22} color={handleIconColor} strokeWidth={2.6} />
+          )}
+        </Animated.View>
+      </GestureDetector>
     </Animated.View>
   );
 }

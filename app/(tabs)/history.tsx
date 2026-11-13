@@ -50,7 +50,6 @@ export default function HistoryScreen() {
     () => tripStorage.getMemoryCache() || []
   );
   const fetchRequestIdRef = useRef(0);
-  const dateSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     tripStorage
@@ -104,10 +103,6 @@ export default function HistoryScreen() {
 
     return () => {
       task.cancel();
-      if (dateSwitchTimerRef.current) {
-        clearTimeout(dateSwitchTimerRef.current);
-        dateSwitchTimerRef.current = null;
-      }
     };
   }, [loadDataFromBackend]);
 
@@ -115,21 +110,20 @@ export default function HistoryScreen() {
     (newDate: string) => {
       if (newDate === selectedDate && !isSkeletonVisible) return;
       setSelectedDate(newDate);
-      setIsSkeletonVisible(true);
 
-      if (dateSwitchTimerRef.current) {
-        clearTimeout(dateSwitchTimerRef.current);
-      }
-
+      const hasMemoryCache = historyStorage.getMemoryCache() !== null;
       const isCacheFresh =
-        historyStorage.getMemoryCache() !== null &&
-        Date.now() - historyStorage.getLastSyncedAt() < 30_000;
+        hasMemoryCache && Date.now() - historyStorage.getLastSyncedAt() < 30_000;
 
-      if (isCacheFresh) {
-        dateSwitchTimerRef.current = setTimeout(() => {
+      if (hasMemoryCache) {
+        if (isSkeletonVisible) {
           setIsSkeletonVisible(false);
-        }, 140);
-        return;
+        }
+        if (isCacheFresh) {
+          return;
+        }
+      } else {
+        setIsSkeletonVisible(true);
       }
 
       const requestId = ++fetchRequestIdRef.current;

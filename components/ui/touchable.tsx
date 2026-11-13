@@ -1,5 +1,10 @@
 import * as React from "react";
-import { Animated, Pressable, type PressableProps } from "react-native";
+import { Pressable, type PressableProps } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import { cn } from "@/lib/utils";
 
@@ -14,40 +19,31 @@ export function Touchable({
   children,
   scaleTo = 0.96,
   disabled,
+  onPressIn,
+  onPressOut,
   ...props
 }: TouchableProps) {
-  const [scale] = React.useState(() => new Animated.Value(1));
-  const isMountedRef = React.useRef(true);
+  const scale = useSharedValue(1);
 
-  React.useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      scale.stopAnimation();
-    };
-  }, [scale]);
-
-  const animateTo = (value: number) => {
-    if (!isMountedRef.current) return;
-    Animated.spring(scale, {
-      toValue: value,
-      useNativeDriver: true,
-      speed: 40,
-      bounciness: 4,
-    }).start();
-  };
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.get() }],
+  }));
 
   return (
     <Pressable
       className={cn(className)}
       disabled={disabled}
-      onPressIn={() => animateTo(scaleTo)}
-      onPressOut={() => animateTo(1)}
+      onPressIn={(event) => {
+        scale.set(withTiming(scaleTo, { duration: 65 }));
+        onPressIn?.(event);
+      }}
+      onPressOut={(event) => {
+        scale.set(withTiming(1, { duration: 110 }));
+        onPressOut?.(event);
+      }}
       {...props}
     >
-      <Animated.View style={{ transform: [{ scale }] }}>
-        {children}
-      </Animated.View>
+      <Animated.View style={animatedStyle}>{children}</Animated.View>
     </Pressable>
   );
 }

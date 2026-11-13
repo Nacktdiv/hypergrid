@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react-native";
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -48,6 +49,7 @@ import type { LatLng } from "@/components/map/map-data";
 import { EmergencyModal } from "@/components/ui/emergency-modal";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppTheme } from "@/contexts/theme-context";
+import type { AppThemeColors } from "@/lib/theme/tokens";
 import { useVehicle } from "@/contexts/vehicle-context";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
 import { useUserLocation } from "@/hooks/use-user-location";
@@ -85,6 +87,11 @@ export default function StartScreen() {
   // UI-thread only animation (translateY transform uses useNativeDriver: true)
   const [drawerY] = useState(() => new Animated.Value(0));
   const lastGeocodeCoordsRef = useRef<LatLng | null>(null);
+  const liveCoordsRef = useRef<LatLng | null>(liveCoords);
+
+  useEffect(() => {
+    liveCoordsRef.current = liveCoords;
+  }, [liveCoords]);
 
   const maxCollapse = Math.max(0, drawerHeight - PEEK_HEIGHT);
 
@@ -192,7 +199,7 @@ export default function StartScreen() {
 
   const handleRecenter = useCallback(async () => {
     Haptics.selectionAsync().catch(() => {});
-    const target = liveCoords || (await getImmediateLocation());
+    const target = liveCoordsRef.current || (await getImmediateLocation());
     if (target) {
       setFocusTarget({
         latitude: target.latitude,
@@ -203,7 +210,7 @@ export default function StartScreen() {
     } else {
       await getImmediateLocation();
     }
-  }, [getImmediateLocation, liveCoords]);
+  }, [getImmediateLocation]);
 
   const handleOpenLaunchMode = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
@@ -218,12 +225,35 @@ export default function StartScreen() {
     snapTo(0, false);
   }, [snapTo]);
 
+  const handleOpenTripPlanner = useCallback(() => {
+    setIsTripPlannerVisible(true);
+  }, []);
+
+  const handleCloseTripPlanner = useCallback(() => {
+    setIsTripPlannerVisible(false);
+  }, []);
+
+  const handleOpenEmergency = useCallback(() => {
+    setIsEmergencyVisible(true);
+  }, []);
+
+  const handleCloseEmergency = useCallback(() => {
+    setIsEmergencyVisible(false);
+  }, []);
+
+  const handleOpenProfile = useCallback(() => {
+    router.navigate("/(tabs)/profile");
+  }, [router]);
+
   const handleSelectDestination = useCallback(
     async (destName: string, destCoords: LatLng) => {
       setIsTripPlannerVisible(false);
       setIsCalculatingRoute(true);
       try {
-        const start = liveCoords || { latitude: -6.2088, longitude: 106.8206 };
+        const start = liveCoordsRef.current || {
+          latitude: -6.2088,
+          longitude: 106.8206,
+        };
         const route = await routingService.calculateRoute(
           start,
           destCoords,
@@ -253,12 +283,27 @@ export default function StartScreen() {
         setIsCalculatingRoute(false);
       }
     },
-    [clusters, liveCoords, snapTo],
+    [clusters, snapTo],
+  );
+
+  // Quantize coordinate anchor (~55m grid) so GPS micro-jitter never recomputes destination list
+  const anchorLatBucket = liveCoords
+    ? Math.round(liveCoords.latitude * 2000)
+    : null;
+  const anchorLngBucket = liveCoords
+    ? Math.round(liveCoords.longitude * 2000)
+    : null;
+  const popularAnchorCoords = useMemo<LatLng | null>(
+    () =>
+      anchorLatBucket !== null && anchorLngBucket !== null
+        ? { latitude: anchorLatBucket / 2000, longitude: anchorLngBucket / 2000 }
+        : null,
+    [anchorLatBucket, anchorLngBucket],
   );
 
   const topThreePopular = useMemo(
-    () => getPopularDestinationsWithDistance(liveCoords).slice(0, 3),
-    [liveCoords],
+    () => getPopularDestinationsWithDistance(popularAnchorCoords).slice(0, 3),
+    [popularAnchorCoords],
   );
 
   // Floating controls ride on UI thread in lockstep with drawerY transform
@@ -267,6 +312,7 @@ export default function StartScreen() {
     ? drawerHeight + 160
     : drawerHeight + 14;
 
+  const hasLiveLocation = liveCoords !== null;
   const userInitial = (user?.name || "U").trim().charAt(0).toUpperCase();
 
   return (
@@ -288,173 +334,30 @@ export default function StartScreen() {
       </View>
 
       {/* 2. UNIFIED TOP SEARCH & USER AVATAR CAPSULE PILL */}
-      <View
-        className="absolute inset-x-4 z-20"
-        style={{ top: Math.max(insets.top, 10) + 6 }}
-      >
-        <View
-          className="flex-row items-center h-13 pl-2 pr-1.5 rounded-full border shadow-md"
-          style={{
-            backgroundColor: colors.pill,
-            borderColor: colors.border,
-          }}
-        >
-          <Pressable
-            onPress={() => setIsTripPlannerVisible(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Search destination"
-            className="flex-1 flex-row items-center gap-2.5 h-full py-1.5 active:opacity-80"
-          >
-            <View
-              className="h-9 w-9 rounded-full items-center justify-center"
-              style={{ backgroundColor: colors.brandSoft }}
-            >
-              {isCalculatingRoute ? (
-                <ActivityIndicator size="small" color={colors.brand} />
-              ) : (
-                <Search size={17} color={colors.brand} />
-              )}
-            </View>
-
-            <View className="flex-1">
-              {isCalculatingRoute ? (
-                <Text
-                  className="font-inter-semibold text-[13px]"
-                  style={{ color: colors.brandText }}
-                  numberOfLines={1}
-                >
-                  Finding route...
-                </Text>
-              ) : activeRoute ? (
-                <View className="flex-row items-center gap-1.5">
-                  <Navigation size={13} color={colors.brand} />
-                  <Text
-                    className="font-inter-semibold text-[13px] flex-1"
-                    style={{ color: colors.text }}
-                    numberOfLines={1}
-                  >
-                    {activeRoute.destinationName} ·{" "}
-                    {(activeRoute.distanceMeters / 1000).toFixed(1)} km
-                  </Text>
-                </View>
-              ) : (
-                <Text
-                  className="font-inter-medium text-[14px]"
-                  style={{ color: colors.textMuted }}
-                  numberOfLines={1}
-                >
-                  Search destination...
-                </Text>
-              )}
-            </View>
-          </Pressable>
-
-          {activeRoute && !isCalculatingRoute ? (
-            <Pressable
-              onPress={handleCancelLaunch}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              className="h-8 w-8 rounded-full items-center justify-center mr-1.5"
-              style={{ backgroundColor: colors.subtle }}
-              accessibilityRole="button"
-              accessibilityLabel="Clear active route"
-            >
-              <X size={14} color={colors.textSecondary} />
-            </Pressable>
-          ) : null}
-
-          {/* Right Avatar Circle Inside Capsule */}
-          <Pressable
-            onPress={() => router.push("/(tabs)/profile")}
-            accessibilityLabel="Open user profile"
-            accessibilityRole="button"
-            className="h-9 w-9 rounded-full items-center justify-center border-2 overflow-hidden"
-            style={{
-              backgroundColor: colors.brandSoft,
-              borderColor: colors.brand,
-            }}
-          >
-            {user?.image ? (
-              <Image
-                source={{ uri: user.image }}
-                style={{ width: "100%", height: "100%" }}
-                contentFit="cover"
-              />
-            ) : user?.name ? (
-              <Text
-                className="font-inter-bold text-xs"
-                style={{ color: colors.brandText }}
-              >
-                {userInitial}
-              </Text>
-            ) : (
-              <User size={16} color={colors.brand} />
-            )}
-          </Pressable>
-        </View>
-      </View>
+      <StartTopBar
+        topOffset={Math.max(insets.top, 10) + 6}
+        colors={colors}
+        isCalculatingRoute={isCalculatingRoute}
+        activeRoute={activeRoute}
+        userImage={user?.image}
+        hasUserName={Boolean(user?.name)}
+        userInitial={userInitial}
+        onOpenTripPlanner={handleOpenTripPlanner}
+        onCancelRoute={handleCancelLaunch}
+        onOpenProfile={handleOpenProfile}
+      />
 
       {/* 3. FLOATING MAP CONTROLS (UI-THREAD TRANSFORM) */}
-      <Animated.View
-        className="absolute right-4 z-10 items-end gap-2.5"
-        style={{
-          bottom: floatingControlsBottom,
-          transform: [{ translateY: drawerY }],
-        }}
-      >
-        <Pressable
-          onPress={() => setIsEmergencyVisible(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Open Emergency Assistance Center"
-          className="h-11 w-11 rounded-full bg-rose-600 border border-rose-700 items-center justify-center shadow-md active:bg-rose-700"
-        >
-          <View className="items-center justify-center">
-            <AlertTriangle size={14} color="#FFFFFF" strokeWidth={2.5} />
-            <Text className="font-inter-extrabold text-[8px] text-white tracking-wider mt-0.5">
-              SOS
-            </Text>
-          </View>
-        </Pressable>
-
-        <Pressable
-          onPress={handleRefresh}
-          accessibilityRole="button"
-          accessibilityLabel="Refresh map and pothole data"
-          className="h-11 w-11 rounded-full border items-center justify-center shadow-sm active:opacity-80"
-          style={{
-            backgroundColor: colors.pill,
-            borderColor: colors.border,
-          }}
-        >
-          {isRefreshing ? (
-            <ActivityIndicator size="small" color={colors.brand} />
-          ) : (
-            <RefreshCw size={17} color={colors.textSecondary} />
-          )}
-        </Pressable>
-
-        <Pressable
-          onPress={handleRecenter}
-          accessibilityRole="button"
-          accessibilityLabel="Center map on my location"
-          className="h-11 w-11 rounded-full border items-center justify-center shadow-sm active:opacity-80"
-          style={{
-            backgroundColor: colors.pill,
-            borderColor: colors.border,
-          }}
-        >
-          <Compass size={19} color={colors.text} />
-        </Pressable>
-
-        <Pressable
-          onPress={() => setIsTripPlannerVisible(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Plan driving route"
-          className="h-11 w-11 rounded-full items-center justify-center shadow-md active:opacity-90"
-          style={{ backgroundColor: colors.brand }}
-        >
-          <Navigation size={18} color="#FFFFFF" />
-        </Pressable>
-      </Animated.View>
+      <StartFloatingControls
+        bottom={floatingControlsBottom}
+        drawerY={drawerY}
+        colors={colors}
+        isRefreshing={isRefreshing}
+        onOpenEmergency={handleOpenEmergency}
+        onRefresh={handleRefresh}
+        onRecenter={handleRecenter}
+        onOpenTripPlanner={handleOpenTripPlanner}
+      />
 
       {/* 4. FLOATING ROUTE INSIGHT CARD */}
       {activeRoute ? (
@@ -648,7 +551,7 @@ export default function StartScreen() {
                     style={{ color: colors.textMuted }}
                     numberOfLines={1}
                   >
-                    {liveCoords
+                    {hasLiveLocation
                       ? `${clusters.length} hazards nearby`
                       : "Locating..."}
                   </Text>
@@ -676,7 +579,7 @@ export default function StartScreen() {
                   Popular Destinations
                 </Text>
                 <Pressable
-                  onPress={() => setIsTripPlannerVisible(true)}
+                  onPress={handleOpenTripPlanner}
                   className="flex-row items-center gap-1"
                 >
                   <Clock size={12} color={colors.brand} />
@@ -790,17 +693,228 @@ export default function StartScreen() {
       {/* TRIP PLANNER DESTINATION MODAL */}
       <TripPlannerSheet
         visible={isTripPlannerVisible}
-        onClose={() => setIsTripPlannerVisible(false)}
-        userCoords={liveCoords}
+        onClose={handleCloseTripPlanner}
+        userCoords={isTripPlannerVisible ? liveCoords : null}
         onSelectDestination={handleSelectDestination}
       />
 
       {/* EMERGENCY SOS MODAL */}
       <EmergencyModal
         visible={isEmergencyVisible}
-        onClose={() => setIsEmergencyVisible(false)}
-        currentCoords={liveCoords}
+        onClose={handleCloseEmergency}
+        currentCoords={isEmergencyVisible ? liveCoords : null}
       />
     </View>
   );
 }
+
+const StartTopBar = memo(function StartTopBar({
+  topOffset,
+  colors,
+  isCalculatingRoute,
+  activeRoute,
+  userImage,
+  hasUserName,
+  userInitial,
+  onOpenTripPlanner,
+  onCancelRoute,
+  onOpenProfile,
+}: {
+  topOffset: number;
+  colors: AppThemeColors;
+  isCalculatingRoute: boolean;
+  activeRoute: PlannedRoute | null;
+  userImage?: string | null;
+  hasUserName: boolean;
+  userInitial: string;
+  onOpenTripPlanner: () => void;
+  onCancelRoute: () => void;
+  onOpenProfile: () => void;
+}) {
+  return (
+    <View className="absolute inset-x-4 z-20" style={{ top: topOffset }}>
+      <View
+        className="flex-row items-center h-13 pl-2 pr-1.5 rounded-full border shadow-md"
+        style={{
+          backgroundColor: colors.pill,
+          borderColor: colors.border,
+        }}
+      >
+        <Pressable
+          onPress={onOpenTripPlanner}
+          accessibilityRole="button"
+          accessibilityLabel="Search destination"
+          className="flex-1 flex-row items-center gap-2.5 h-full py-1.5 active:opacity-80"
+        >
+          <View
+            className="h-9 w-9 rounded-full items-center justify-center"
+            style={{ backgroundColor: colors.brandSoft }}
+          >
+            {isCalculatingRoute ? (
+              <ActivityIndicator size="small" color={colors.brand} />
+            ) : (
+              <Search size={17} color={colors.brand} />
+            )}
+          </View>
+
+          <View className="flex-1">
+            {isCalculatingRoute ? (
+              <Text
+                className="font-inter-semibold text-[13px]"
+                style={{ color: colors.brandText }}
+                numberOfLines={1}
+              >
+                Finding route...
+              </Text>
+            ) : activeRoute ? (
+              <View className="flex-row items-center gap-1.5">
+                <Navigation size={13} color={colors.brand} />
+                <Text
+                  className="font-inter-semibold text-[13px] flex-1"
+                  style={{ color: colors.text }}
+                  numberOfLines={1}
+                >
+                  {activeRoute.destinationName} ·{" "}
+                  {(activeRoute.distanceMeters / 1000).toFixed(1)} km
+                </Text>
+              </View>
+            ) : (
+              <Text
+                className="font-inter-medium text-[14px]"
+                style={{ color: colors.textMuted }}
+                numberOfLines={1}
+              >
+                Search destination...
+              </Text>
+            )}
+          </View>
+        </Pressable>
+
+        {activeRoute && !isCalculatingRoute ? (
+          <Pressable
+            onPress={onCancelRoute}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            className="h-8 w-8 rounded-full items-center justify-center mr-1.5"
+            style={{ backgroundColor: colors.subtle }}
+            accessibilityRole="button"
+            accessibilityLabel="Clear active route"
+          >
+            <X size={14} color={colors.textSecondary} />
+          </Pressable>
+        ) : null}
+
+        <Pressable
+          onPress={onOpenProfile}
+          accessibilityLabel="Open user profile"
+          accessibilityRole="button"
+          className="h-9 w-9 rounded-full items-center justify-center border-2 overflow-hidden"
+          style={{
+            backgroundColor: colors.brandSoft,
+            borderColor: colors.brand,
+          }}
+        >
+          {userImage ? (
+            <Image
+              source={{ uri: userImage }}
+              style={{ width: "100%", height: "100%" }}
+              contentFit="cover"
+            />
+          ) : hasUserName ? (
+            <Text
+              className="font-inter-bold text-xs"
+              style={{ color: colors.brandText }}
+            >
+              {userInitial}
+            </Text>
+          ) : (
+            <User size={16} color={colors.brand} />
+          )}
+        </Pressable>
+      </View>
+    </View>
+  );
+});
+
+const StartFloatingControls = memo(function StartFloatingControls({
+  bottom,
+  drawerY,
+  colors,
+  isRefreshing,
+  onOpenEmergency,
+  onRefresh,
+  onRecenter,
+  onOpenTripPlanner,
+}: {
+  bottom: number;
+  drawerY: Animated.Value;
+  colors: AppThemeColors;
+  isRefreshing: boolean;
+  onOpenEmergency: () => void;
+  onRefresh: () => void;
+  onRecenter: () => void;
+  onOpenTripPlanner: () => void;
+}) {
+  return (
+    <Animated.View
+      className="absolute right-4 z-10 items-end gap-2.5"
+      style={{
+        bottom,
+        transform: [{ translateY: drawerY }],
+      }}
+    >
+      <Pressable
+        onPress={onOpenEmergency}
+        accessibilityRole="button"
+        accessibilityLabel="Open Emergency Assistance Center"
+        className="h-11 w-11 rounded-full bg-rose-600 border border-rose-700 items-center justify-center shadow-md active:bg-rose-700"
+      >
+        <View className="items-center justify-center">
+          <AlertTriangle size={14} color="#FFFFFF" strokeWidth={2.5} />
+          <Text className="font-inter-extrabold text-[8px] text-white tracking-wider mt-0.5">
+            SOS
+          </Text>
+        </View>
+      </Pressable>
+
+      <Pressable
+        onPress={onRefresh}
+        accessibilityRole="button"
+        accessibilityLabel="Refresh map and pothole data"
+        className="h-11 w-11 rounded-full border items-center justify-center shadow-sm active:opacity-80"
+        style={{
+          backgroundColor: colors.pill,
+          borderColor: colors.border,
+        }}
+      >
+        {isRefreshing ? (
+          <ActivityIndicator size="small" color={colors.brand} />
+        ) : (
+          <RefreshCw size={17} color={colors.textSecondary} />
+        )}
+      </Pressable>
+
+      <Pressable
+        onPress={onRecenter}
+        accessibilityRole="button"
+        accessibilityLabel="Center map on my location"
+        className="h-11 w-11 rounded-full border items-center justify-center shadow-sm active:opacity-80"
+        style={{
+          backgroundColor: colors.pill,
+          borderColor: colors.border,
+        }}
+      >
+        <Compass size={19} color={colors.text} />
+      </Pressable>
+
+      <Pressable
+        onPress={onOpenTripPlanner}
+        accessibilityRole="button"
+        accessibilityLabel="Plan driving route"
+        className="h-11 w-11 rounded-full items-center justify-center shadow-md active:opacity-90"
+        style={{ backgroundColor: colors.brand }}
+      >
+        <Navigation size={18} color="#FFFFFF" />
+      </Pressable>
+    </Animated.View>
+  );
+});

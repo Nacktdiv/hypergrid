@@ -69,7 +69,8 @@ export default function ProfileScreen() {
   const { colors, isDark } = useAppTheme();
   const { user, isLoading: isAuthLoading, signOut, updateProfile } = useAuth();
   const { vehicleId, vehicleProfile, setVehicle } = useVehicle();
-  const { coords } = useUserLocation(false);
+  const [isEmergencyVisible, setIsEmergencyVisible] = useState(false);
+  const { coords } = useUserLocation(false, { enabled: isEmergencyVisible });
 
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [nameInput, setNameInput] = useState(user?.name || "Driver");
@@ -80,7 +81,6 @@ export default function ProfileScreen() {
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [activeModal, setActiveModal] = useState<InfoModalKind>(null);
-  const [isEmergencyVisible, setIsEmergencyVisible] = useState(false);
 
   const [pendingQueueCount, setPendingQueueCount] = useState(() =>
     offlineQueue.size()
@@ -92,21 +92,32 @@ export default function ProfileScreen() {
 
   const refreshSyncMetrics = useCallback(() => {
     setPendingQueueCount(offlineQueue.size());
-    tripStorage
-      .getTrips()
-      .then((trips) => setSyncedTripsCount(trips.length))
+    if (tripStorage.getMemoryCache() === null) {
+      tripStorage
+        .getTrips()
+        .then((trips) => setSyncedTripsCount(trips.length))
+        .catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem(NOTIFICATIONS_STORAGE_KEY)
+      .then((val) => {
+        setNotificationsEnabled(val !== "false");
+      })
       .catch(() => {});
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      refreshSyncMetrics();
-      AsyncStorage.getItem(NOTIFICATIONS_STORAGE_KEY)
-        .then((val) => {
-          setNotificationsEnabled(val !== "false");
-        })
-        .catch(() => {});
-    }, [refreshSyncMetrics])
+      setPendingQueueCount(offlineQueue.size());
+      if (tripStorage.getMemoryCache() === null) {
+        tripStorage
+          .getTrips()
+          .then((trips) => setSyncedTripsCount(trips.length))
+          .catch(() => {});
+      }
+    }, [])
   );
 
   useEffect(() => {

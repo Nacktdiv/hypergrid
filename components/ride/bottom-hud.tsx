@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
 import {
   AlertOctagon,
@@ -24,6 +24,119 @@ export interface ShockAlert {
   severity?: "warning" | "danger" | "info";
 }
 
+export interface RideTelemetryStore {
+  getElapsedSeconds: () => number;
+  getLiveGForce: () => number;
+  getMaxGForce: () => number;
+  emitGForce: (gForce: number) => void;
+  tickElapsed: () => void;
+  subscribeElapsed: (listener: () => void) => () => void;
+  subscribeGForce: (listener: () => void) => () => void;
+}
+
+export function createRideTelemetryStore(): RideTelemetryStore {
+  let elapsedSeconds = 0;
+  let liveGForce = 0;
+  let maxGForce = 0;
+  const elapsedListeners = new Set<() => void>();
+  const gForceListeners = new Set<() => void>();
+
+  return {
+    getElapsedSeconds: () => elapsedSeconds,
+    getLiveGForce: () => liveGForce,
+    getMaxGForce: () => maxGForce,
+    emitGForce: (nextGForce: number) => {
+      if (nextGForce > maxGForce) {
+        maxGForce = nextGForce;
+      }
+      if (nextGForce === liveGForce) return;
+      liveGForce = nextGForce;
+      gForceListeners.forEach((listener) => listener());
+    },
+    tickElapsed: () => {
+      elapsedSeconds += 1;
+      elapsedListeners.forEach((listener) => listener());
+    },
+    subscribeElapsed: (listener) => {
+      elapsedListeners.add(listener);
+      return () => {
+        elapsedListeners.delete(listener);
+      };
+    },
+    subscribeGForce: (listener) => {
+      gForceListeners.add(listener);
+      return () => {
+        gForceListeners.delete(listener);
+      };
+    },
+  };
+}
+
+const noopSubscribe = () => () => {};
+
+const LiveElapsedMetricPill = React.memo(function LiveElapsedMetricPill({
+  telemetry,
+  fallbackElapsedSeconds,
+  variant,
+  iconColor,
+}: {
+  telemetry?: RideTelemetryStore;
+  fallbackElapsedSeconds: number;
+  variant: "light" | "dark";
+  iconColor: string;
+}) {
+  const getFallback = useCallback(
+    () => fallbackElapsedSeconds,
+    [fallbackElapsedSeconds]
+  );
+  const elapsedSeconds = useSyncExternalStore(
+    telemetry ? telemetry.subscribeElapsed : noopSubscribe,
+    telemetry ? telemetry.getElapsedSeconds : getFallback
+  );
+
+  const minutes = Math.floor(elapsedSeconds / 60);
+  const seconds = elapsedSeconds % 60;
+  const timeFormatted = `${String(minutes).padStart(2, "0")}:${String(
+    seconds
+  ).padStart(2, "0")}`;
+
+  return (
+    <MetricPill
+      icon={<Clock size={16} color={iconColor} />}
+      label="Ride Time"
+      value={timeFormatted}
+      variant={variant}
+    />
+  );
+});
+
+const LiveShockMetricPill = React.memo(function LiveShockMetricPill({
+  telemetry,
+  fallbackGForce,
+  variant,
+  iconColor,
+}: {
+  telemetry?: RideTelemetryStore;
+  fallbackGForce: number;
+  variant: "light" | "dark";
+  iconColor: string;
+}) {
+  const getFallback = useCallback(() => fallbackGForce, [fallbackGForce]);
+  const liveGForce = useSyncExternalStore(
+    telemetry ? telemetry.subscribeGForce : noopSubscribe,
+    telemetry ? telemetry.getLiveGForce : getFallback
+  );
+
+  return (
+    <MetricPill
+      icon={<Zap size={16} color={iconColor} />}
+      label="Peak Shock"
+      value={`${Number(liveGForce).toFixed(2)}G`}
+      variant={variant}
+    />
+  );
+});
+
 export interface BottomHudProps {
   vehicleName?: string;
   plate?: string;
@@ -34,6 +147,7 @@ export interface BottomHudProps {
   peakGForce?: number;
   anomalyCount?: number;
   elapsedSeconds?: number;
+  telemetry?: RideTelemetryStore;
   isPaused?: boolean;
   onTogglePause?: () => void;
   onStop?: () => void;
@@ -51,6 +165,7 @@ export const BottomHud = React.memo(function BottomHud({
   gForce = 1.0,
   anomalyCount = 0,
   elapsedSeconds = 0,
+  telemetry,
   isPaused = false,
   onTogglePause,
   onStop,
@@ -58,12 +173,6 @@ export const BottomHud = React.memo(function BottomHud({
   onDismissShockAlert,
 }: BottomHudProps) {
   const { colors, isDark } = useOptionalTheme();
-
-  const minutes = Math.floor(elapsedSeconds / 60);
-  const seconds = elapsedSeconds % 60;
-  const timeFormatted = `${String(minutes).padStart(2, "0")}:${String(
-    seconds
-  ).padStart(2, "0")}`;
 
   const isDangerAlert = shockAlert?.severity === "danger";
   const pillVariant = isDark ? "dark" : "light";
@@ -135,17 +244,17 @@ export const BottomHud = React.memo(function BottomHud({
 
       {/* 2. THREE METRIC PILLS */}
       <View className="flex-row items-center justify-between gap-2">
-        <MetricPill
-          icon={<Clock size={16} color={colors.brand} />}
-          label="Ride Time"
-          value={timeFormatted}
+        <LiveElapsedMetricPill
+          telemetry={telemetry}
+          fallbackElapsedSeconds={elapsedSeconds}
           variant={pillVariant}
+          iconColor={colors.brand}
         />
-        <MetricPill
-          icon={<Zap size={16} color={colors.warning} />}
-          label="Peak Shock"
-          value={`${Number(gForce).toFixed(2)}G`}
+        <LiveShockMetricPill
+          telemetry={telemetry}
+          fallbackGForce={gForce}
           variant={pillVariant}
+          iconColor={colors.warning}
         />
         <MetricPill
           icon={<ShieldAlert size={16} color={colors.danger} />}

@@ -1,5 +1,6 @@
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
+import { InteractionManager } from "react-native";
 
 import { SlideCommit } from "@/components/ui/slide-commit";
 import { useOptionalTheme } from "@/contexts/theme-context";
@@ -14,10 +15,6 @@ export function PlayButton({ activeRoute, onStartRide }: PlayButtonProps) {
   const router = useRouter();
   const { colors } = useOptionalTheme();
   const [sliderKey, setSliderKey] = useState(0);
-
-  const handleConfirm = useCallback(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 160));
-  }, []);
 
   const handleDone = useCallback(() => {
     if (onStartRide) {
@@ -38,9 +35,9 @@ export function PlayButton({ activeRoute, onStartRide }: PlayButtonProps) {
       router.push("/ride");
     }
 
-    setTimeout(() => {
+    InteractionManager.runAfterInteractions(() => {
       setSliderKey((prev) => prev + 1);
-    }, 600);
+    });
   }, [activeRoute, onStartRide, router]);
 
   return (
@@ -51,7 +48,6 @@ export function PlayButton({ activeRoute, onStartRide }: PlayButtonProps) {
       }
       doneLabel="Starting..."
       errorLabel="Cannot start ride"
-      onConfirm={handleConfirm}
       onDone={handleDone}
       trackColor={colors.brand}
       handleColor={colors.brand}

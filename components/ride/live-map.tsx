@@ -43,17 +43,29 @@ export const LiveMap = React.memo(function LiveMap({
     return null;
   }, [currentCoords, routeHistory]);
 
+  const fallbackRouteCoords = useMemo(
+    () => (activeCoord ? [activeCoord] : []),
+    [activeCoord]
+  );
+
+  // Rute prioritas: jika rute navigasi terarah aktif, pertahankan referensi plannedRoute.
+  // Jika tidak, tampilkan jejak titik GPS perjalanan nyata yang sudah dilalui.
+  const activeRouteCoordinates = useMemo(() => {
+    if (plannedRoute && plannedRoute.length > 0) return plannedRoute;
+    if (routeHistory.length > 0) return routeHistory;
+    return fallbackRouteCoords;
+  }, [plannedRoute, routeHistory, fallbackRouteCoords]);
+
+  const routeObj = useMemo(
+    () => ({
+      id: "live-drive-route",
+      coordinates: activeRouteCoordinates,
+    }),
+    [activeRouteCoordinates]
+  );
+
   const mapData: MapData | null = useMemo(() => {
     if (!activeCoord) return null;
-
-    // Rute prioritas: jika rute navigasi terarah aktif, tampilkan plannedRoute ke destinasi.
-    // Jika tidak, tampilkan jejak titik GPS perjalanan nyata yang sudah dilalui.
-    const activeRouteCoordinates =
-      plannedRoute && plannedRoute.length > 0
-        ? plannedRoute
-        : routeHistory.length > 0
-          ? routeHistory
-          : [activeCoord];
 
     return {
       camera: {
@@ -61,15 +73,12 @@ export const LiveMap = React.memo(function LiveMap({
         longitude: activeCoord.longitude,
         zoom: 16.5,
       },
-      route: {
-        id: "live-drive-route",
-        coordinates: activeRouteCoordinates,
-      },
+      route: routeObj,
       damagePoints: liveDetections,
       userLocation: activeCoord,
       vehiclePosition: activeCoord,
     };
-  }, [activeCoord, plannedRoute, routeHistory, liveDetections]);
+  }, [activeCoord, routeObj, liveDetections]);
 
   // Tampilkan Skeleton saat GPS & data peta sedang dimuat
   if (!mapData || !activeCoord) {

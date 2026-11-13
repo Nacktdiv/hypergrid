@@ -1,10 +1,15 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { BackHandler, InteractionManager, View } from "react-native";
+import { BackHandler, InteractionManager, Text, View } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Accelerometer, Gyroscope } from "expo-sensors";
+import { Navigation } from "lucide-react-native";
 
-import { BottomHud, type ShockAlert } from "@/components/ride/bottom-hud";
+import {
+  BottomHud,
+  createRideTelemetryStore,
+  type ShockAlert,
+} from "@/components/ride/bottom-hud";
 import { LiveMap } from "@/components/ride/live-map";
 import { TopFloatingBar } from "@/components/ride/top-floating-bar";
 import { TripCompletedView } from "@/components/ride/trip-completed-view";
@@ -80,6 +85,7 @@ export default function RideScreen() {
   const [isPaused, setIsPaused] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [isEmergencyVisible, setIsEmergencyVisible] = useState(false);
+  const [isInteractiveReady, setIsInteractiveReady] = useState(false);
   const [resolvedDestinationName, setResolvedDestinationName] = useState<string>(
     destination?.name || ""
   );
@@ -87,6 +93,7 @@ export default function RideScreen() {
   const startCoordsRef = useRef<LatLng | null>(null);
   const [startLocationName, setStartLocationName] = useState<string>("Origin Location");
   const [tripStartTime] = useState<number>(() => Date.now());
+  const [telemetry] = useState(() => createRideTelemetryStore());
 
   useEffect(() => {
     defaultEdgeDetector.setUserId(user?.id ?? null);
@@ -94,6 +101,7 @@ export default function RideScreen() {
 
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
+      setIsInteractiveReady(true);
       backgroundTrackingService.startBackgroundTracking("driving").catch((err) => {
         console.warn("[RideScreen] Gagal mengaktifkan background driving tracking:", err);
       });
@@ -106,13 +114,9 @@ export default function RideScreen() {
   }, []);
 
   // Status Telemetri Live
-  const [currentVibration, setCurrentVibration] = useState(0);
-  const [shockLevel, setShockLevel] = useState(0);
   const [activeShockAlert, setActiveShockAlert] = useState<ShockAlert | null>(null);
   const shockAlertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [liveDetections, setLiveDetections] = useState<DamagePoint[]>([]);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [maxGForce, setMaxGForce] = useState<number>(0);
 
   const triggerShockAlert = useCallback(
     (alert: ShockAlert, autoDismissMs = 6000) => {
@@ -144,18 +148,17 @@ export default function RideScreen() {
     };
   }, []);
 
-  // Timer durasi berkendara
+  // Timer durasi berkendara (diisolasi via telemetry store agar RideScreen & LiveMap tidak re-render setiap detik)
   useEffect(() => {
     if (isPaused || isFinished) return;
     const interval = setInterval(() => {
-      setElapsedSeconds((prev) => prev + 1);
+      telemetry.tickElapsed();
     }, 1000);
     return () => clearInterval(interval);
-  }, [isPaused, isFinished]);
+  }, [isPaused, isFinished, telemetry]);
 
   // Status Sensor Akselerometer & Giroskop HP
   const [sensorEnabled] = useState(true);
-  const [liveGForce, setLiveGForce] = useState<number>(0);
   const lastDetectionTimeRef = useRef<number>(0);
 
   // Ref penampung data Giroskop real-time
@@ -198,9 +201,6 @@ export default function RideScreen() {
   const vehicleProfileRef = useRef(vehicleProfile);
   const lastUiUpdateRef = useRef<number>(0);
   const windowPeakTotalGRef = useRef<number>(0);
-  const windowPeakDynamicGRef = useRef<number>(0);
-  const windowPeakVibRef = useRef<number>(0);
-  const windowPeakShockLevelRef = useRef<number>(0);
   const lastMotionAtRef = useRef<number>(0);
 
   useEffect(() => {
@@ -258,8 +258,6 @@ export default function RideScreen() {
 
   const runInferenceRef = useRef(runInference);
   const addSampleRef = useRef(addSample);
-  const maxGForceRef = useRef(maxGForce);
-  const liveGForceRef = useRef(liveGForce);
   const detectedCountRef = useRef(detectedCount);
   const lastResultRef = useRef(lastResult);
   const hasSavedSessionRef = useRef(false);
@@ -267,11 +265,9 @@ export default function RideScreen() {
   useEffect(() => {
     runInferenceRef.current = runInference;
     addSampleRef.current = addSample;
-    maxGForceRef.current = maxGForce;
-    liveGForceRef.current = liveGForce;
     detectedCountRef.current = detectedCount;
     lastResultRef.current = lastResult;
-  }, [runInference, addSample, maxGForce, liveGForce, detectedCount, lastResult]);
+  }, [runInference, addSample, detectedCount, lastResult]);
 
   const { clusters, nearbyCluster, fetchClusters, checkNearby } =
     usePotholeClusters();
@@ -373,7 +369,7 @@ export default function RideScreen() {
 
   // Loop Pemeriksaan Early Warning PostGIS Cluster di Sekitar Rute
   useEffect(() => {
-    if (isPaused || isFinished) return;
+    if (isPaused || isFinished || !isInteractiveReady) return;
 
     const earlyWarningTimer = setInterval(() => {
       const coords = liveCoordsRef.current;
@@ -383,11 +379,11 @@ export default function RideScreen() {
     }, 2500);
 
     return () => clearInterval(earlyWarningTimer);
-  }, [isPaused, isFinished, checkNearby]);
+  }, [isPaused, isFinished, isInteractiveReady, checkNearby]);
 
-  // Gyroscope Listener — simpan angular velocity terbaru
+  // Gyroscope Listener — simpan angular velocity terbaru setelah animasi masuk selesai
   useEffect(() => {
-    if (isPaused || isFinished || !sensorEnabled) return;
+    if (isPaused || isFinished || !sensorEnabled || !isInteractiveReady) return;
 
     Gyroscope.setUpdateInterval(EDGE_AI_CONFIG.sampleRateMs);
 
@@ -396,11 +392,11 @@ export default function RideScreen() {
     });
 
     return () => subscription.remove();
-  }, [isPaused, isFinished, sensorEnabled]);
+  }, [isPaused, isFinished, sensorEnabled, isInteractiveReady]);
 
   // Accelerometer Listener + Causal EMA Gravity Removal + Buffer Window
   useEffect(() => {
-    if (isPaused || isFinished || !sensorEnabled) return;
+    if (isPaused || isFinished || !sensorEnabled || !isInteractiveReady) return;
 
     Accelerometer.setUpdateInterval(EDGE_AI_CONFIG.sampleRateMs);
 
@@ -448,54 +444,17 @@ export default function RideScreen() {
         isMovingNow ||
         (lastMotionAtRef.current > 0 && now - lastMotionAtRef.current < 4000);
 
-      // Telemetri gauge, vibrasi & G-Force aktif terus selama trip berjalan (terkalibrasi profil kendaraan)
-      const computedLevel = Math.min(
-        100,
-        Math.max(
-          8,
-          Math.round(
-            dynamicVerticalG * currentProfile.sensorConfig.shockGaugeMultiplier + 10
-          )
-        )
-      );
-
-      const idleVib = currentProfile.sensorConfig.idleVibration ?? 0;
-      const rawDynamicVib = Math.round(
-        (dynamicVerticalG * 9.81 * 2.8 + idleVib) *
-          currentProfile.sensorConfig.vibrationFactor
-      );
-      const dynamicVib = Math.min(180, Math.max(idleVib, rawDynamicVib));
-
-      // Peak-hold akumulator per sampel 50ms agar lonjakan lubang tajam tidak terbuang di antara tick UI
+      // Peak-hold akumulator per sampel 50ms agar lonjakan lubang tajam tidak terbuang di antara tick HUD
       if (roundedG > windowPeakTotalGRef.current) {
         windowPeakTotalGRef.current = roundedG;
       }
-      if (dynamicVerticalG > windowPeakDynamicGRef.current) {
-        windowPeakDynamicGRef.current = dynamicVerticalG;
-      }
-      if (dynamicVib > windowPeakVibRef.current) {
-        windowPeakVibRef.current = dynamicVib;
-      }
-      if (computedLevel > windowPeakShockLevelRef.current) {
-        windowPeakShockLevelRef.current = computedLevel;
-      }
 
-      // Flush peak window ke React state ~6.7 Hz (150ms) untuk HUD mulus & responsif
+      // Flush peak window ~6.7 Hz (150ms) langsung ke telemetry store (hanya re-render pill G-Force di BottomHud)
       if (now - lastUiUpdateRef.current >= 150) {
         lastUiUpdateRef.current = now;
         const peakG = windowPeakTotalGRef.current || roundedG;
-        const peakLevel = windowPeakShockLevelRef.current || computedLevel;
-        const peakVib = windowPeakVibRef.current || dynamicVib;
-
         windowPeakTotalGRef.current = 0;
-        windowPeakDynamicGRef.current = 0;
-        windowPeakShockLevelRef.current = 0;
-        windowPeakVibRef.current = 0;
-
-        setLiveGForce(peakG);
-        setMaxGForce((prev) => Math.max(prev, peakG));
-        setShockLevel(peakLevel);
-        setCurrentVibration(peakVib);
+        telemetry.emitGForce(peakG);
       }
 
       const speedForSample = isMovingNow
@@ -610,6 +569,8 @@ export default function RideScreen() {
     isPaused,
     isFinished,
     sensorEnabled,
+    isInteractiveReady,
+    telemetry,
     triggerShockAlert,
   ]);
 
@@ -682,7 +643,7 @@ export default function RideScreen() {
         Math.round(
           100 -
             detectedCountRef.current * 12 -
-            Math.max(0, (maxGForceRef.current - 1.0) * 15)
+            Math.max(0, (telemetry.getMaxGForce() - 1.0) * 15)
         )
       )
     );
@@ -695,15 +656,18 @@ export default function RideScreen() {
         !lastResultRef.current.modelVersion?.includes("heuristic")
     );
 
+    const finalElapsedSeconds = telemetry.getElapsedSeconds();
+    const finalMaxGForce = telemetry.getMaxGForce();
+
     const tripRecord: SavedTripRecord = {
       id: `trip_${Date.now()}`,
       startTime: new Date(tripStartTime).toISOString(),
       endTime: new Date().toISOString(),
-      elapsedSeconds,
+      elapsedSeconds: finalElapsedSeconds,
       distanceMeters: totalDistanceMeters,
       maxGForce:
         detectedCountRef.current > 0 || totalDistanceMeters >= 5
-          ? maxGForceRef.current
+          ? finalMaxGForce
           : 0,
       anomalyCount: detectedCountRef.current,
       vehicleName: vehicleProfile.name,
@@ -755,9 +719,9 @@ export default function RideScreen() {
         id: `trip_${Date.now()}`,
         startTime: new Date(tripStartTime).toISOString(),
         endTime: new Date().toISOString(),
-        elapsedSeconds,
+        elapsedSeconds: telemetry.getElapsedSeconds(),
         distanceMeters: totalDistanceMeters,
-        maxGForce: detectedCountRef.current > 0 ? maxGForceRef.current : 0,
+        maxGForce: detectedCountRef.current > 0 ? telemetry.getMaxGForce() : 0,
         anomalyCount: detectedCountRef.current,
         vehicleName: vehicleProfile.name,
         vehiclePlate: vehicleProfile.plate,
@@ -783,7 +747,7 @@ export default function RideScreen() {
     totalDistanceMeters,
     destination?.name,
     destination?.coords,
-    elapsedSeconds,
+    telemetry,
     vehicleProfile.name,
     vehicleProfile.plate,
     vehicleProfile.type,
@@ -851,6 +815,8 @@ export default function RideScreen() {
   }, [router]);
 
   if (isFinished) {
+    const finalElapsedSeconds = telemetry.getElapsedSeconds();
+    const finalMaxGForce = telemetry.getMaxGForce();
     const hasRealDetection =
       detectedCount > 0 && Boolean(lastResult?.isAnomalyDetected);
     const isTflite = Boolean(
@@ -869,11 +835,11 @@ export default function RideScreen() {
     return (
       <TripCompletedView
         data={{
-          elapsedSeconds,
+          elapsedSeconds: finalElapsedSeconds,
           detectedCount,
           maxGForce:
-            detectedCount > 0 || totalDistanceMeters >= 5 || maxGForce > 1.05
-              ? maxGForce
+            detectedCount > 0 || totalDistanceMeters >= 5 || finalMaxGForce > 1.05
+              ? finalMaxGForce
               : 0,
           distanceMeters: totalDistanceMeters,
           vehicleName: vehicleProfile.name,
@@ -893,15 +859,43 @@ export default function RideScreen() {
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.canvas }}>
-      <LiveMap
-        isPaused={isPaused}
-        currentCoords={liveCoords}
-        routeHistory={routeHistory}
-        plannedRoute={destination?.plannedRoute}
-        liveDetections={allRoadHazards}
-        vehicleType={vehicleProfile.id}
-        onDamagePress={handleHazardPress}
-      />
+      {isInteractiveReady ? (
+        <LiveMap
+          isPaused={isPaused}
+          currentCoords={liveCoords}
+          routeHistory={routeHistory}
+          plannedRoute={destination?.plannedRoute}
+          liveDetections={allRoadHazards}
+          vehicleType={vehicleProfile.id}
+          onDamagePress={handleHazardPress}
+        />
+      ) : (
+        <View
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: colors.canvas }}
+        >
+          <View
+            className="items-center gap-2 rounded-2xl border px-5 py-4"
+            style={{
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            }}
+          >
+            <View
+              className="rounded-full p-2.5"
+              style={{ backgroundColor: colors.brandSoft }}
+            >
+              <Navigation size={20} color={colors.brand} />
+            </View>
+            <Text
+              className="font-inter-semibold text-xs"
+              style={{ color: colors.textMuted }}
+            >
+              Initializing Live Map...
+            </Text>
+          </View>
+        </View>
+      )}
 
       <View className="absolute inset-0">
         <TopFloatingBar
@@ -917,12 +911,8 @@ export default function RideScreen() {
             vehicleName={vehicleProfile.name}
             plate={vehicleProfile.plate}
             speed={currentSpeed}
-            vibration={currentVibration}
-            shockLevel={shockLevel}
-            gForce={liveGForce}
-            peakGForce={maxGForce}
+            telemetry={telemetry}
             anomalyCount={detectedCount}
-            elapsedSeconds={elapsedSeconds}
             isPaused={isPaused}
             onTogglePause={handleTogglePause}
             onStop={handleStopDriveStable}
@@ -936,8 +926,8 @@ export default function RideScreen() {
       <EmergencyModal
         visible={isEmergencyVisible}
         onClose={handleCloseEmergency}
-        currentCoords={liveCoords}
-        speedKmh={currentSpeed}
+        currentCoords={isEmergencyVisible ? liveCoords : null}
+        speedKmh={isEmergencyVisible ? currentSpeed : 0}
       />
     </View>
   );
