@@ -1,31 +1,28 @@
-import { useState, useEffect } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import {
-  CheckCircle2,
-  Mail,
-  Server,
-  Settings,
-  ShieldCheck,
-  X,
-  XCircle,
+    CheckCircle2,
+    Mail,
+    Server,
+    Settings,
+    ShieldCheck,
+    X,
+    XCircle,
 } from "lucide-react-native";
+import { useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    Modal,
+    Text,
+    TextInput,
+    View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Touchable } from "@/components/ui/touchable";
 import { useAuth } from "@/hooks/use-auth";
-import {
-  getApiBaseUrl,
-  setRuntimeApiBaseUrl,
-} from "@/services/api/config";
+import { getApiBaseUrl, setRuntimeApiBaseUrl } from "@/services/api/config";
 import { healthService } from "@/services/api/health.service";
 
 /**
@@ -61,17 +58,17 @@ export default function Index() {
   // State Dialog Konfigurasi Server
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [serverUrlInput, setServerUrlInput] = useState(getApiBaseUrl());
-  const [healthStatus, setHealthStatus] = useState<"idle" | "checking" | "ok" | "error">("idle");
+  const [healthStatus, setHealthStatus] = useState<
+    "idle" | "checking" | "ok" | "error"
+  >("idle");
   const [healthMsg, setHealthMsg] = useState("");
 
   // Session expired notice from middleware
   useEffect(() => {
     if (sessionExpiredNotice) {
-      Alert.alert(
-        "Session Expired",
-        sessionExpiredNotice,
-        [{ text: "Got it", onPress: () => clearSessionExpiredNotice() }]
-      );
+      Alert.alert("Session Expired", sessionExpiredNotice, [
+        { text: "Got it", onPress: () => clearSessionExpiredNotice() },
+      ]);
     }
   }, [sessionExpiredNotice, clearSessionExpiredNotice]);
 
@@ -104,7 +101,10 @@ export default function Index() {
         }
       }
     } catch (err: any) {
-      Alert.alert("Sign In Failed", err.message || "Please check your server connection or credentials.");
+      Alert.alert(
+        "Sign In Failed",
+        err.message || "Please check your server connection or credentials.",
+      );
     } finally {
       setAuthSubmitting(false);
     }
@@ -124,7 +124,7 @@ export default function Index() {
     } catch (err: any) {
       Alert.alert(
         "Google Sign-In",
-        err.message || "Failed to sign in with Google OAuth."
+        err.message || "Failed to sign in with Google OAuth.",
       );
     } finally {
       setGoogleLoading(false);
@@ -254,7 +254,7 @@ export default function Index() {
           <View className="rounded-t-[32px] bg-white p-6 shadow-xl">
             <View className="mb-4 flex-row items-center justify-between">
               <View className="flex-row items-center gap-2">
-                <ShieldCheck size={22} color="#009EFF" />
+                <ShieldCheck size={22} color="#1DA1F2" />
                 <Text className="font-chivo-bold text-xl text-[#0F172A]">
                   {isRegisterMode ? "User Registration" : "Sign In"}
                 </Text>
@@ -324,7 +324,9 @@ export default function Index() {
 
               <View className="mt-2 flex-row items-center justify-center gap-1.5">
                 <Text className="font-quicksand text-xs text-slate-500">
-                  {isRegisterMode ? "Already have an account?" : "Don't have an account?"}
+                  {isRegisterMode
+                    ? "Already have an account?"
+                    : "Don't have an account?"}
                 </Text>
                 <Touchable onPress={() => setIsRegisterMode((prev) => !prev)}>
                   <Text className="font-quicksand-bold text-xs text-custom-primary">
@@ -362,13 +364,17 @@ export default function Index() {
 
             <View className="gap-3">
               <Text className="font-quicksand text-xs text-slate-500">
-                Set HyperGrid NestJS backend Base URL for your dev environment (Emulator: 10.0.2.2, iOS: localhost, Physical Device: LAN IP).
+                Set HyperGrid NestJS backend Base URL for your dev environment
+                (Emulator: 10.0.2.2, iOS: localhost, Physical Device: LAN IP).
               </Text>
 
               <TextInput
                 autoCapitalize="none"
                 className="rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-mono text-xs text-[#0F172A]"
-                placeholder={process.env.EXPO_PUBLIC_API_URL || "https://hg-server.onrender.com"}
+                placeholder={
+                  process.env.EXPO_PUBLIC_API_URL ||
+                  "https://hg-server.onrender.com"
+                }
                 value={serverUrlInput}
                 onChangeText={setServerUrlInput}
               />
@@ -388,8 +394,8 @@ export default function Index() {
                       healthStatus === "ok"
                         ? "text-emerald-700"
                         : healthStatus === "error"
-                        ? "text-rose-600"
-                        : "text-slate-600"
+                          ? "text-rose-600"
+                          : "text-slate-600"
                     }`}
                   >
                     {healthMsg}

@@ -1,11 +1,11 @@
-import React, { useMemo } from "react";
-import { View, Text } from "react-native";
 import { Navigation } from "lucide-react-native";
+import React, { useMemo } from "react";
+import { Text, View } from "react-native";
 
-import { cn } from "@/lib/utils";
 import { LeafletMap } from "@/components/map/leaflet-map";
 import type { DamagePoint, LatLng, MapData } from "@/components/map/map-data";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 export interface LiveMapProps {
   isPaused?: boolean;
@@ -49,8 +49,8 @@ export const LiveMap = React.memo(function LiveMap({
       plannedRoute && plannedRoute.length > 0
         ? plannedRoute
         : routeHistory.length > 0
-        ? routeHistory
-        : [activeCoord];
+          ? routeHistory
+          : [activeCoord];
 
     return {
       camera: {
@@ -74,7 +74,7 @@ export const LiveMap = React.memo(function LiveMap({
       <View className="flex-1 items-center justify-center bg-[#0B0F19] px-6">
         <View className="w-full max-w-xs items-center gap-3.5 rounded-2xl border border-slate-800 bg-slate-900/90 px-6 py-6 shadow-2xl">
           <View className="rounded-full bg-sky-500/10 p-3">
-            <Navigation size={26} color="#009EFF" />
+            <Navigation size={26} color="#1DA1F2" />
           </View>
           <Skeleton dark className="h-4 w-40 rounded-lg" />
           <Skeleton dark className="h-3 w-52 rounded-md" />

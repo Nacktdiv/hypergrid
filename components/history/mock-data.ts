@@ -15,14 +15,14 @@
 
 export type DayOption = {
   /** Kode hari untuk React key, mis. "sen" */
-  id: string
+  id: string;
   /** Label singkat 3 huruf, mis. "Sen" */
-  short: string
+  short: string;
   /** Tanggal angka, mis. "22" */
-  date: string
+  date: string;
   /** Tanggal panjang untuk header */
-  longLabel: string
-}
+  longLabel: string;
+};
 
 /**
  * Deret 7 hari. Urutan dan tanggal berdasar kalender (22–28 Sep 2026,
@@ -36,70 +36,196 @@ export const DAYS: DayOption[] = [
   { id: "jum", short: "Jum", date: "26", longLabel: "Jumat, 26 Sep 2026" },
   { id: "sab", short: "Sab", date: "27", longLabel: "Sabtu, 27 Sep 2026" },
   { id: "min", short: "Min", date: "28", longLabel: "Minggu, 28 Sep 2026" },
-]
+];
 
 /** Id hari yang terpilih saat layar dibuka */
-export const DEFAULT_DAY_ID = "jum"
+export const DEFAULT_DAY_ID = "jum";
 
 export type Metric = {
-  id: string
-  label: string
-  value: string
-  unit?: string
+  id: string;
+  label: string;
+  value: string;
+  unit?: string;
   /** Warna aksen ikon */
-  accent: string
-}
+  accent: string;
+};
 
 /** Metrik harian, diindeks berdasarkan id hari */
 export const METRICS_BY_DAY: Record<string, Metric[]> = {
   sen: [
-    { id: "rusak", label: "Titik Rusak", value: "4", unit: "lokasi", accent: "#B3261E" },
-    { id: "jarak", label: "Jarak Tempuh", value: "9.8", unit: "KM", accent: "#009EFF" },
-    { id: "waktu", label: "Waktu Tempuh", value: "24", unit: "Menit", accent: "#F59E0B" },
+    {
+      id: "rusak",
+      label: "Titik Rusak",
+      value: "4",
+      unit: "lokasi",
+      accent: "#B3261E",
+    },
+    {
+      id: "jarak",
+      label: "Jarak Tempuh",
+      value: "9.8",
+      unit: "KM",
+      accent: "#1DA1F2",
+    },
+    {
+      id: "waktu",
+      label: "Waktu Tempuh",
+      value: "24",
+      unit: "Menit",
+      accent: "#F59E0B",
+    },
   ],
   sel: [
-    { id: "rusak", label: "Titik Rusak", value: "2", unit: "lokasi", accent: "#B3261E" },
-    { id: "jarak", label: "Jarak Tempuh", value: "6.1", unit: "KM", accent: "#009EFF" },
-    { id: "waktu", label: "Waktu Tempuh", value: "17", unit: "Menit", accent: "#F59E0B" },
+    {
+      id: "rusak",
+      label: "Titik Rusak",
+      value: "2",
+      unit: "lokasi",
+      accent: "#B3261E",
+    },
+    {
+      id: "jarak",
+      label: "Jarak Tempuh",
+      value: "6.1",
+      unit: "KM",
+      accent: "#1DA1F2",
+    },
+    {
+      id: "waktu",
+      label: "Waktu Tempuh",
+      value: "17",
+      unit: "Menit",
+      accent: "#F59E0B",
+    },
   ],
   rab: [
-    { id: "rusak", label: "Titik Rusak", value: "9", unit: "lokasi", accent: "#B3261E" },
-    { id: "jarak", label: "Jarak Tempuh", value: "21.4", unit: "KM", accent: "#009EFF" },
-    { id: "waktu", label: "Waktu Tempuh", value: "48", unit: "Menit", accent: "#F59E0B" },
+    {
+      id: "rusak",
+      label: "Titik Rusak",
+      value: "9",
+      unit: "lokasi",
+      accent: "#B3261E",
+    },
+    {
+      id: "jarak",
+      label: "Jarak Tempuh",
+      value: "21.4",
+      unit: "KM",
+      accent: "#1DA1F2",
+    },
+    {
+      id: "waktu",
+      label: "Waktu Tempuh",
+      value: "48",
+      unit: "Menit",
+      accent: "#F59E0B",
+    },
   ],
   kam: [
-    { id: "rusak", label: "Titik Rusak", value: "5", unit: "lokasi", accent: "#B3261E" },
-    { id: "jarak", label: "Jarak Tempuh", value: "12.7", unit: "KM", accent: "#009EFF" },
-    { id: "waktu", label: "Waktu Tempuh", value: "29", unit: "Menit", accent: "#F59E0B" },
+    {
+      id: "rusak",
+      label: "Titik Rusak",
+      value: "5",
+      unit: "lokasi",
+      accent: "#B3261E",
+    },
+    {
+      id: "jarak",
+      label: "Jarak Tempuh",
+      value: "12.7",
+      unit: "KM",
+      accent: "#1DA1F2",
+    },
+    {
+      id: "waktu",
+      label: "Waktu Tempuh",
+      value: "29",
+      unit: "Menit",
+      accent: "#F59E0B",
+    },
   ],
   jum: [
-    { id: "rusak", label: "Titik Rusak", value: "7", unit: "lokasi", accent: "#B3261E" },
-    { id: "jarak", label: "Jarak Tempuh", value: "14.2", unit: "KM", accent: "#009EFF" },
-    { id: "waktu", label: "Waktu Tempuh", value: "32", unit: "Menit", accent: "#F59E0B" },
+    {
+      id: "rusak",
+      label: "Titik Rusak",
+      value: "7",
+      unit: "lokasi",
+      accent: "#B3261E",
+    },
+    {
+      id: "jarak",
+      label: "Jarak Tempuh",
+      value: "14.2",
+      unit: "KM",
+      accent: "#1DA1F2",
+    },
+    {
+      id: "waktu",
+      label: "Waktu Tempuh",
+      value: "32",
+      unit: "Menit",
+      accent: "#F59E0B",
+    },
   ],
   sab: [
-    { id: "rusak", label: "Titik Rusak", value: "11", unit: "lokasi", accent: "#B3261E" },
-    { id: "jarak", label: "Jarak Tempuh", value: "26.9", unit: "KM", accent: "#009EFF" },
-    { id: "waktu", label: "Waktu Tempuh", value: "55", unit: "Menit", accent: "#F59E0B" },
+    {
+      id: "rusak",
+      label: "Titik Rusak",
+      value: "11",
+      unit: "lokasi",
+      accent: "#B3261E",
+    },
+    {
+      id: "jarak",
+      label: "Jarak Tempuh",
+      value: "26.9",
+      unit: "KM",
+      accent: "#1DA1F2",
+    },
+    {
+      id: "waktu",
+      label: "Waktu Tempuh",
+      value: "55",
+      unit: "Menit",
+      accent: "#F59E0B",
+    },
   ],
   min: [
-    { id: "rusak", label: "Titik Rusak", value: "1", unit: "lokasi", accent: "#B3261E" },
-    { id: "jarak", label: "Jarak Tempuh", value: "3.2", unit: "KM", accent: "#009EFF" },
-    { id: "waktu", label: "Waktu Tempuh", value: "11", unit: "Menit", accent: "#F59E0B" },
+    {
+      id: "rusak",
+      label: "Titik Rusak",
+      value: "1",
+      unit: "lokasi",
+      accent: "#B3261E",
+    },
+    {
+      id: "jarak",
+      label: "Jarak Tempuh",
+      value: "3.2",
+      unit: "KM",
+      accent: "#1DA1F2",
+    },
+    {
+      id: "waktu",
+      label: "Waktu Tempuh",
+      value: "11",
+      unit: "Menit",
+      accent: "#F59E0B",
+    },
   ],
-}
+};
 
 export type HistoryEntry = {
-  id: string
-  from: string
-  to: string
-  time: string
-  date: string
-  guncangan: number
-  distance: string
+  id: string;
+  from: string;
+  to: string;
+  time: string;
+  date: string;
+  guncangan: number;
+  distance: string;
   /** Catatan singkat yang muncul saat kartu diketuk */
-  note: string
-}
+  note: string;
+};
 
 /** Riwayat per hari, diindeks berdasarkan id hari */
 export const HISTORY_BY_DAY: Record<string, HistoryEntry[]> = {
@@ -267,4 +393,4 @@ export const HISTORY_BY_DAY: Record<string, HistoryEntry[]> = {
       note: "1 guncangan di jalan masuk kompleks.",
     },
   ],
-}
+};

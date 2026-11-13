@@ -1,14 +1,11 @@
-import React from "react";
 import { Image } from "expo-image";
 import { Pressable, Text, View } from "react-native";
-import { Activity, Zap } from "lucide-react-native";
 
 import {
   VEHICLE_PROFILES,
   type VehicleId,
   type VehicleProfile,
 } from "@/contexts/vehicle-context";
-import { TOKENS } from "@/lib/theme/tokens";
 import { cn } from "@/lib/utils";
 
 import { VEHICLE_OPTIONS } from "./mock-data";
@@ -28,22 +25,22 @@ export function VehicleSelector({
     VEHICLE_PROFILES[selected] ?? VEHICLE_PROFILES.car;
 
   return (
-    <View className={cn("gap-3", className)}>
+    <View className={cn("gap-6", className)}>
       {/* VEHICLE INFO ROW */}
       <View className="flex-row items-center justify-between">
         <View className="flex-1 mr-3">
-          <Text className="font-quicksand-bold text-[11px] tracking-wider uppercase text-brand">
+          <Text className="text-xs text-muted-foreground">
             {activeProfile.standardCategory}
           </Text>
           <Text
             numberOfLines={1}
-            className="font-chivo-bold text-xl text-slate-900 mt-0.5"
+            className="font-chivo-bold text-xl text-brand"
           >
             {activeProfile.name}
           </Text>
-          <Text className="font-quicksand text-xs text-slate-500 mt-0.5">
+          {/* <Text className="font-quicksand text-xs text-slate-500 mt-0.5">
             Plate: {activeProfile.plate}
-          </Text>
+          </Text> */}
         </View>
 
         <View className="h-14 w-20 items-center justify-center">
@@ -57,7 +54,7 @@ export function VehicleSelector({
       </View>
 
       {/* SPEC METRIC PILLS (CLEAN SANS TYPOGRAPHY, SYNCHRONIZED BRAND COLOR) */}
-      <View className="flex-row items-center gap-2">
+      {/* <View className="flex-row items-center gap-2">
         <View className="flex-1 flex-row items-center gap-2 rounded-xl bg-slate-100/80 px-3 py-2 border border-slate-200/60">
           <Zap size={14} color={TOKENS.colors.brand.DEFAULT} />
           <View>
@@ -81,7 +78,7 @@ export function VehicleSelector({
             </Text>
           </View>
         </View>
-      </View>
+      </View> */}
 
       {/* VEHICLE SWITCHER PILLS */}
       <View className="flex-row items-center justify-between gap-2 mt-1">
@@ -98,26 +95,40 @@ export function VehicleSelector({
             >
               <View
                 className={cn(
-                  "flex-row items-center justify-center gap-2 py-2 px-2 rounded-pill border",
+                  "overflow-hidden rounded-xl border transition-colors",
                   isActive
-                    ? "bg-sky-50 border-brand"
-                    : "bg-slate-100 border-slate-200/70"
+                    ? "border-brand bg-brand/10"
+                    : "border-border bg-card",
                 )}
               >
-                <Image
-                  source={option.image}
-                  style={{ width: 22, height: 18 }}
-                  contentFit="contain"
-                />
-                <Text
+                {/* Area Gambar / Ikon */}
+                <View className="items-center justify-center py-4">
+                  <Image
+                    source={option.image}
+                    style={{ width: 52, height: 48 }}
+                    contentFit="contain"
+                  />
+                </View>
+
+                {/* Footer Label */}
+                <View
                   className={cn(
-                    "font-quicksand-bold text-xs",
-                    isActive ? "text-brand" : "text-slate-600"
+                    "items-center justify-center border-t py-1.5 px-2",
+                    isActive
+                      ? "border-brand bg-brand"
+                      : "border-border bg-muted/30",
                   )}
-                  numberOfLines={1}
                 >
-                  {option.label}
-                </Text>
+                  <Text
+                    className={cn(
+                      "text-xs font-medium",
+                      isActive ? "text-brand-light" : "text-foreground",
+                    )}
+                    numberOfLines={1}
+                  >
+                    {option.label}
+                  </Text>
+                </View>
               </View>
             </Pressable>
           );

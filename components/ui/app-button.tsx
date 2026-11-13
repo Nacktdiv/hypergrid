@@ -54,16 +54,16 @@ export function AppButton({
   }[size];
 
   const variantContainerClasses = {
-    primary: "bg-brand border-0 shadow-md",
+    primary: "bg-brand border-0",
     secondary: "bg-slate-100 border border-slate-200/60",
     outline: "bg-white border border-slate-200",
     destructive: "bg-rose-50 border border-rose-200",
-    circle: "h-12 w-12 rounded-full bg-white border border-slate-200/80 shadow-sm items-center justify-center p-0",
-    quickAction: "h-10 px-3.5 rounded-full bg-slate-100 border border-slate-200/60 flex-row items-center justify-center gap-1.5",
+    circle: "h-12 w-12 rounded-sm bg-white border border-slate-200/80 shadow-sm items-center justify-center p-0",
+    quickAction: "h-10 px-3.5 rounded-sm bg-slate-100 border border-slate-200/60 flex-row items-center justify-center gap-1.5",
   }[variant];
 
   const variantTextClasses = {
-    primary: "text-white font-quicksand-bold text-base",
+    primary: "text-white font-bold text-[14px]",
     secondary: "text-slate-800 font-quicksand-bold text-sm",
     outline: "text-slate-700 font-quicksand-bold text-sm",
     destructive: "text-rose-600 font-quicksand-bold text-sm",
@@ -75,13 +75,13 @@ export function AppButton({
     <View
       className={cn(
         "flex-row items-center justify-center gap-2.5",
-        isCircle ? "rounded-full" : "rounded-pill",
+        isCircle ? "rounded-sm" : "rounded-xl",
         !isCircle && variant !== "quickAction" && sizeClasses,
         variantContainerClasses,
         disabled && "opacity-50",
         className
       )}
-      style={variant === "primary" ? TOKENS.shadows.glow : undefined}
+      // style={variant === "primary" ? TOKENS.shadows.glow : undefined}
     >
       {loading ? (
         <ActivityIndicator

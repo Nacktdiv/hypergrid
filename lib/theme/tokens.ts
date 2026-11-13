@@ -6,7 +6,7 @@
 export const TOKENS = {
   colors: {
     brand: {
-      DEFAULT: "#009EFF",
+      DEFAULT: "#1DA1F2",
       hover: "#0084D9",
       light: "#E0F2FE",
       dark: "#0369A1",
@@ -31,7 +31,7 @@ export const TOKENS = {
       warningLight: "#FFFBEB",
       danger: "#EF4444",
       dangerLight: "#FEF2F2",
-      info: "#009EFF",
+      info: "#1DA1F2",
       infoLight: "#E0F2FE",
     },
     surface: {
@@ -45,7 +45,7 @@ export const TOKENS = {
     border: {
       DEFAULT: "#E2E8F0",
       subtle: "#F1F5F9",
-      active: "#009EFF",
+      active: "#1DA1F2",
       dark: "#1E293B",
     },
     text: {
@@ -85,7 +85,7 @@ export const TOKENS = {
       elevation: 6,
     },
     glow: {
-      shadowColor: "#009EFF",
+      shadowColor: "#1DA1F2",
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.28,
       shadowRadius: 12,

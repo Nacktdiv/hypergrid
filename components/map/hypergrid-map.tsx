@@ -1,14 +1,19 @@
 import { Image, type ImageSource } from "expo-image";
 import { Platform, StyleSheet, Text, View } from "react-native";
-import MapView, { Callout, Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, {
+    Callout,
+    Marker,
+    Polyline,
+    PROVIDER_GOOGLE,
+} from "react-native-maps";
 
 import {
-  ROUTE_COLOR,
-  SEVERITY_COLOR,
-  USER_COLOR,
-  type DamagePoint,
-  type LatLng,
-  type MapData,
+    ROUTE_COLOR,
+    SEVERITY_COLOR,
+    USER_COLOR,
+    type DamagePoint,
+    type LatLng,
+    type MapData,
 } from "./map-data";
 
 /**
@@ -48,9 +53,11 @@ export function HypergridMap({
         key={`map-${data.camera.latitude}-${data.camera.longitude}`}
         loadingBackgroundColor="#F8FAFC"
         loadingEnabled={true}
-        loadingIndicatorColor="#009EFF"
+        loadingIndicatorColor="#1DA1F2"
         onMapReady={() => {
-          console.log("[HypergridMap] Native map successfully mounted and ready");
+          console.log(
+            "[HypergridMap] Native map successfully mounted and ready",
+          );
         }}
         pitchEnabled={false}
         provider={mapProvider}
@@ -75,11 +82,7 @@ export function HypergridMap({
         ) : null}
 
         {data.damagePoints.map((point) => (
-          <DamageMarker
-            key={point.id}
-            point={point}
-            onPress={onDamagePress}
-          />
+          <DamageMarker key={point.id} point={point} onPress={onDamagePress} />
         ))}
 
         {/* Kendaraan aktif — mengikuti pilihan di VehicleSelector */}
@@ -130,7 +133,7 @@ function DamageMarker({
           onPress(point);
         } else {
           console.log(
-            `[HyperGrid] marker ${point.id} ditekan — ${point.reportCount} laporan, severity ${point.severity}`
+            `[HyperGrid] marker ${point.id} ditekan — ${point.reportCount} laporan, severity ${point.severity}`,
           );
         }
       }}
@@ -143,10 +146,7 @@ function DamageMarker({
         ]}
       >
         <Text
-          style={[
-            styles.damageCount,
-            { color: isLow ? "#121212" : "#FFFFFF" },
-          ]}
+          style={[styles.damageCount, { color: isLow ? "#121212" : "#FFFFFF" }]}
         >
           {point.reportCount}
         </Text>

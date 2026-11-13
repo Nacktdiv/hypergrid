@@ -1,8 +1,7 @@
-import React, { useMemo, useRef, useEffect, useState } from "react";
-import { StyleSheet, View, ActivityIndicator } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 import type { AreaSummary, DamagePoint, MapData } from "./map-data";
-import { VEHICLE_MARKER_IMAGES } from "./vehicle-assets-base64";
 
 export type LeafletMapProps = {
   data: MapData;
@@ -45,14 +44,13 @@ export const LeafletMap = React.memo(function LeafletMap({
 
   // Buat HTML Leaflet sekali dengan titik awal nyata
   const htmlContent = useMemo(() => {
-    const { camera, route, damagePoints, vehiclePosition } =
-      initialData;
+    const { camera, route, damagePoints, vehiclePosition } = initialData;
     const centerLat = camera.latitude;
     const centerLng = camera.longitude;
     const zoomLevel = Math.max(12, Math.min(18, Math.round(camera.zoom)));
 
     const routeCoords = JSON.stringify(
-      route.coordinates.map((c) => [c.latitude, c.longitude])
+      route.coordinates.map((c) => [c.latitude, c.longitude]),
     );
     const damageData = JSON.stringify(damagePoints);
     const vehicleCoord = JSON.stringify([
@@ -96,8 +94,8 @@ export const LeafletMap = React.memo(function LeafletMap({
 
     /* 1. Macro Badge (Tampilan Jauh zoom < 15): Hanya Angka dan Warna */
     .macro-badge-compact {
-      width: 32px !important;
-      height: 32px !important;
+      width: 24px !important;
+      height: 24px !important;
       border-radius: 50%;
       display: flex;
       align-items: center;
@@ -105,16 +103,16 @@ export const LeafletMap = React.memo(function LeafletMap({
       color: #ffffff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-weight: 800;
-      font-size: 13px;
+      font-size: 11px;
       line-height: 1;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
-      border: 2.5px solid #ffffff;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+      border: 2px solid #ffffff;
       cursor: pointer;
       transition: transform 0.15s ease;
       user-select: none;
     }
     .macro-badge-compact:active {
-      transform: scale(1.18);
+      transform: scale(1.15);
     }
     .macro-badge-compact.severity-severe { background-color: #991B1B; }
     .macro-badge-compact.severity-high { background-color: #EF4444; }
@@ -126,7 +124,7 @@ export const LeafletMap = React.memo(function LeafletMap({
       display: flex;
       align-items: center;
       justify-content: center;
-      filter: drop-shadow(0 3px 5px rgba(15, 23, 42, 0.35));
+      filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.3));
       cursor: pointer;
       transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
       user-select: none;
@@ -135,8 +133,8 @@ export const LeafletMap = React.memo(function LeafletMap({
       transform: scale(1.15) translateY(-2px);
     }
     .location-pin-marker.is-active {
-      transform: scale(1.22) translateY(-3px);
-      filter: drop-shadow(0 6px 12px rgba(15, 23, 42, 0.5));
+      transform: scale(1.2) translateY(-2px);
+      filter: drop-shadow(0 4px 8px rgba(15, 23, 42, 0.45));
       z-index: 9999 !important;
     }
 
@@ -144,7 +142,7 @@ export const LeafletMap = React.memo(function LeafletMap({
       width: 20px !important;
       height: 20px !important;
       border-radius: 50%;
-      background-color: #009EFF;
+      background-color: #1DA1F2;
       border: 3px solid #ffffff;
       box-shadow: 0 2px 6px rgba(0,0,0,0.35);
     }
@@ -253,7 +251,7 @@ export const LeafletMap = React.memo(function LeafletMap({
       window.clusterRoadCache = {};
       if (initialRoute && initialRoute.length > 0) {
         window.routePolyline = L.polyline(initialRoute, {
-          color: '#009EFF',
+          color: '#1DA1F2',
           weight: 5,
           opacity: 0.85,
           lineJoin: 'round'
@@ -650,15 +648,15 @@ export const LeafletMap = React.memo(function LeafletMap({
           .catch(function() {});
       }
 
-      // Helper membuat SVG Badge Icon Lokasi (Map Pin)
+      // Helper membuat SVG Badge Icon Lokasi (Map Pin) - ukuran lebih kecil & compact
       function createLocationPinSvg(sevColor, count, isActive) {
         var strokeCol = isActive ? '#FDE047' : '#ffffff';
-        var strokeW = isActive ? '2.8' : '2';
+        var strokeW = isActive ? '2.4' : '1.8';
         var innerContent = (count && count > 1)
-          ? '<text x="12" y="15" text-anchor="middle" font-size="8.5" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-weight="900" fill="#ffffff">' + count + '</text>'
-          : '<circle cx="12" cy="11.5" r="4.2" fill="#ffffff"/>';
+          ? '<text x="12" y="14.5" text-anchor="middle" font-size="8" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-weight="900" fill="#ffffff">' + count + '</text>'
+          : '<circle cx="12" cy="11" r="3.6" fill="#ffffff"/>';
 
-        return '<svg width="' + (isActive ? 30 : 26) + '" height="' + (isActive ? 38 : 34) + '" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+        return '<svg width="' + (isActive ? 24 : 20) + '" height="' + (isActive ? 30 : 25) + '" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">' +
           '<path d="M12 0C5.372 0 0 5.372 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.372 18.628 0 12 0Z" fill="' + sevColor + '" stroke="' + strokeCol + '" stroke-width="' + strokeW + '"/>' +
           innerContent +
           '</svg>';
@@ -776,7 +774,7 @@ export const LeafletMap = React.memo(function LeafletMap({
           blur: 6,
           maxZoom: 18,
           minOpacity: 0.35,
-          gradient: { 0.2: '#009EFF', 0.5: '#EAB308', 0.75: '#F59E0B', 1.0: '#EF4444' }
+          gradient: { 0.2: '#1DA1F2', 0.5: '#EAB308', 0.75: '#F59E0B', 1.0: '#EF4444' }
         });
       };
 
@@ -862,8 +860,8 @@ export const LeafletMap = React.memo(function LeafletMap({
             var ptSevColor = pt.severity === 'severe' ? '#991B1B' : (pt.severity === 'high' ? '#EF4444' : (pt.severity === 'medium' ? '#F59E0B' : '#EAB308'));
             var pinSvg = createLocationPinSvg(ptSevColor, pt.reportCount, isPtActive);
             var pinHtml = '<div class="location-pin-marker' + (isPtActive ? ' is-active' : '') + '">' + pinSvg + '</div>';
-            var iconW = isPtActive ? 30 : 26;
-            var iconH = isPtActive ? 38 : 34;
+            var iconW = isPtActive ? 24 : 20;
+            var iconH = isPtActive ? 30 : 25;
             var pinIcon = L.divIcon({
               className: '',
               html: pinHtml,
@@ -999,8 +997,8 @@ export const LeafletMap = React.memo(function LeafletMap({
           var pinIcon = L.divIcon({
             className: '',
             html: pinHtml,
-            iconSize: [30, 38],
-            iconAnchor: [15, 38]
+            iconSize: [24, 30],
+            iconAnchor: [12, 30]
           });
           var pinMarker = L.marker([finalPinLat, finalPinLng], {
             icon: pinIcon,
@@ -1168,8 +1166,8 @@ export const LeafletMap = React.memo(function LeafletMap({
           var ptSevColor = pt.severity === 'severe' ? '#991B1B' : (pt.severity === 'high' ? '#EF4444' : (pt.severity === 'medium' ? '#F59E0B' : '#EAB308'));
           var pinSvg = createLocationPinSvg(ptSevColor, pt.reportCount, isPtActive);
           var pinHtml = '<div class="location-pin-marker' + (isPtActive ? ' is-active' : '') + '">' + pinSvg + '</div>';
-          var iconW = isPtActive ? 30 : 26;
-          var iconH = isPtActive ? 38 : 34;
+          var iconW = isPtActive ? 24 : 20;
+          var iconH = isPtActive ? 30 : 25;
           var icon = L.divIcon({
             className: '',
             html: pinHtml,
@@ -1269,32 +1267,27 @@ export const LeafletMap = React.memo(function LeafletMap({
       window.activeRoadSegments = computeRoadSegmentAreas(window.rawDamagePoints);
       window.updateLOD();
 
-      // Vehicle graphic markers (placed in vehicleTopPane & highest zIndexOffset so never covered by clusters)
-      var vehicleImages = ${JSON.stringify(VEHICLE_MARKER_IMAGES)};
-      var initialImg = vehicleImages["${vehicleType}"] || vehicleImages["car"];
-      var vehicleIcon = L.divIcon({
-        className: '',
-        html: '<div class="vehicle-marker-wrapper"><img class="vehicle-marker-img" src="' + initialImg + '" alt="vehicle" /></div>',
-        iconSize: [48, 48],
-        iconAnchor: [24, 24]
+      // User Location Pin Marker (Default Leaflet Marker)
+      var defaultLeafletIcon = L.icon({
+        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
       });
+
       window.vehicleMarker = L.marker(${vehicleCoord}, {
-        icon: vehicleIcon,
+        icon: defaultLeafletIcon,
         pane: 'vehicleTopPane',
         zIndexOffset: 10000
       }).addTo(window.map);
 
-      // Helper untuk mengganti ikon gambar kendaraan secara real-time
-      window.setVehicleType = function(vType) {
-        var imgSrc = vehicleImages[vType] || vehicleImages["car"];
-        var newIcon = L.divIcon({
-          className: '',
-          html: '<div class="vehicle-marker-wrapper"><img class="vehicle-marker-img" src="' + imgSrc + '" alt="vehicle" /></div>',
-          iconSize: [48, 48],
-          iconAnchor: [24, 24]
-        });
+      // Helper untuk jenis kendaraan (jika dipanggil tetap mempertahankan default leaflet marker)
+      window.setVehicleType = function(_vType) {
         if (window.vehicleMarker) {
-          window.vehicleMarker.setIcon(newIcon);
+          window.vehicleMarker.setIcon(defaultLeafletIcon);
           if (window.vehicleMarker.setZIndexOffset) {
             window.vehicleMarker.setZIndexOffset(10000);
           }
@@ -1314,7 +1307,7 @@ export const LeafletMap = React.memo(function LeafletMap({
           window.routePolyline.setLatLngs(validCoords);
         } else if (validCoords.length > 0) {
           window.routePolyline = L.polyline(validCoords, {
-            color: '#009EFF',
+            color: '#1DA1F2',
             weight: 5,
             opacity: 0.85,
             lineJoin: 'round'
@@ -1385,7 +1378,7 @@ export const LeafletMap = React.memo(function LeafletMap({
     lastRouteLengthRef.current = coords.length;
 
     const routeJson = JSON.stringify(
-      coords.map((c) => [c.latitude, c.longitude])
+      coords.map((c) => [c.latitude, c.longitude]),
     );
     const js = `
       if (window.updateRoute) window.updateRoute(${routeJson});
@@ -1420,7 +1413,7 @@ export const LeafletMap = React.memo(function LeafletMap({
 
     if (data.activeClusterId) {
       const activePt = data.damagePoints.find(
-        (p) => p.id === data.activeClusterId
+        (p) => p.id === data.activeClusterId,
       );
       const activeJson = JSON.stringify(activePt || null);
       const js = `
@@ -1479,7 +1472,7 @@ export const LeafletMap = React.memo(function LeafletMap({
         const lat = data.vehiclePosition.latitude;
         const lng = data.vehiclePosition.longitude;
         const routeJson = JSON.stringify(
-          data.route.coordinates.map((c) => [c.latitude, c.longitude])
+          data.route.coordinates.map((c) => [c.latitude, c.longitude]),
         );
         const activePt = data.activeClusterId
           ? data.damagePoints.find((p) => p.id === data.activeClusterId)
@@ -1519,7 +1512,7 @@ export const LeafletMap = React.memo(function LeafletMap({
         startInLoadingState={true}
         renderLoading={() => (
           <View style={styles.loader}>
-            <ActivityIndicator size="small" color="#009EFF" />
+            <ActivityIndicator size="small" color="#1DA1F2" />
           </View>
         )}
       />

@@ -6,7 +6,7 @@ import { SHOCK_METRICS } from "./mock-data";
  * Header baris Metrix — Figma `Name` #114:1413 / #114:1460.
  *
  * Label "Sensitivity Threshold" di kiri + badge "Calibration" di kanan
- * (View 1) atau "Back" (View 2). Badge: bg Primary #009EFF, radius 16,
+ * (View 1) atau "Back" (View 2). Badge: bg Primary #1DA1F2, radius 16,
  * padding 6px, teks hitam Quicksand Medium 13.
  */
 export function TelemetryHeader() {
@@ -22,5 +22,5 @@ export function TelemetryHeader() {
         </Text>
       </View>
     </View>
-  )
+  );
 }

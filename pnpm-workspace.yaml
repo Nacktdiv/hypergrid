@@ -1,4 +1,0 @@
-allowBuilds:
-  unrs-resolver: true
-patchedDependencies:
-  react-native@0.86.3: patches/react-native@0.86.3.patch

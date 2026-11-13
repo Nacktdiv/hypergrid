@@ -1,4 +1,17 @@
-import React, { useCallback, useMemo, useState } from "react";
+import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
+import {
+  AlertTriangle,
+  MapPin,
+  Navigation,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  User,
+  X
+} from "lucide-react-native";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -9,35 +22,23 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import { useRouter } from "expo-router";
-import {
-  AlertTriangle,
-  ChevronDown,
-  ChevronUp,
-  MapPin,
-  Navigation,
-  RefreshCw,
-  Search,
-  ShieldAlert,
-  ShieldCheck,
-  User,
-  X,
-} from "lucide-react-native";
-import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MainMap } from "@/components/main/main-map";
 import { PlayButton } from "@/components/main/play-button";
-import { VehicleSelector } from "@/components/main/vehicle-selector";
 import { TripPlannerSheet } from "@/components/main/trip-planner-sheet";
+import { VehicleSelector } from "@/components/main/vehicle-selector";
+import type { LatLng } from "@/components/map/map-data";
 import { AppButton } from "@/components/ui/app-button";
 import { EmergencyModal } from "@/components/ui/emergency-modal";
+import { useVehicle } from "@/contexts/vehicle-context";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
 import { useUserLocation } from "@/hooks/use-user-location";
-import { useVehicle } from "@/contexts/vehicle-context";
-import { routingService, type PlannedRoute } from "@/services/api/routing.service";
-import type { LatLng } from "@/components/map/map-data";
 import { TOKENS } from "@/lib/theme/tokens";
+import {
+  routingService,
+  type PlannedRoute,
+} from "@/services/api/routing.service";
 
 const PEEK_HEIGHT = 48;
 
@@ -71,7 +72,7 @@ export default function StartScreen() {
         speed: 15,
       }).start();
     },
-    [drawerY]
+    [drawerY],
   );
 
   const toggleDrawer = useCallback(() => {
@@ -83,50 +84,46 @@ export default function StartScreen() {
   }, [isCollapsed, maxCollapse, snapTo]);
 
   // PanResponder to handle smooth 1:1 drag gestures like Google Maps
-  const panResponder = useMemo(
-    () => {
-      let touchStartOffset = 0;
-      return PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: (_, gestureState) =>
-          Math.abs(gestureState.dy) > 4,
-        onPanResponderGrant: () => {
-          drawerY.stopAnimation((value) => {
-            touchStartOffset = value;
-          });
-        },
-        onPanResponderMove: (_, gestureState) => {
-          const limit = Math.max(0, drawerHeight - PEEK_HEIGHT);
-          const nextY = Math.min(
-            Math.max(0, touchStartOffset + gestureState.dy),
-            limit
-          );
-          drawerY.setValue(nextY);
-        },
-        onPanResponderRelease: (_, gestureState) => {
-          const limit = Math.max(0, drawerHeight - PEEK_HEIGHT);
-          const currentY = Math.min(
-            Math.max(0, touchStartOffset + gestureState.dy),
-            limit
-          );
+  const panResponder = useMemo(() => {
+    let touchStartOffset = 0;
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dy) > 4,
+      onPanResponderGrant: () => {
+        drawerY.stopAnimation((value) => {
+          touchStartOffset = value;
+        });
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const limit = Math.max(0, drawerHeight - PEEK_HEIGHT);
+        const nextY = Math.min(
+          Math.max(0, touchStartOffset + gestureState.dy),
+          limit,
+        );
+        drawerY.setValue(nextY);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const limit = Math.max(0, drawerHeight - PEEK_HEIGHT);
+        const currentY = Math.min(
+          Math.max(0, touchStartOffset + gestureState.dy),
+          limit,
+        );
 
-          // Fast downward swipe or pulled down past 35% -> collapse completely
-          const shouldCollapse =
-            gestureState.vy > 0.3 || currentY > limit * 0.35;
-          const target = shouldCollapse ? limit : 0;
+        // Fast downward swipe or pulled down past 35% -> collapse completely
+        const shouldCollapse = gestureState.vy > 0.3 || currentY > limit * 0.35;
+        const target = shouldCollapse ? limit : 0;
 
-          setIsCollapsed(shouldCollapse);
-          Animated.spring(drawerY, {
-            toValue: target,
-            useNativeDriver: false,
-            bounciness: 2,
-            speed: 15,
-          }).start();
-        },
-      });
-    },
-    [drawerY, drawerHeight]
-  );
+        setIsCollapsed(shouldCollapse);
+        Animated.spring(drawerY, {
+          toValue: target,
+          useNativeDriver: false,
+          bounciness: 2,
+          speed: 15,
+        }).start();
+      },
+    });
+  }, [drawerY, drawerHeight]);
 
   const handleDrawerLayout = useCallback((e: LayoutChangeEvent) => {
     const { height } = e.nativeEvent.layout;
@@ -145,7 +142,10 @@ export default function StartScreen() {
   };
 
   // Direct route calculation on map without leaving screen ("gak pindah halaman")
-  const handleSelectDestination = async (destName: string, destCoords: LatLng) => {
+  const handleSelectDestination = async (
+    destName: string,
+    destCoords: LatLng,
+  ) => {
     setIsTripPlannerVisible(false);
     setIsCalculatingRoute(true);
     try {
@@ -154,20 +154,25 @@ export default function StartScreen() {
         start,
         destCoords,
         destName,
-        clusters
+        clusters,
       );
       if (route) {
         setActiveRoute(route);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success,
+        ).catch(() => {});
       } else {
         Alert.alert(
           "Route Not Found",
-          "Could not calculate driving directions to this location. Please try another destination."
+          "Could not calculate driving directions to this location. Please try another destination.",
         );
       }
     } catch (err) {
       console.warn("[StartScreen] Route calculation error:", err);
-      Alert.alert("Route Error", "Failed to calculate route. Please try again.");
+      Alert.alert(
+        "Route Error",
+        "Failed to calculate route. Please try again.",
+      );
     } finally {
       setIsCalculatingRoute(false);
     }
@@ -180,13 +185,13 @@ export default function StartScreen() {
         outputRange: [drawerHeight + 14, PEEK_HEIGHT + 14],
         extrapolate: "clamp",
       }),
-    [drawerY, drawerHeight]
+    [drawerY, drawerHeight],
   );
 
   // Offset right floating buttons if the route insight card is currently displayed
   const floatingControlsBottom = useMemo(
     () => (activeRoute ? Animated.add(recenterBottom, 152) : recenterBottom),
-    [activeRoute, recenterBottom]
+    [activeRoute, recenterBottom],
   );
 
   return (
@@ -228,7 +233,7 @@ export default function StartScreen() {
           >
             {isCalculatingRoute ? (
               <View className="flex-row items-center gap-2 flex-1">
-                <ActivityIndicator size="small" color="#009EFF" />
+                <ActivityIndicator size="small" color="#1DA1F2" />
                 <Text
                   className="font-quicksand-bold text-xs text-sky-600 flex-1"
                   numberOfLines={1}
@@ -238,7 +243,7 @@ export default function StartScreen() {
               </View>
             ) : activeRoute ? (
               <View className="flex-row items-center gap-2 flex-1 pr-1.5">
-                <Navigation size={13} color="#009EFF" />
+                <Navigation size={13} color="#1DA1F2" />
                 <Text
                   className="font-quicksand-bold text-xs text-slate-800 flex-1"
                   numberOfLines={1}
@@ -311,9 +316,7 @@ export default function StartScreen() {
           variant="circle"
           size="sm"
           onPress={() => getImmediateLocation()}
-          iconLeft={
-            <MapPin size={18} color={TOKENS.colors.brand.DEFAULT} />
-          }
+          iconLeft={<MapPin size={18} color={TOKENS.colors.brand.DEFAULT} />}
           accessibilityLabel="Center map on my location"
         />
       </Animated.View>
@@ -331,7 +334,7 @@ export default function StartScreen() {
             <View className="flex-row items-center justify-between pb-2.5 border-b border-slate-100">
               <View className="flex-1 pr-2">
                 <View className="flex-row items-center gap-1.5">
-                  <Navigation size={13} color="#009EFF" />
+                  <Navigation size={13} color="#1DA1F2" />
                   <Text
                     className="font-chivo-bold text-sm text-slate-900"
                     numberOfLines={1}
@@ -346,8 +349,8 @@ export default function StartScreen() {
                   activeRoute.hazards.safetyRating === "dangerous"
                     ? "bg-rose-50 border-rose-200"
                     : activeRoute.hazards.safetyRating === "caution"
-                    ? "bg-amber-50 border-amber-200"
-                    : "bg-emerald-50 border-emerald-200"
+                      ? "bg-amber-50 border-amber-200"
+                      : "bg-emerald-50 border-emerald-200"
                 }`}
               >
                 {activeRoute.hazards.safetyRating === "dangerous" ? (
@@ -362,8 +365,8 @@ export default function StartScreen() {
                     activeRoute.hazards.safetyRating === "dangerous"
                       ? "text-rose-700"
                       : activeRoute.hazards.safetyRating === "caution"
-                      ? "text-amber-700"
-                      : "text-emerald-700"
+                        ? "text-amber-700"
+                        : "text-emerald-700"
                   }`}
                 >
                   {activeRoute.hazards.safetyRating === "safe"
@@ -391,7 +394,8 @@ export default function StartScreen() {
                   Est. Time
                 </Text>
                 <Text className="font-mono-bold text-xs text-slate-800 mt-0.5">
-                  {Math.max(1, Math.round(activeRoute.durationSeconds / 60))} min
+                  {Math.max(1, Math.round(activeRoute.durationSeconds / 60))}{" "}
+                  min
                 </Text>
               </View>
 
@@ -446,24 +450,26 @@ export default function StartScreen() {
       >
         <View className="rounded-t-sheet bg-white border-t border-slate-200/90 px-5 pt-2 pb-6 shadow-sm">
           {/* DRAG HANDLE & DRAWER TOGGLE HEADER */}
-          <View
-            {...panResponder.panHandlers}
-            className="items-center py-1.5"
-          >
+          <View {...panResponder.panHandlers} className="items-center py-1.5">
             <Pressable
               onPress={toggleDrawer}
               accessibilityRole="button"
               accessibilityLabel={
-                isCollapsed ? "Expand vehicle drawer" : "Swipe down to collapse drawer"
+                isCollapsed
+                  ? "Expand vehicle drawer"
+                  : "Swipe down to collapse drawer"
               }
               className="active:opacity-80"
             >
               <View className="items-center py-0.5 px-4">
-                <View className="w-12 h-1.5 bg-slate-300 rounded-full mb-1.5" />
+                <View className="w-12 h-1.5 bg-gray-300 rounded-full mb-1.5" />
                 <View className="flex-row items-center gap-1.5">
-                  {isCollapsed ? (
+                  {/* {isCollapsed ? (
                     <>
-                      <ChevronUp size={14} color={TOKENS.colors.brand.DEFAULT} />
+                      <ChevronUp
+                        size={14}
+                        color={TOKENS.colors.brand.DEFAULT}
+                      />
                       <Text className="font-quicksand-bold text-[11px] text-brand">
                         Swipe up for vehicle controls
                       </Text>
@@ -475,14 +481,14 @@ export default function StartScreen() {
                         Swipe down for full map
                       </Text>
                     </>
-                  )}
+                  )} */}
                 </View>
               </View>
             </Pressable>
           </View>
 
           {/* DRAWER CONTENT: VEHICLE SELECTOR & START RIDE */}
-          <View className="gap-4 pt-2">
+          <View className="gap-4 pt-6">
             <VehicleSelector onSelect={setVehicle} selected={vehicleId} />
             <PlayButton activeRoute={activeRoute} />
           </View>

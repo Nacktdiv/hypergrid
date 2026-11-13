@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { ActivityIndicator, Alert, Text, View } from "react-native";
-import { Camera } from "lucide-react-native";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
+import { Camera } from "lucide-react-native";
+import { useState } from "react";
+import { ActivityIndicator, Alert, Text, View } from "react-native";
 
 import { Touchable } from "@/components/ui/touchable";
 import { PROFILE } from "./mock-data";
@@ -44,7 +44,7 @@ export function ProfileHeader({
     } catch (err: any) {
       Alert.alert(
         "Gagal Menyimpan Foto",
-        err.message || "Terjadi kesalahan saat mengunggah foto profil."
+        err.message || "Terjadi kesalahan saat mengunggah foto profil.",
       );
     } finally {
       setIsUploading(false);
@@ -57,7 +57,7 @@ export function ProfileHeader({
       if (status !== "granted") {
         Alert.alert(
           "Izin Kamera Diperlukan",
-          "HyperGrid membutuhkan izin kamera untuk mengambil foto profil."
+          "HyperGrid membutuhkan izin kamera untuk mengambil foto profil.",
         );
         return;
       }
@@ -83,7 +83,7 @@ export function ProfileHeader({
       if (status !== "granted") {
         Alert.alert(
           "Izin Galeri Diperlukan",
-          "HyperGrid membutuhkan izin galeri untuk memilih foto profil."
+          "HyperGrid membutuhkan izin galeri untuk memilih foto profil.",
         );
         return;
       }
@@ -122,7 +122,7 @@ export function ProfileHeader({
           style: "cancel",
         },
       ],
-      { cancelable: true }
+      { cancelable: true },
     );
   };
 
@@ -176,7 +176,7 @@ export function ProfileHeader({
               shadowRadius: 8,
             }}
           >
-            <Camera size={14} color="#009EFF" />
+            <Camera size={14} color="#1DA1F2" />
           </View>
         </Touchable>
       </View>

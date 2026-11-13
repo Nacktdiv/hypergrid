@@ -38,7 +38,7 @@ export function AppCard({
   return (
     <View
       className={cn(variantClasses, className)}
-      style={[shadowStyle, style]}
+      style={[style]}
       {...props}
     >
       {children}

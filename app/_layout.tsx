@@ -8,14 +8,12 @@ import "../global.css";
 
 import {
   useFonts,
-  Chivo_400Regular,
-  Chivo_700Bold,
-} from "@expo-google-fonts/chivo";
-import {
-  Quicksand_400Regular,
-  Quicksand_600SemiBold,
-  Quicksand_700Bold,
-} from "@expo-google-fonts/quicksand";
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  Inter_800ExtraBold,
+} from "@expo-google-fonts/inter";
 import {
   JetBrainsMono_400Regular,
   JetBrainsMono_700Bold,
@@ -40,11 +38,11 @@ function RootNavigation() {
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
-    Chivo_400Regular,
-    Chivo_700Bold,
-    Quicksand_400Regular,
-    Quicksand_600SemiBold,
-    Quicksand_700Bold,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    Inter_800ExtraBold,
     JetBrainsMono_400Regular,
     JetBrainsMono_700Bold,
   });

@@ -15,18 +15,18 @@ export function SelectedVehicleCard() {
     <AppCard variant="default" className="p-4 gap-3">
       <View className="flex-row items-center justify-between">
         <View className="flex-1 mr-2">
-          <Text className="font-quicksand-bold text-[11px] tracking-wider uppercase text-brand">
+          <Text className="font-quicksand-bold text-[11px] text-muted-foreground">
             Active Telemetry Vehicle
           </Text>
-          <Text className="font-chivo-bold text-lg text-slate-900 mt-0.5">
+          <Text className="font-chivo-bold text-lg text-gray-900">
             {vehicleProfile.name}
           </Text>
-          <Text className="font-quicksand-semibold text-xs text-slate-600 mt-0.5">
+          <Text className="font-quicksand-semibold text-xs text-gray-600 mt-0.5">
             Plate: {vehicleProfile.plate}
           </Text>
         </View>
 
-        <View className="h-16 w-24 items-center justify-center rounded-xl bg-slate-50 border border-slate-100 p-1">
+        <View className="h-16 w-24 items-center justify-center rounded-xl bg-gray-50 border border-gray-100 p-1">
           <Image
             source={vehicleProfile.image}
             style={{ width: "100%", height: "100%" }}
@@ -36,7 +36,7 @@ export function SelectedVehicleCard() {
         </View>
       </View>
 
-      <View className="flex-row items-center gap-2 pt-1 border-t border-slate-100">
+      <View className="flex-row items-center gap-2 pt-1 border-t border-gray-100">
         <MetricPill
           icon={<Zap size={14} color={TOKENS.colors.brand.DEFAULT} />}
           label="Shock Thresh"

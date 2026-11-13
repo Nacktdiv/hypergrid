@@ -1,4 +1,3 @@
-import React from "react";
 import { Tabs } from "expo-router";
 import { CarFront, RotateCcwClock, User } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,17 +11,17 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarStyle: {
           backgroundColor: "#FFFFFF",
-          borderTopColor: "#E2E8F0",
+          borderTopColor: "#FFF",
           borderTopWidth: 1,
           height: 56 + Math.max(insets.bottom, 10),
           paddingBottom: Math.max(insets.bottom, 10),
           paddingTop: 8,
         },
-        tabBarActiveTintColor: "#009EFF",
+        tabBarActiveTintColor: "#1DA1F2",
         tabBarInactiveTintColor: "#64748B",
         tabBarLabelStyle: {
-          fontFamily: "Quicksand_700Bold",
-          fontSize: 11,
+          // fontFamily: "Inter_700Bold",
+          fontSize: 9,
           marginTop: -2,
         },
       }}
@@ -43,7 +42,11 @@ export default function TabsLayout() {
           title: "History",
           tabBarAccessibilityLabel: "History Tab",
           tabBarIcon: ({ color, focused }) => (
-            <RotateCcwClock size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
+            <RotateCcwClock
+              size={22}
+              color={color}
+              strokeWidth={focused ? 2.5 : 2}
+            />
           ),
         }}
       />

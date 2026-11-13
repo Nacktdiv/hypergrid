@@ -1,15 +1,14 @@
-import React from "react";
-import { ScrollView, Text, View } from "react-native";
-import Svg, { Circle, Line, G } from "react-native-svg";
 import {
-  CheckCircle2,
-  Clock,
-  Navigation,
-  ShieldAlert,
-  ShieldCheck,
-  Zap,
+    CheckCircle2,
+    Clock,
+    Navigation,
+    ShieldAlert,
+    ShieldCheck,
+    Zap,
 } from "lucide-react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Circle, G, Line } from "react-native-svg";
 
 import { AppButton } from "@/components/ui/app-button";
 import { AppCard } from "@/components/ui/app-card";
@@ -46,8 +45,7 @@ export function TripCompletedView({
 
   const minutes = Math.floor(data.elapsedSeconds / 60);
   const seconds = data.elapsedSeconds % 60;
-  const timeFormatted =
-    minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+  const timeFormatted = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 
   const distanceFormatted =
     data.distanceMeters >= 1000
@@ -61,19 +59,19 @@ export function TripCompletedView({
       Math.round(
         100 -
           data.detectedCount * 12 -
-          Math.max(0, (data.maxGForce - 1.0) * 15)
-      )
-    )
+          Math.max(0, (data.maxGForce - 1.0) * 15),
+      ),
+    ),
   );
 
   const stabilityScore = Math.max(
     40,
-    Math.min(100, Math.round(100 - Math.max(0, (data.maxGForce - 1.0) * 22)))
+    Math.min(100, Math.round(100 - Math.max(0, (data.maxGForce - 1.0) * 22))),
   );
 
   const clearanceScore = Math.max(
     25,
-    Math.min(100, Math.round(100 - data.detectedCount * 16))
+    Math.min(100, Math.round(100 - data.detectedCount * 16)),
   );
 
   const statusConfig =
@@ -86,28 +84,28 @@ export function TripCompletedView({
           border: "border-emerald-200",
         }
       : roadScore >= 70
-      ? {
-          label: "GOOD",
-          color: "#009EFF",
-          bg: "bg-sky-50",
-          text: "text-sky-700",
-          border: "border-sky-200",
-        }
-      : roadScore >= 50
-      ? {
-          label: "MODERATE",
-          color: "#F59E0B",
-          bg: "bg-amber-50",
-          text: "text-amber-700",
-          border: "border-amber-200",
-        }
-      : {
-          label: "ROUGH",
-          color: "#EF4444",
-          bg: "bg-rose-50",
-          text: "text-rose-700",
-          border: "border-rose-200",
-        };
+        ? {
+            label: "GOOD",
+            color: "#1DA1F2",
+            bg: "bg-sky-50",
+            text: "text-sky-700",
+            border: "border-sky-200",
+          }
+        : roadScore >= 50
+          ? {
+              label: "MODERATE",
+              color: "#F59E0B",
+              bg: "bg-amber-50",
+              text: "text-amber-700",
+              border: "border-amber-200",
+            }
+          : {
+              label: "ROUGH",
+              color: "#EF4444",
+              bg: "bg-rose-50",
+              text: "text-rose-700",
+              border: "border-rose-200",
+            };
 
   const size = 190;
   const center = size / 2;
@@ -392,7 +390,7 @@ export function TripCompletedView({
         {data.destinationName ? (
           <AppCard className="p-4 bg-white border border-slate-200/90 shadow-xs mb-3.5">
             <View className="flex-row items-center gap-2 mb-2">
-              <Navigation size={14} color="#009EFF" />
+              <Navigation size={14} color="#1DA1F2" />
               <Text className="font-chivo-bold text-xs text-slate-800 uppercase tracking-wider">
                 Trip Route & Destination
               </Text>
@@ -402,7 +400,10 @@ export function TripCompletedView({
               <Text className="font-quicksand text-xs text-slate-500">
                 Departure
               </Text>
-              <Text className="font-quicksand-bold text-xs text-slate-800" numberOfLines={1}>
+              <Text
+                className="font-quicksand-bold text-xs text-slate-800"
+                numberOfLines={1}
+              >
                 {data.startLocationName || "Origin Location"}
               </Text>
             </View>
@@ -411,7 +412,10 @@ export function TripCompletedView({
               <Text className="font-quicksand text-xs text-slate-500">
                 Final Destination
               </Text>
-              <Text className="font-quicksand-bold text-xs text-brand" numberOfLines={1}>
+              <Text
+                className="font-quicksand-bold text-xs text-brand"
+                numberOfLines={1}
+              >
                 {data.destinationName}
               </Text>
             </View>
@@ -444,8 +448,8 @@ export function TripCompletedView({
               {data.detectedCount === 0
                 ? "Zero Prediction (No Anomaly)"
                 : data.isTflite
-                ? "TFLite Neural Net"
-                : "Smart Edge AI Heuristic"}
+                  ? "TFLite Neural Net"
+                  : "Smart Edge AI Heuristic"}
             </Text>
           </View>
 
