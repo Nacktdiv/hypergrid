@@ -269,7 +269,7 @@ export function TripPlannerSheet({
                   className="font-inter text-[11px] mt-0.5"
                   style={{ color: colors.textMuted }}
                 >
-                  Eco route & road safety scanning
+                  Choose destination
                 </Text>
               </View>
             </View>

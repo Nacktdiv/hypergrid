@@ -47,11 +47,9 @@ export function PlayButton({ activeRoute, onStartRide }: PlayButtonProps) {
     <SlideCommit
       key={sliderKey}
       label={
-        activeRoute
-          ? `Slide to Start: ${activeRoute.destinationName}`
-          : "Slide to Start Ride"
+        activeRoute ? `Start: ${activeRoute.destinationName}` : "Start Ride"
       }
-      doneLabel="Starting Ride..."
+      doneLabel="Starting..."
       errorLabel="Cannot start ride"
       onConfirm={handleConfirm}
       onDone={handleDone}

@@ -323,7 +323,7 @@ export default function StartScreen() {
                   style={{ color: colors.brandText }}
                   numberOfLines={1}
                 >
-                  Calculating optimal route...
+                  Finding route...
                 </Text>
               ) : activeRoute ? (
                 <View className="flex-row items-center gap-1.5">
@@ -523,8 +523,8 @@ export default function StartScreen() {
                   }}
                 >
                   {activeRoute.hazards.safetyRating === "safe"
-                    ? "Eco & Smooth"
-                    : `${activeRoute.hazards.totalHazards} Hazards`}
+                    ? "Clear"
+                    : `${activeRoute.hazards.totalHazards} pts`}
                 </Text>
               </View>
             </View>
@@ -649,8 +649,8 @@ export default function StartScreen() {
                     numberOfLines={1}
                   >
                     {liveCoords
-                      ? `${clusters.length} hazard clusters indexed nearby`
-                      : "Waiting for GPS lock..."}
+                      ? `${clusters.length} hazards nearby`
+                      : "Locating..."}
                   </Text>
                 </View>
 
@@ -756,7 +756,7 @@ export default function StartScreen() {
                   >
                     {activeRoute
                       ? `${(activeRoute.distanceMeters / 1000).toFixed(1)} km · ${Math.max(1, Math.round(activeRoute.durationSeconds / 60))} min`
-                      : "Continuous Edge AI pothole scanning"}
+                      : "Road hazard scan"}
                   </Text>
                 </View>
 

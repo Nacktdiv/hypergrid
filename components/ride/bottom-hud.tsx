@@ -48,9 +48,7 @@ export const BottomHud = React.memo(function BottomHud({
   vehicleName = "Vehicle",
   plate,
   speed = 0,
-  vibration = 0,
   gForce = 1.0,
-  peakGForce,
   anomalyCount = 0,
   elapsedSeconds = 0,
   isPaused = false,
@@ -108,11 +106,7 @@ export const BottomHud = React.memo(function BottomHud({
               className="font-inter text-xs"
               style={{ color: colors.textMuted }}
             >
-              {isPaused
-                ? "Telemetry Paused"
-                : plate
-                  ? `Plate ${plate}`
-                  : "Live Telemetry Active"}
+              {isPaused ? "Paused" : plate ? plate : "Active"}
             </Text>
           </View>
         </View>
@@ -150,8 +144,7 @@ export const BottomHud = React.memo(function BottomHud({
         <MetricPill
           icon={<Zap size={16} color={colors.warning} />}
           label="Peak Shock"
-          value={`${Number(peakGForce && peakGForce > 0 ? peakGForce : gForce).toFixed(2)}G`}
-          subValue={`${Number(gForce).toFixed(2)}G · ${vibration} m/s²`}
+          value={`${Number(gForce).toFixed(2)}G`}
           variant={pillVariant}
         />
         <MetricPill

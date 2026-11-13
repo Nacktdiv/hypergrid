@@ -95,13 +95,7 @@ export const ClusterRadialCard = React.memo(function ClusterRadialCard({
               className="font-inter-bold text-sm"
               style={{ color: colors.text }}
             >
-              Cluster Severity & AI Analysis
-            </Text>
-            <Text
-              className="font-inter text-[11px]"
-              style={{ color: colors.textMuted }}
-            >
-              Concentric multi-metric telemetry evaluation
+              Hazard Summary
             </Text>
           </View>
           <View
@@ -244,7 +238,7 @@ export const ClusterRadialCard = React.memo(function ClusterRadialCard({
               className="font-inter-bold text-[9px] uppercase tracking-wider"
               style={{ color: colors.brandText }}
             >
-              AI Conf
+              Confidence
             </Text>
           </View>
         </View>
@@ -365,7 +359,7 @@ export const ClusterRadialCard = React.memo(function ClusterRadialCard({
               className="font-inter-semibold text-xs"
               style={{ color: colors.textMuted }}
             >
-              DBSCAN Cluster Area
+              Hazard Zone
             </Text>
           </View>
           <View

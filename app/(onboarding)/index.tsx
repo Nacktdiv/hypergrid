@@ -10,27 +10,23 @@ export default function Index() {
 
   let imageSource;
   let title = "Smarter Roads, Together";
-  let description =
-    "Real-time road hazard detection and spatial infrastructure mapping.";
+  let description = "Live road hazard alerts and route mapping.";
 
   switch (progress) {
     case 1:
       imageSource = require("@/assets/images/onboard/onboard-1.png");
       title = "Smarter Roads, Together";
-      description =
-        "Real-time road hazard detection and spatial infrastructure mapping.";
+      description = "Live road hazard alerts and route mapping.";
       break;
     case 2:
       imageSource = require("@/assets/images/onboard/onboard-2.png");
-      title = "Edge AI On-Device Detection";
-      description =
-        "Automated shock analysis and pothole identification powered by device sensors.";
+      title = "Road Shock Detection";
+      description = "Detect potholes using your phone sensors.";
       break;
     case 3:
       imageSource = require("@/assets/images/onboard/onboard-3.png");
       title = "Driver Early Warning";
-      description =
-        "Proactive proximity alerts for road anomalies along your driving route.";
+      description = "Get alerted to rough roads ahead on your route.";
       break;
     default:
       imageSource = require("@/assets/images/onboard/onboard-1.png");

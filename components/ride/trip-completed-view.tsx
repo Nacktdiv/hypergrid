@@ -113,7 +113,7 @@ export function TripCompletedView({
   const handleShareTrip = useCallback(async () => {
     const routeLine = data.destinationName
       ? `${data.startLocationName || "Origin"} -> ${data.destinationName}`
-      : "Free Ride Telemetry Session";
+      : "Free Ride";
     const summaryText =
       `HyperGrid Trip Completed\n` +
       `Route: ${routeLine}\n` +
@@ -179,7 +179,7 @@ export function TripCompletedView({
                 className="font-inter text-xs mt-0.5"
                 style={{ color: colors.textMuted }}
               >
-                Telemetry synchronized with HyperGrid Cloud
+                Saved to your trip history
               </Text>
             </View>
 
@@ -222,7 +222,7 @@ export function TripCompletedView({
               className="font-inter-bold text-sm"
               style={{ color: colors.text }}
             >
-              Road Quality & Dynamics
+              Trip Summary
             </Text>
             <View className="flex-row items-center gap-1.5">
               <View
@@ -233,7 +233,7 @@ export function TripCompletedView({
                 className="font-inter text-xs"
                 style={{ color: colors.textMuted }}
               >
-                3-Axis Evaluation
+                Score
               </Text>
             </View>
           </View>
@@ -539,7 +539,7 @@ export function TripCompletedView({
                 className="font-inter-bold text-xs uppercase tracking-wider"
                 style={{ color: colors.text }}
               >
-                Trip Route & Destination
+                Route
               </Text>
             </View>
 
@@ -608,7 +608,7 @@ export function TripCompletedView({
             className="font-inter-bold text-xs uppercase tracking-wider mb-2.5"
             style={{ color: colors.text }}
           >
-            System & Synchronization
+            Trip Details
           </Text>
 
           {data.vehicleName ? (
@@ -620,7 +620,7 @@ export function TripCompletedView({
                 className="font-inter text-xs"
                 style={{ color: colors.textMuted }}
               >
-                Vehicle Profile
+                Vehicle
               </Text>
               <Text
                 className="font-inter-bold text-xs"
@@ -640,17 +640,17 @@ export function TripCompletedView({
               className="font-inter text-xs"
               style={{ color: colors.textMuted }}
             >
-              Detection Pipeline
+              Detection
             </Text>
             <Text
               className="font-mono-bold text-xs"
               style={{ color: colors.brand }}
             >
               {data.detectedCount === 0
-                ? "Zero Prediction (No Anomaly)"
+                ? "No hazards"
                 : data.isTflite
-                  ? "TFLite Neural Net"
-                  : "Smart Edge AI Heuristic"}
+                  ? "On-device"
+                  : "Sensor"}
             </Text>
           </View>
 
@@ -662,7 +662,7 @@ export function TripCompletedView({
               className="font-inter text-xs"
               style={{ color: colors.textMuted }}
             >
-              Confidence Rating
+              Confidence
             </Text>
             <Text
               className="font-mono-bold text-xs"
@@ -675,7 +675,7 @@ export function TripCompletedView({
             >
               {data.detectedCount > 0
                 ? `${data.confidencePercent ?? 0}% (${data.confidenceTier ?? "HIGH"})`
-                : "0% (NONE)"}
+                : "0%"}
             </Text>
           </View>
 
@@ -684,7 +684,7 @@ export function TripCompletedView({
               className="font-inter text-xs"
               style={{ color: colors.textMuted }}
             >
-              PostGIS Server
+              Cloud Sync
             </Text>
             <View className="flex-row items-center gap-1">
               <CheckCircle2 size={13} color={colors.success} />
@@ -692,7 +692,7 @@ export function TripCompletedView({
                 className="font-inter-bold text-xs"
                 style={{ color: colors.successText }}
               >
-                Synchronized
+                Synced
               </Text>
             </View>
           </View>

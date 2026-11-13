@@ -76,13 +76,7 @@ export const MetricsSummary = React.memo(function MetricsSummary({
             className="font-inter-extrabold text-sm"
             style={{ color: colors.text }}
           >
-            Telemetry Radial Index
-          </Text>
-          <Text
-            className="font-inter text-xs mt-0.5"
-            style={{ color: colors.textMuted }}
-          >
-            Radial sensor vibration & AI model metrics
+            Trip Summary
           </Text>
         </View>
       </View>
@@ -269,7 +263,7 @@ export const MetricsSummary = React.memo(function MetricsSummary({
             className="font-inter text-[10px] mt-1"
             style={{ color: colors.textMuted }}
           >
-            Edge AI Score
+            Detection
           </Text>
         </View>
 

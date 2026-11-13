@@ -18,10 +18,10 @@ export interface VehicleSelectorProps {
   className?: string;
 }
 
-const DYNAMICS_COPY: Record<VehicleId, string> = {
-  car: "Edge AI calibrated for passenger car dynamics",
-  motor: "Edge AI calibrated for motorcycle suspension dynamics",
-  bicycle: "Edge AI calibrated for bicycle & rigid-frame dynamics",
+const VEHICLE_LABELS: Record<VehicleId, string> = {
+  car: "Passenger Car",
+  motor: "Motorcycle",
+  bicycle: "Bicycle",
 };
 
 export const VehicleSelector = React.memo(function VehicleSelector({
@@ -44,32 +44,20 @@ export const VehicleSelector = React.memo(function VehicleSelector({
         }}
       >
         <View className="flex-1 mr-3">
-          <View className="flex-row items-center gap-2">
-            <Text
-              numberOfLines={1}
-              className="font-inter-bold text-base"
-              style={{ color: colors.text }}
-            >
-              {activeProfile.name}
-            </Text>
-            <View
-              className="px-2 py-0.5 rounded-md"
-              style={{ backgroundColor: colors.brandSoft }}
-            >
-              <Text
-                className="font-mono-bold text-[10px]"
-                style={{ color: colors.brandText }}
-              >
-                {activeProfile.sensorConfig.zShockThreshold.toFixed(2)}G
-              </Text>
-            </View>
-          </View>
+          <Text
+            numberOfLines={1}
+            className="font-inter-bold text-base"
+            style={{ color: colors.text }}
+          >
+            {activeProfile.name}
+          </Text>
           <Text
             numberOfLines={1}
             className="font-inter text-xs mt-1"
             style={{ color: colors.textMuted }}
           >
-            {DYNAMICS_COPY[selected] ?? DYNAMICS_COPY.car}
+            {VEHICLE_LABELS[selected] ?? VEHICLE_LABELS.car}
+            {activeProfile.plate ? ` · ${activeProfile.plate}` : ""}
           </Text>
         </View>
 

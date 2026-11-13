@@ -231,10 +231,9 @@ export default function RideScreen() {
   // Kecepatan spidometer terkalibrasi secara dinamis sesuai profil kendaraan
   const currentSpeed = useMemo(() => {
     if (isPaused || isFinished) return 0;
-    const minSpeed = vehicleProfile.sensorConfig.minMovingSpeed ?? 2.0;
     const displayFactor = vehicleProfile.sensorConfig.speedDisplayFactor ?? 1.0;
 
-    if (gpsSpeed >= minSpeed) {
+    if (gpsSpeed >= 1.0) {
       return Math.round(gpsSpeed * displayFactor);
     }
     return 0;
@@ -548,8 +547,8 @@ export default function RideScreen() {
 
         triggerShockAlert({
           id: `shock_${now}`,
-          title: `Road Shock Detected (${dynamicVerticalG.toFixed(2)}G)`,
-          subtitle: "Analyzing road anomaly with Edge AI...",
+          title: `Road Shock (${dynamicVerticalG.toFixed(2)}G)`,
+          subtitle: "Checking road impact...",
           gForce: dynamicVerticalG,
           severity: dynamicVerticalG > 1.8 ? "danger" : "warning",
         });
@@ -582,10 +581,8 @@ export default function RideScreen() {
 
               triggerShockAlert({
                 id: `det_${Date.now()}`,
-                title: isTflite
-                  ? `TFLite: ${Math.round(res.probability * 100)}% Pothole (${dynamicVerticalG.toFixed(2)}G)`
-                  : `Pothole Detected (${confPct}% Conf · ${dynamicVerticalG.toFixed(2)}G)`,
-                subtitle: "Road defect registered & logged",
+                title: `Pothole Detected (${dynamicVerticalG.toFixed(2)}G)`,
+                subtitle: `${isTflite ? Math.round(res.probability * 100) : confPct}% confidence · Saved`,
                 gForce: dynamicVerticalG,
                 severity: dynamicVerticalG > 1.8 ? "danger" : "warning",
               });

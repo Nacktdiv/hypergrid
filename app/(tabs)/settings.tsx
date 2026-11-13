@@ -83,10 +83,10 @@ export default function SettingsScreen() {
 
   const themeCaption =
     themePreference === "system"
-      ? `Following system setting (${resolvedTheme === "dark" ? "Dark" : "Light"})`
+      ? `Auto (${resolvedTheme === "dark" ? "Dark" : "Light"})`
       : themePreference === "dark"
-      ? "Dark mode enabled"
-      : "Light mode enabled";
+      ? "Dark"
+      : "Light";
 
   return (
     <View
@@ -108,12 +108,6 @@ export default function SettingsScreen() {
             style={{ color: colors.text }}
           >
             Settings
-          </Text>
-          <Text
-            className="font-inter-medium text-sm mt-1"
-            style={{ color: colors.textMuted }}
-          >
-            Preferences & application settings
           </Text>
         </View>
 
@@ -209,12 +203,6 @@ export default function SettingsScreen() {
                 >
                   Notifications
                 </Text>
-                <Text
-                  className="font-inter text-xs mt-0.5"
-                  style={{ color: colors.textMuted }}
-                >
-                  Pothole anomaly & cloud sync alerts
-                </Text>
               </View>
             </View>
             <Switch
@@ -246,18 +234,12 @@ export default function SettingsScreen() {
                 >
                   Privacy & Security
                 </Text>
-                <Text
-                  className="font-inter text-xs mt-0.5"
-                  style={{ color: colors.textMuted }}
-                >
-                  On-device Edge AI processing & data scope
-                </Text>
               </View>
             </View>
             <ChevronRight size={18} color={colors.textMuted} />
           </TouchableOpacity>
 
-          {/* Onboarding Walkthrough */}
+          {/* App Guide */}
           <TouchableOpacity
             onPress={() => router.push("/(onboarding)")}
             activeOpacity={0.75}
@@ -276,13 +258,7 @@ export default function SettingsScreen() {
                   className="font-inter-semibold text-[15px]"
                   style={{ color: colors.text }}
                 >
-                  Onboarding Walkthrough
-                </Text>
-                <Text
-                  className="font-inter text-xs mt-0.5"
-                  style={{ color: colors.textMuted }}
-                >
-                  Review sensor mounting & detection tutorial
+                  App Guide
                 </Text>
               </View>
             </View>
@@ -308,12 +284,6 @@ export default function SettingsScreen() {
                   style={{ color: colors.text }}
                 >
                   About App
-                </Text>
-                <Text
-                  className="font-inter text-xs mt-0.5"
-                  style={{ color: colors.textMuted }}
-                >
-                  HyperGrid Road Intelligence
                 </Text>
               </View>
             </View>
@@ -374,17 +344,14 @@ export default function SettingsScreen() {
                   className="font-inter text-[13px] leading-5"
                   style={{ color: colors.textSecondary }}
                 >
-                  Raw accelerometer and gyroscope samples are processed locally on
-                  your device inside the 2.0-second sliding Edge AI window.
+                  Motion sensor data is analyzed directly on your phone.
                 </Text>
                 <Text
                   className="font-inter text-[13px] leading-5"
                   style={{ color: colors.textSecondary }}
                 >
-                  Only confirmed road anomaly coordinates, peak G-force, and
-                  vibration magnitude are uploaded when a pothole event occurs.
-                  Ride history summaries remain saved locally unless synced to
-                  your account.
+                  Only confirmed hazard locations and shock strength are
+                  uploaded when a bump or pothole is detected.
                 </Text>
               </View>
             ) : (
@@ -393,9 +360,8 @@ export default function SettingsScreen() {
                   className="font-inter text-[13px] leading-5"
                   style={{ color: colors.textSecondary }}
                 >
-                  HyperGrid combines on-device Edge AI vibration detection with
-                  PostGIS DBSCAN spatial clustering to map verified road hazards
-                  in real time.
+                  HyperGrid maps road hazards detected by your vehicle sensors
+                  while you drive.
                 </Text>
                 <View
                   className="rounded-xl p-3.5 border gap-1.5"
@@ -414,9 +380,7 @@ export default function SettingsScreen() {
                     className="font-inter text-xs"
                     style={{ color: colors.textMuted }}
                   >
-                    Active Profile: {vehicleProfile.name} (
-                    {vehicleProfile.sensorConfig.zShockThreshold.toFixed(2)}G
-                    threshold)
+                    Active Profile: {vehicleProfile.name}
                   </Text>
                 </View>
               </View>

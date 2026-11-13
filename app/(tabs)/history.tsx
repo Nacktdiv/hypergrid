@@ -224,21 +224,21 @@ export default function HistoryScreen() {
       return [
         {
           id: "rusak",
-          label: "Anomaly Points",
+          label: "Hazards",
           value: "0",
-          unit: "locations",
+          unit: "pts",
           accent: "#38BDF8",
         },
         {
           id: "confidence",
-          label: "Avg AI Confidence",
+          label: "Confidence",
           value: "0%",
-          unit: "AI",
+          unit: "Score",
           accent: colors.brand,
         },
         {
           id: "peak",
-          label: "G-Force Peak",
+          label: "Peak Shock",
           value: "0.0",
           unit: "G",
           accent: "#1D4ED8",
@@ -271,23 +271,23 @@ export default function HistoryScreen() {
     return [
       {
         id: "rusak",
-        label: "Anomaly Points",
+        label: "Hazards",
         value: String(totalAnomalies),
-        unit: "locations",
+        unit: "pts",
         accent: "#38BDF8",
       },
       {
         id: "confidence",
-        label: "Avg AI Confidence",
+        label: "Confidence",
         value: `${avgConfidence}%`,
         unit: "Score",
         accent: colors.brand,
       },
       {
         id: "peak",
-        label: "G-Force Peak",
+        label: "Peak Shock",
         value: `${maxPeak}G`,
-        unit: "Z-Peak",
+        unit: "Max",
         accent: "#1D4ED8",
       },
     ];
@@ -350,13 +350,13 @@ export default function HistoryScreen() {
 
         list.push({
           id: det.id,
-          from: `Coordinates [${det.latitude.toFixed(4)}, ${det.longitude.toFixed(4)}]`,
-          to: `Device: ${det.deviceId || "Edge Mobile"}`,
+          from: `[${det.latitude.toFixed(4)}, ${det.longitude.toFixed(4)}]`,
+          to: det.deviceId || "Mobile Sensor",
           time: timeStr,
           date: selectedDate,
           guncangan: det.zAccelPeak && det.zAccelPeak >= 1.7 ? 1 : 0,
           distance: speed,
-          note: `Model ${det.modelVersion || "v1"} • AI Confidence: ${confPct}% • Peak Gravity: ${zPeak} • Coordinates: [${det.latitude.toFixed(4)}, ${det.longitude.toFixed(4)}]`,
+          note: `Confidence ${confPct}% · Peak ${zPeak}`,
         });
       }
     }
@@ -399,7 +399,7 @@ export default function HistoryScreen() {
               className="font-inter text-xs mt-0.5"
               style={{ color: colors.textMuted }}
             >
-              Driving telemetry and detected road anomalies
+              Past trips & hazards
             </Text>
           </View>
 
@@ -535,7 +535,7 @@ export default function HistoryScreen() {
                   className="font-inter-bold text-sm"
                   style={{ color: colors.text }}
                 >
-                  Telemetry Logs
+                  Trip Logs
                 </Text>
                 <Text
                   className="font-mono-bold text-xs"

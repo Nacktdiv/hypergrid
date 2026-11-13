@@ -27,7 +27,7 @@ export const SelectedVehicleCard = React.memo(function SelectedVehicleCard() {
             className="font-inter-semibold text-[11px] uppercase tracking-wider"
             style={{ color: colors.textMuted }}
           >
-            Active Telemetry Vehicle
+            Active Vehicle
           </Text>
           <Text
             className="font-inter-bold text-lg mt-0.5"

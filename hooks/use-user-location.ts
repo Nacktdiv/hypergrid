@@ -214,8 +214,8 @@ export function useUserLocation(
       locationSubscription.current = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
-          distanceInterval: 2, // Update setiap perpindahan 2 meter
-          timeInterval: 1000, // atau setiap 1 detik
+          distanceInterval: 0, // Update berbasis waktu agar gerak pelan/indoor tetap terbaca
+          timeInterval: 1000,
         },
         (loc) => {
           const currentCoords: LatLng = {
@@ -226,60 +226,54 @@ export function useUserLocation(
 
           lastFgWatchMsRef.current = Date.now();
 
-          // ── Kecepatan dari GPS (prioritaskan Doppler OS sebelum fallback displacement) ─────────
+          // Native Doppler sering mengirim 0 saat berjalan/berlari pelan; prioritaskan hanya jika > 0.2 m/s
           const movedMeters = lastLocRef.current
             ? haversineMeters(lastLocRef.current.coords, currentCoords)
             : 0;
+          const nativeSpeedMs = loc.coords.speed;
           const hasNativeSpeed =
-            loc.coords.speed != null &&
-            Number.isFinite(loc.coords.speed) &&
-            loc.coords.speed >= 0;
+            nativeSpeedMs != null &&
+            Number.isFinite(nativeSpeedMs) &&
+            nativeSpeedMs > 0.2;
 
-          let rawKmh = hasNativeSpeed ? (loc.coords.speed as number) * 3.6 : -1;
+          let rawKmh = hasNativeSpeed ? nativeSpeedMs * 3.6 : 0;
 
-          if (!hasNativeSpeed) {
-            if (lastLocRef.current) {
-              const dt = (nowMs - lastLocRef.current.timeMs) / 1000;
-              if (dt >= 0.8 && movedMeters >= 1.2) {
-                rawKmh = (movedMeters / dt) * 3.6;
-              } else {
-                rawKmh = 0;
-              }
-            } else {
-              rawKmh = 0;
+          if (!hasNativeSpeed && lastLocRef.current) {
+            const dt = (nowMs - lastLocRef.current.timeMs) / 1000;
+            const accuracyM = loc.coords.accuracy;
+            const accuracyOk = accuracyM == null || accuracyM <= 35;
+            if (accuracyOk && dt >= 0.8 && movedMeters >= 0.8) {
+              rawKmh = (movedMeters / dt) * 3.6;
             }
           }
 
-          // Eliminasi noise drift sangat kecil saat kendaraan benar-benar stasioner (< 1.0 km/h)
-          if (rawKmh < 1.0) {
+          if (rawKmh < 0.8) {
             rawKmh = 0;
           }
 
-          // ── Sanity check: reject lonjakan glitch GPS ───────────────────────
+          // Reject lonjakan glitch GPS tidak masuk akal
           const maxGlitch = options?.maxSpeedGlitch ?? 200;
           if (rawKmh > maxGlitch) {
             rawKmh = emaSpeedRef.current;
           }
 
-          // ── EMA low-pass filter kecepatan (decay halus ke 0 jika diam) ────
+          // EMA low-pass filter kecepatan (decay halus ke 0 jika diam)
           if (rawKmh === 0) {
             emaSpeedRef.current =
-              emaSpeedRef.current < 0.8 ? 0 : emaSpeedRef.current * 0.45;
+              emaSpeedRef.current < 0.7 ? 0 : emaSpeedRef.current * 0.45;
           } else {
             const alpha = options?.speedEmaAlpha ?? SPEED_EMA_ALPHA;
             emaSpeedRef.current =
               alpha * rawKmh + (1 - alpha) * emaSpeedRef.current;
           }
 
-          // Deadband: hanya kunci ke 0 murni bila < 0.8 km/h
-          const filteredKmh = emaSpeedRef.current < 0.8 ? 0 : emaSpeedRef.current;
+          const filteredKmh = emaSpeedRef.current < 0.7 ? 0 : emaSpeedRef.current;
 
-          // Update lastLocRef hanya bila ada native Doppler speed, perpindahan >= 1.2m, atau interval >= 3 detik
           if (
             hasNativeSpeed ||
-            movedMeters >= 1.2 ||
+            movedMeters >= 0.8 ||
             !lastLocRef.current ||
-            nowMs - lastLocRef.current.timeMs >= 3000
+            nowMs - lastLocRef.current.timeMs >= 2500
           ) {
             lastLocRef.current = { coords: currentCoords, timeMs: nowMs };
           }

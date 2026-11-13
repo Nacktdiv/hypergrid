@@ -161,7 +161,7 @@ export default function Index() {
             className="text-center font-inter text-sm px-4"
             style={{ color: colors.textMuted }}
           >
-            AI Road Damage Detection & Spatial Mapping Platform
+            Road hazard map
           </Text>
         </View>
 

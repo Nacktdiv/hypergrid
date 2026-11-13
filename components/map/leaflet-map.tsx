@@ -7,7 +7,7 @@ import type { AreaSummary, DamagePoint, MapData } from "./map-data";
 
 const TILE_URLS = {
   light: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-  dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  dark: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
 } as const;
 
 export type LeafletMapProps = {
@@ -77,7 +77,7 @@ export const LeafletMap = React.memo(function LeafletMap({
 
     return `
 <!DOCTYPE html>
-<html>
+<html lang="en"${initialTheme === "dark" ? ' class="map-dark"' : ""}>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
@@ -86,6 +86,9 @@ export const LeafletMap = React.memo(function LeafletMap({
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #map { height: 100%; width: 100%; background: ${initialBg}; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    html.map-dark .leaflet-tile-pane {
+      filter: invert(93%) hue-rotate(180deg) brightness(95%) contrast(92%) saturate(75%);
+    }
     .damage-marker {
       display: flex;
       align-items: center;
@@ -199,14 +202,7 @@ export const LeafletMap = React.memo(function LeafletMap({
       width: 18px;
       height: 18px;
       border-radius: 50%;
-      opacity: 0.3;
-      transform: scale(0.9);
-      animation: subPointPulse 2.4s ease-out infinite;
-    }
-    @keyframes subPointPulse {
-      0% { transform: scale(0.8); opacity: 0.45; }
-      50% { transform: scale(1.3); opacity: 0.12; }
-      100% { transform: scale(0.8); opacity: 0.45; }
+      opacity: 0.28;
     }
     .sub-detection-dot {
       width: 8px;
@@ -255,14 +251,13 @@ export const LeafletMap = React.memo(function LeafletMap({
         attributionControl: false
       });
 
-      // Tile Layer (Light: OpenStreetMap / Dark: CartoDB DarkMatter)
+      // OpenStreetMap tile layer (inverted via .map-dark CSS filter in dark mode)
       window.HYPERGRID_TILES = {
         light: '${TILE_URLS.light}',
         dark: '${TILE_URLS.dark}'
       };
       window.baseTileLayer = L.tileLayer(window.HYPERGRID_TILES['${initialTheme}'], {
-        maxZoom: 19,
-        subdomains: ['a', 'b', 'c']
+        maxZoom: 19
       }).addTo(window.map);
 
       // Route Polyline
@@ -1345,12 +1340,16 @@ export const LeafletMap = React.memo(function LeafletMap({
       window.setMapTheme = function(theme) {
         var nextTheme = theme === 'dark' ? 'dark' : 'light';
         var bg = nextTheme === 'dark' ? '#090B10' : '#F4F6F9';
+        document.documentElement.classList.toggle('map-dark', nextTheme === 'dark');
         document.documentElement.style.backgroundColor = bg;
         document.body.style.backgroundColor = bg;
         var mapEl = document.getElementById('map');
         if (mapEl) mapEl.style.backgroundColor = bg;
         if (window.baseTileLayer && window.HYPERGRID_TILES && window.HYPERGRID_TILES[nextTheme]) {
-          window.baseTileLayer.setUrl(window.HYPERGRID_TILES[nextTheme]);
+          var nextUrl = window.HYPERGRID_TILES[nextTheme];
+          if (window.baseTileLayer._url !== nextUrl) {
+            window.baseTileLayer.setUrl(nextUrl);
+          }
         }
       };
 

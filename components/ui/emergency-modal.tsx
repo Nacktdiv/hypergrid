@@ -238,7 +238,7 @@ export function EmergencyModal({
                   className="font-inter text-xs mt-0.5"
                   style={{ color: colors.textMuted }}
                 >
-                  National Hotlines & Instant Location Sharing
+                  Hotlines & Live Location
                 </Text>
               </View>
             </View>

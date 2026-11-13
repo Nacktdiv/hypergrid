@@ -348,8 +348,8 @@ export const MainMap = React.memo(function MainMap({
                 style={{ color: colors.textSecondary }}
               >
                 {clusters.length > 0
-                  ? `DBSCAN: ${filteredClusters.length} Road Hazard Clusters`
-                  : "No Clusters Nearby"}
+                  ? `${filteredClusters.length} Hazards`
+                  : "No Hazards"}
               </Text>
             </View>
           </View>
@@ -849,7 +849,7 @@ export const MainMap = React.memo(function MainMap({
                 >
                   <ZoomIn size={18} color="#ffffff" />
                   <Text className="font-inter-bold text-sm text-white">
-                    Zoom & Inspect on Map
+                    Focus Map
                   </Text>
                 </Touchable>
               </View>

@@ -256,19 +256,19 @@ export default function ProfileScreen() {
             >
               <ProfileMenuRow
                 icon={<CarFront size={18} color={colors.brand} />}
-                title="Vehicle Calibration"
-                subtitle={`${vehicleProfile.name} (${vehicleProfile.sensorConfig.zShockThreshold.toFixed(2)}G)`}
+                title="Vehicle"
+                subtitle={vehicleProfile.name}
                 onPress={() => setActiveModal("calibration")}
                 showDivider
               />
 
               <ProfileMenuRow
                 icon={<CloudUpload size={18} color={colors.brand} />}
-                title="Cloud Telemetry Sync"
+                title="Cloud Sync"
                 subtitle={
                   pendingQueueCount > 0
-                    ? `${pendingQueueCount} detections queued`
-                    : `${syncedTripsCount} trips synchronized`
+                    ? `${pendingQueueCount} pending`
+                    : `${syncedTripsCount} synced`
                 }
                 onPress={() => {
                   refreshSyncMetrics();
@@ -295,12 +295,6 @@ export default function ProfileScreen() {
                     >
                       Notifications
                     </Text>
-                    <Text
-                      className="font-inter text-xs mt-0.5"
-                      style={{ color: colors.textMuted }}
-                    >
-                      Hazard & telemetry alerts
-                    </Text>
                   </View>
                 </View>
 
@@ -317,14 +311,13 @@ export default function ProfileScreen() {
 
               <ProfileMenuRow
                 icon={<PhoneCall size={18} color={colors.danger} />}
-                title="Emergency Hotline"
-                subtitle="Quick call & live GPS location share"
+                title="Emergency SOS"
                 onPress={() => setIsEmergencyVisible(true)}
                 showDivider={false}
               />
             </View>
 
-            {/* Grouped Card 2: Edge AI & Documentation */}
+            {/* Grouped Card 2: App Info */}
             <View
               className="rounded-[20px] border overflow-hidden"
               style={{
@@ -334,22 +327,19 @@ export default function ProfileScreen() {
             >
               <ProfileMenuRow
                 icon={<Cpu size={18} color={colors.brand} />}
-                title="Edge AI Guide"
-                subtitle="How 3-axis detection & clustering work"
+                title="How It Works"
                 onPress={() => setActiveModal("guide")}
                 showDivider
               />
               <ProfileMenuRow
                 icon={<ShieldCheck size={18} color={colors.brand} />}
                 title="Privacy Policy"
-                subtitle="Local processing & spatial upload scope"
                 onPress={() => setActiveModal("privacy")}
                 showDivider
               />
               <ProfileMenuRow
                 icon={<FileText size={18} color={colors.brand} />}
                 title="Terms & Conditions"
-                subtitle="Driver safety & mounting terms"
                 onPress={() => setActiveModal("terms")}
                 showDivider={false}
               />
@@ -519,16 +509,16 @@ export default function ProfileScreen() {
                 style={{ color: colors.text }}
               >
                 {activeModal === "calibration"
-                  ? "Vehicle Calibration"
+                  ? "Vehicle"
                   : activeModal === "sync"
-                    ? "Cloud Telemetry Sync"
+                    ? "Cloud Sync"
                     : activeModal === "guide"
-                      ? "Edge AI Guide"
+                      ? "How It Works"
                       : activeModal === "privacy"
                         ? "Privacy Policy"
                         : activeModal === "terms"
                           ? "Terms & Conditions"
-                          : "Quick Actions"}
+                          : "Menu"}
               </Text>
               <TouchableOpacity
                 onPress={() => setActiveModal(null)}
@@ -663,7 +653,7 @@ export default function ProfileScreen() {
                     className="font-inter-bold text-xs"
                     style={{ color: colors.brandText }}
                   >
-                    Sync Offline Queue Now
+                    Sync Now
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -673,23 +663,19 @@ export default function ProfileScreen() {
                   className="font-inter text-[13px] leading-5"
                   style={{ color: colors.textSecondary }}
                 >
-                  1. Mount your phone securely inside the cabin or handlebar
-                  mount before starting Drive Mode.
+                  1. Mount your phone securely before starting a ride.
                 </Text>
                 <Text
                   className="font-inter text-[13px] leading-5"
                   style={{ color: colors.textSecondary }}
                 >
-                  2. A 2.0-second 3-axis accelerometer and gyroscope sliding
-                  window evaluates sharp Z-axis impacts when moving above
-                  vehicle speed gate.
+                  2. Motion sensors watch for sharp bumps while moving.
                 </Text>
                 <Text
                   className="font-inter text-[13px] leading-5"
                   style={{ color: colors.textSecondary }}
                 >
-                  3. Confirmed anomalies sync to HyperGrid PostGIS and aggregate
-                  with DBSCAN into corridor clusters along roads.
+                  3. Confirmed hazards appear on the road map for other drivers.
                 </Text>
               </View>
             ) : activeModal === "privacy" ? (
@@ -698,9 +684,8 @@ export default function ProfileScreen() {
                   className="font-inter text-[13px] leading-5"
                   style={{ color: colors.textSecondary }}
                 >
-                  All sensor telemetry windows are inferred locally on-device.
-                  Only anomaly coordinates, speed, vehicle calibration class,
-                  and G-force peak metadata are transmitted on confirmed events.
+                  Sensor readings stay on your device. Only confirmed hazard
+                  locations, speed, vehicle type, and shock strength are shared.
                 </Text>
               </View>
             ) : activeModal === "terms" ? (
@@ -709,9 +694,8 @@ export default function ProfileScreen() {
                   className="font-inter text-[13px] leading-5"
                   style={{ color: colors.textSecondary }}
                 >
-                  HyperGrid provides crowdsourced road hazard awareness and
-                  does not replace driver attentiveness. Always mount your
-                  device safely and obey local traffic laws.
+                  HyperGrid provides road hazard alerts to assist drivers. Keep
+                  your eyes on the road and mount your phone safely.
                 </Text>
               </View>
             ) : (
@@ -733,7 +717,7 @@ export default function ProfileScreen() {
                     className="font-inter-semibold text-sm flex-1"
                     style={{ color: colors.text }}
                   >
-                    Open App Settings & Theme
+                    App Settings
                   </Text>
                   <ChevronRight size={16} color={colors.textMuted} />
                 </TouchableOpacity>
@@ -755,7 +739,7 @@ export default function ProfileScreen() {
                     className="font-inter-semibold text-sm flex-1"
                     style={{ color: colors.text }}
                   >
-                    Edit Profile Information
+                    Edit Profile
                   </Text>
                   <ChevronRight size={16} color={colors.textMuted} />
                 </TouchableOpacity>
@@ -777,7 +761,7 @@ export default function ProfileScreen() {
                     className="font-inter-semibold text-sm flex-1"
                     style={{ color: colors.text }}
                   >
-                    Inspect Telemetry Sync Status
+                    Sync Status
                   </Text>
                   <ChevronRight size={16} color={colors.textMuted} />
                 </TouchableOpacity>
