@@ -3,6 +3,7 @@ import { View } from "react-native";
 
 import { LeafletMap } from "@/components/map/leaflet-map";
 import type { DamagePoint, LatLng, MapData } from "@/components/map/map-data";
+import { useOptionalTheme } from "@/contexts/theme-context";
 
 export interface RouteMapPreviewProps {
   routeCoordinates?: LatLng[];
@@ -10,20 +11,21 @@ export interface RouteMapPreviewProps {
 }
 
 /**
- * Route Map Preview — peta ringkas riwayat perjalanan (Leaflet OpenStreetMap).
- * Menggunakan data rute perjalanan dan titik kerusakan nyata dari server.
+ * Route Map Preview — compact route map for trip history.
  */
-export function RouteMapPreview({
+export const RouteMapPreview = React.memo(function RouteMapPreview({
   routeCoordinates = [],
   damagePoints = [],
 }: RouteMapPreviewProps) {
+  const { colors } = useOptionalTheme();
+
   const mapData: MapData = useMemo(() => {
     const centerPoint: LatLng =
       routeCoordinates.length > 0
         ? routeCoordinates[0]
         : damagePoints.length > 0
-        ? damagePoints[0].position
-        : { latitude: -6.2088, longitude: 106.8456 };
+          ? damagePoints[0].position
+          : { latitude: -6.2088, longitude: 106.8456 };
 
     return {
       camera: {
@@ -35,15 +37,21 @@ export function RouteMapPreview({
         id: "history-route",
         coordinates: routeCoordinates,
       },
-      damagePoints: damagePoints,
+      damagePoints,
       userLocation: centerPoint,
       vehiclePosition: centerPoint,
     };
   }, [routeCoordinates, damagePoints]);
 
   return (
-    <View className="h-56 overflow-hidden rounded-2xl border border-gray-300 bg-white shadow-sm">
+    <View
+      className="h-56 overflow-hidden rounded-3xl border shadow-sm"
+      style={{
+        borderColor: colors.border,
+        backgroundColor: colors.card,
+      }}
+    >
       <LeafletMap data={mapData} interactive={true} />
     </View>
   );
-}
+});

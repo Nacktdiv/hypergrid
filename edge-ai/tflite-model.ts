@@ -43,13 +43,24 @@ export function useTfliteModel() {
       );
     }
 
-    // Jalankan inferensi — input mengharapkan ArrayBuffer[]
-    const inputBuffer = features.buffer as ArrayBuffer;
+    // Jalankan inferensi — input mengharapkan ArrayBuffer[] berukuran tepat 47 * 4 byte
+    const inputBuffer = features.buffer.slice(
+      features.byteOffset,
+      features.byteOffset + features.byteLength
+    ) as ArrayBuffer;
     const outputs = await model.model.run([inputBuffer]);
 
-    // Parse output buffer float32
-    const outputBuffer = outputs[0];
-    const outputFloats = new Float32Array(outputBuffer);
+    // Parse output buffer float32 (dukung ArrayBuffer maupun TypedArray view)
+    const rawOutput = outputs?.[0] as ArrayBuffer | Float32Array | undefined;
+    const outputFloats = !rawOutput
+      ? new Float32Array(0)
+      : ArrayBuffer.isView(rawOutput)
+      ? new Float32Array(
+          rawOutput.buffer,
+          rawOutput.byteOffset,
+          Math.floor(rawOutput.byteLength / 4)
+        )
+      : new Float32Array(rawOutput);
     const probability = outputFloats[0] ?? 0;
 
     const isPothole = probability >= EDGE_AI_CONFIG.optimalThreshold;

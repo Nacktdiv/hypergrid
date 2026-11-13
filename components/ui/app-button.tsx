@@ -6,7 +6,7 @@ import {
   type GestureResponderEvent,
 } from "react-native";
 
-import { TOKENS } from "@/lib/theme/tokens";
+import { useOptionalTheme } from "@/contexts/theme-context";
 import { cn } from "@/lib/utils";
 import { Touchable } from "./touchable";
 
@@ -45,6 +45,7 @@ export function AppButton({
   className,
   accessibilityLabel,
 }: AppButtonProps) {
+  const { colors } = useOptionalTheme();
   const isCircle = variant === "circle";
 
   const sizeClasses = {
@@ -55,38 +56,42 @@ export function AppButton({
 
   const variantContainerClasses = {
     primary: "bg-brand border-0",
-    secondary: "bg-slate-100 border border-slate-200/60",
-    outline: "bg-white border border-slate-200",
-    destructive: "bg-rose-50 border border-rose-200",
-    circle: "h-12 w-12 rounded-sm bg-white border border-slate-200/80 shadow-sm items-center justify-center p-0",
-    quickAction: "h-10 px-3.5 rounded-sm bg-slate-100 border border-slate-200/60 flex-row items-center justify-center gap-1.5",
+    secondary:
+      "bg-slate-100 dark:bg-[#1E2430] border border-slate-200/70 dark:border-[#2B3344]",
+    outline:
+      "bg-white dark:bg-[#151922] border border-slate-200 dark:border-[#232936]",
+    destructive:
+      "bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-500/30",
+    circle:
+      "h-12 w-12 rounded-full bg-white dark:bg-[#151922] border border-slate-200/80 dark:border-[#232936] shadow-sm items-center justify-center p-0",
+    quickAction:
+      "h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#1E2430] border border-slate-200/70 dark:border-[#2B3344] flex-row items-center justify-center gap-1.5",
   }[variant];
 
   const variantTextClasses = {
-    primary: "text-white font-bold text-[14px]",
-    secondary: "text-slate-800 font-quicksand-bold text-sm",
-    outline: "text-slate-700 font-quicksand-bold text-sm",
-    destructive: "text-rose-600 font-quicksand-bold text-sm",
+    primary: "text-white font-inter-bold text-[14px]",
+    secondary: "text-slate-800 dark:text-slate-100 font-inter-bold text-sm",
+    outline: "text-slate-700 dark:text-slate-200 font-inter-bold text-sm",
+    destructive: "text-rose-600 dark:text-rose-400 font-inter-bold text-sm",
     circle: "",
-    quickAction: "text-slate-700 font-quicksand-semibold text-xs",
+    quickAction: "text-slate-700 dark:text-slate-200 font-inter-semibold text-xs",
   }[variant];
 
   const content = (
     <View
       className={cn(
         "flex-row items-center justify-center gap-2.5",
-        isCircle ? "rounded-sm" : "rounded-xl",
+        isCircle ? "rounded-full" : "rounded-2xl",
         !isCircle && variant !== "quickAction" && sizeClasses,
         variantContainerClasses,
         disabled && "opacity-50",
         className
       )}
-      // style={variant === "primary" ? TOKENS.shadows.glow : undefined}
     >
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={variant === "primary" ? "#FFFFFF" : TOKENS.colors.brand.DEFAULT}
+          color={variant === "primary" ? "#FFFFFF" : colors.brand}
         />
       ) : (
         <>

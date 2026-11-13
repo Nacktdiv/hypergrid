@@ -1,6 +1,8 @@
 import { Image } from "expo-image";
+import React from "react";
 import { Pressable, Text, View } from "react-native";
 
+import { useOptionalTheme } from "@/contexts/theme-context";
 import {
   VEHICLE_PROFILES,
   type VehicleId,
@@ -16,119 +18,115 @@ export interface VehicleSelectorProps {
   className?: string;
 }
 
-export function VehicleSelector({
+const DYNAMICS_COPY: Record<VehicleId, string> = {
+  car: "Edge AI calibrated for passenger car dynamics",
+  motor: "Edge AI calibrated for motorcycle suspension dynamics",
+  bicycle: "Edge AI calibrated for bicycle & rigid-frame dynamics",
+};
+
+export const VehicleSelector = React.memo(function VehicleSelector({
   selected,
   onSelect,
   className,
 }: VehicleSelectorProps) {
+  const { colors } = useOptionalTheme();
   const activeProfile: VehicleProfile =
     VEHICLE_PROFILES[selected] ?? VEHICLE_PROFILES.car;
 
   return (
-    <View className={cn("gap-6", className)}>
-      {/* VEHICLE INFO ROW */}
-      <View className="flex-row items-center justify-between">
+    <View className={cn("gap-3.5", className)}>
+      {/* CALIBRATION SUMMARY CARD */}
+      <View
+        className="flex-row items-center justify-between rounded-2xl px-4 py-3 border"
+        style={{
+          backgroundColor: colors.cardMuted,
+          borderColor: colors.border,
+        }}
+      >
         <View className="flex-1 mr-3">
-          <Text className="text-xs text-muted-foreground">
-            {activeProfile.standardCategory}
-          </Text>
+          <View className="flex-row items-center gap-2">
+            <Text
+              numberOfLines={1}
+              className="font-inter-bold text-base"
+              style={{ color: colors.text }}
+            >
+              {activeProfile.name}
+            </Text>
+            <View
+              className="px-2 py-0.5 rounded-md"
+              style={{ backgroundColor: colors.brandSoft }}
+            >
+              <Text
+                className="font-mono-bold text-[10px]"
+                style={{ color: colors.brandText }}
+              >
+                {activeProfile.sensorConfig.zShockThreshold.toFixed(2)}G
+              </Text>
+            </View>
+          </View>
           <Text
             numberOfLines={1}
-            className="font-chivo-bold text-xl text-brand"
+            className="font-inter text-xs mt-1"
+            style={{ color: colors.textMuted }}
           >
-            {activeProfile.name}
+            {DYNAMICS_COPY[selected] ?? DYNAMICS_COPY.car}
           </Text>
-          {/* <Text className="font-quicksand text-xs text-slate-500 mt-0.5">
-            Plate: {activeProfile.plate}
-          </Text> */}
         </View>
 
-        <View className="h-14 w-20 items-center justify-center">
+        <View className="h-12 w-16 items-center justify-center">
           <Image
             source={activeProfile.image}
             style={{ width: "100%", height: "100%" }}
             contentFit="contain"
-            transition={200}
+            transition={150}
           />
         </View>
       </View>
 
-      {/* SPEC METRIC PILLS (CLEAN SANS TYPOGRAPHY, SYNCHRONIZED BRAND COLOR) */}
-      {/* <View className="flex-row items-center gap-2">
-        <View className="flex-1 flex-row items-center gap-2 rounded-xl bg-slate-100/80 px-3 py-2 border border-slate-200/60">
-          <Zap size={14} color={TOKENS.colors.brand.DEFAULT} />
-          <View>
-            <Text className="font-quicksand text-[11px] text-slate-500">
-              Shock Thresh
-            </Text>
-            <Text className="font-quicksand-bold text-xs text-slate-900">
-              {activeProfile.sensorConfig.zShockThreshold}G
-            </Text>
-          </View>
-        </View>
-
-        <View className="flex-1 flex-row items-center gap-2 rounded-xl bg-slate-100/80 px-3 py-2 border border-slate-200/60">
-          <Activity size={14} color={TOKENS.colors.brand.DEFAULT} />
-          <View>
-            <Text className="font-quicksand text-[11px] text-slate-500">
-              Speed Gate
-            </Text>
-            <Text className="font-quicksand-bold text-xs text-slate-900">
-              &gt; {activeProfile.sensorConfig.minMovingSpeed} km/h
-            </Text>
-          </View>
-        </View>
-      </View> */}
-
-      {/* VEHICLE SWITCHER PILLS */}
-      <View className="flex-row items-center justify-between gap-2 mt-1">
+      {/* VEHICLE SWITCHER TILES */}
+      <View className="flex-row items-center justify-between gap-2.5">
         {VEHICLE_OPTIONS.map((option) => {
           const isActive = selected === option.id;
           return (
             <Pressable
               key={option.id}
-              className="flex-1 active:opacity-80 active:scale-95"
+              className="flex-1 active:opacity-85"
               onPress={() => onSelect(option.id)}
               accessibilityRole="radio"
               accessibilityState={{ selected: isActive }}
               accessibilityLabel={`Select vehicle ${option.label}`}
             >
               <View
-                className={cn(
-                  "overflow-hidden rounded-xl border transition-colors",
-                  isActive
-                    ? "border-brand bg-brand/10"
-                    : "border-border bg-card",
-                )}
+                className="overflow-hidden rounded-2xl border items-center pt-3 pb-2 px-2"
+                style={{
+                  backgroundColor: isActive ? colors.brandSoft : colors.cardMuted,
+                  borderColor: isActive ? colors.brand : colors.border,
+                }}
               >
-                {/* Area Gambar / Ikon */}
-                <View className="items-center justify-center py-4">
-                  <Image
-                    source={option.image}
-                    style={{ width: 52, height: 48 }}
-                    contentFit="contain"
-                  />
-                </View>
+                <Image
+                  source={option.image}
+                  style={{ width: 46, height: 38 }}
+                  contentFit="contain"
+                />
 
-                {/* Footer Label */}
-                <View
-                  className={cn(
-                    "items-center justify-center border-t py-1.5 px-2",
-                    isActive
-                      ? "border-brand bg-brand"
-                      : "border-border bg-muted/30",
-                  )}
+                <Text
+                  className="font-inter-bold text-xs mt-2"
+                  style={{
+                    color: isActive ? colors.brandText : colors.textSecondary,
+                  }}
+                  numberOfLines={1}
                 >
-                  <Text
-                    className={cn(
-                      "text-xs font-medium",
-                      isActive ? "text-brand-light" : "text-foreground",
-                    )}
-                    numberOfLines={1}
-                  >
-                    {option.label}
-                  </Text>
-                </View>
+                  {option.label}
+                </Text>
+
+                {/* Active Bottom Indicator Pill */}
+                <View
+                  className="h-1 rounded-full mt-2"
+                  style={{
+                    width: isActive ? 28 : 0,
+                    backgroundColor: isActive ? colors.brand : "transparent",
+                  }}
+                />
               </View>
             </Pressable>
           );
@@ -136,4 +134,4 @@ export function VehicleSelector({
       </View>
     </View>
   );
-}
+});

@@ -1,7 +1,9 @@
-import { SlideCommit } from "@/components/ui/slide-commit";
-import type { PlannedRoute } from "@/services/api/routing.service";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+
+import { SlideCommit } from "@/components/ui/slide-commit";
+import { useOptionalTheme } from "@/contexts/theme-context";
+import type { PlannedRoute } from "@/services/api/routing.service";
 
 export interface PlayButtonProps {
   activeRoute?: PlannedRoute | null;
@@ -10,14 +12,14 @@ export interface PlayButtonProps {
 
 export function PlayButton({ activeRoute, onStartRide }: PlayButtonProps) {
   const router = useRouter();
+  const { colors } = useOptionalTheme();
   const [sliderKey, setSliderKey] = useState(0);
 
-  const handleConfirm = async () => {
-    // Memberikan jeda singkat 200ms untuk feedback getaran & sensor sync
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  };
+  const handleConfirm = useCallback(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 160));
+  }, []);
 
-  const handleDone = () => {
+  const handleDone = useCallback(() => {
     if (onStartRide) {
       onStartRide();
     } else if (activeRoute) {
@@ -36,11 +38,10 @@ export function PlayButton({ activeRoute, onStartRide }: PlayButtonProps) {
       router.push("/ride");
     }
 
-    // Reset key agar saat kembali dari ride slider siap digunakan kembali
     setTimeout(() => {
       setSliderKey((prev) => prev + 1);
     }, 600);
-  };
+  }, [activeRoute, onStartRide, router]);
 
   return (
     <SlideCommit
@@ -54,8 +55,8 @@ export function PlayButton({ activeRoute, onStartRide }: PlayButtonProps) {
       errorLabel="Cannot start ride"
       onConfirm={handleConfirm}
       onDone={handleDone}
-      trackColor="#1DA1F2"
-      handleColor="#FFFFFF"
+      trackColor={colors.brand}
+      handleColor={colors.brand}
       successColor="#10B981"
       height={54}
       radius={27}

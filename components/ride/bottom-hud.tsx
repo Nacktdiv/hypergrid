@@ -14,7 +14,7 @@ import { AppButton } from "@/components/ui/app-button";
 import { AppCard } from "@/components/ui/app-card";
 import { MetricPill } from "@/components/ui/metric-pill";
 import { Touchable } from "@/components/ui/touchable";
-import { TOKENS } from "@/lib/theme/tokens";
+import { useOptionalTheme } from "@/contexts/theme-context";
 
 export interface ShockAlert {
   id?: string;
@@ -31,6 +31,7 @@ export interface BottomHudProps {
   vibration?: number | string;
   shockLevel?: number;
   gForce?: number;
+  peakGForce?: number;
   anomalyCount?: number;
   elapsedSeconds?: number;
   isPaused?: boolean;
@@ -48,8 +49,8 @@ export const BottomHud = React.memo(function BottomHud({
   plate,
   speed = 0,
   vibration = 0,
-  shockLevel = 15,
   gForce = 1.0,
+  peakGForce,
   anomalyCount = 0,
   elapsedSeconds = 0,
   isPaused = false,
@@ -58,41 +59,81 @@ export const BottomHud = React.memo(function BottomHud({
   shockAlert,
   onDismissShockAlert,
 }: BottomHudProps) {
-  // Format MM:SS for ride timer
+  const { colors, isDark } = useOptionalTheme();
+
   const minutes = Math.floor(elapsedSeconds / 60);
   const seconds = elapsedSeconds % 60;
   const timeFormatted = `${String(minutes).padStart(2, "0")}:${String(
     seconds
   ).padStart(2, "0")}`;
 
+  const isDangerAlert = shockAlert?.severity === "danger";
+  const pillVariant = isDark ? "dark" : "light";
+
   return (
     <AppCard
       variant="sheet"
-      className="pb-6 pt-3 px-4 gap-3 bg-white shadow-2xl"
+      className="pb-6 pt-3 px-4 gap-3 shadow-2xl"
+      style={{
+        backgroundColor: colors.sheet,
+        borderTopColor: colors.border,
+      }}
     >
-      {/* Handle bar */}
-      <View className="w-10 h-1 bg-slate-300 rounded-full self-center mb-1" />
+      <View
+        className="w-10 h-1 rounded-full self-center mb-0.5"
+        style={{ backgroundColor: isDark ? colors.borderStrong : "#CBD5E1" }}
+      />
 
       {/* 1. TRIP SUMMARY & LIVE SPEED HEADER */}
-      <View className="flex-row items-center justify-between pb-2 border-b border-slate-100">
+      <View
+        className="flex-row items-center justify-between pb-2.5 border-b"
+        style={{ borderBottomColor: colors.border }}
+      >
         <View className="flex-1 mr-2">
-          <Text className="font-quicksand-bold text-base text-slate-900" numberOfLines={1}>
+          <Text
+            className="font-inter-bold text-base"
+            style={{ color: colors.text }}
+            numberOfLines={1}
+          >
             {vehicleName}
           </Text>
           <View className="flex-row items-center gap-1.5 mt-0.5">
-            <View className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <Text className="font-quicksand text-xs text-slate-500">
-              {plate ? `Plate ${plate}` : "Live Telemetry Active"}
+            <View
+              className="h-1.5 w-1.5 rounded-full"
+              style={{
+                backgroundColor: isPaused ? colors.warning : colors.success,
+              }}
+            />
+            <Text
+              className="font-inter text-xs"
+              style={{ color: colors.textMuted }}
+            >
+              {isPaused
+                ? "Telemetry Paused"
+                : plate
+                  ? `Plate ${plate}`
+                  : "Live Telemetry Active"}
             </Text>
           </View>
         </View>
 
-        {/* Live Speed Badge */}
-        <View className="flex-row items-baseline gap-1 px-3 py-1.5 rounded-2xl bg-sky-50 border border-sky-100">
-          <Text className="font-chivo-bold text-2xl text-brand">
+        <View
+          className="flex-row items-baseline gap-1 px-3.5 py-1.5 rounded-2xl border"
+          style={{
+            backgroundColor: colors.brandSoft,
+            borderColor: colors.brandBorder,
+          }}
+        >
+          <Text
+            className="font-inter-extrabold text-2xl"
+            style={{ color: colors.brand }}
+          >
             {speed}
           </Text>
-          <Text className="font-quicksand-bold text-xs text-sky-700">
+          <Text
+            className="font-inter-bold text-xs"
+            style={{ color: colors.brandText }}
+          >
             km/h
           </Text>
         </View>
@@ -101,61 +142,67 @@ export const BottomHud = React.memo(function BottomHud({
       {/* 2. THREE METRIC PILLS */}
       <View className="flex-row items-center justify-between gap-2">
         <MetricPill
-          icon={<Clock size={16} color={TOKENS.colors.brand.DEFAULT} />}
+          icon={<Clock size={16} color={colors.brand} />}
           label="Ride Time"
           value={timeFormatted}
-          variant="light"
+          variant={pillVariant}
         />
         <MetricPill
-          icon={<Zap size={16} color={TOKENS.colors.status.warning} />}
+          icon={<Zap size={16} color={colors.warning} />}
           label="Peak Shock"
-          value={`${Number(gForce).toFixed(2)}G`}
-          variant="light"
+          value={`${Number(peakGForce && peakGForce > 0 ? peakGForce : gForce).toFixed(2)}G`}
+          subValue={`${Number(gForce).toFixed(2)}G · ${vibration} m/s²`}
+          variant={pillVariant}
         />
         <MetricPill
-          icon={<ShieldAlert size={16} color={TOKENS.colors.status.danger} />}
+          icon={<ShieldAlert size={16} color={colors.danger} />}
           label="Anomalies"
           value={`${anomalyCount} Pts`}
-          variant="light"
+          variant={pillVariant}
         />
       </View>
 
       {/* 3. SHOCK / ANOMALY NOTIFICATION CARD (DISMISSIBLE) */}
       {shockAlert ? (
         <View
-          className={`flex-row items-center justify-between p-3 rounded-2xl border ${
-            shockAlert.severity === "danger"
-              ? "bg-rose-50 border-rose-200"
-              : "bg-amber-50 border-amber-200"
-          }`}
+          className="flex-row items-center justify-between p-3 rounded-2xl border"
+          style={{
+            backgroundColor: isDangerAlert
+              ? colors.dangerSoft
+              : colors.warningSoft,
+            borderColor: isDangerAlert
+              ? isDark
+                ? "rgba(239,68,68,0.35)"
+                : "#FECDD3"
+              : isDark
+                ? "rgba(245,158,11,0.35)"
+                : "#FDE68A",
+          }}
         >
           <View className="flex-row items-center gap-2.5 flex-1 pr-2">
             <View
-              className={`w-8 h-8 rounded-full items-center justify-center ${
-                shockAlert.severity === "danger"
-                  ? "bg-rose-500"
-                  : "bg-amber-500"
-              }`}
+              className="w-8 h-8 rounded-full items-center justify-center"
+              style={{
+                backgroundColor: isDangerAlert
+                  ? colors.danger
+                  : colors.warning,
+              }}
             >
               <Zap size={16} color="#FFFFFF" />
             </View>
             <View className="flex-1">
               <Text
-                className={`font-quicksand-bold text-xs ${
-                  shockAlert.severity === "danger"
-                    ? "text-rose-950"
-                    : "text-amber-950"
-                }`}
+                className="font-inter-bold text-xs"
+                style={{
+                  color: isDangerAlert ? colors.dangerText : colors.warningText,
+                }}
                 numberOfLines={1}
               >
                 {shockAlert.title}
               </Text>
               <Text
-                className={`font-quicksand text-[11px] ${
-                  shockAlert.severity === "danger"
-                    ? "text-rose-800"
-                    : "text-amber-800"
-                }`}
+                className="font-inter text-[11px]"
+                style={{ color: colors.textSecondary }}
                 numberOfLines={1}
               >
                 {shockAlert.subtitle}
@@ -166,32 +213,34 @@ export const BottomHud = React.memo(function BottomHud({
           <Touchable
             onPress={onDismissShockAlert}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            className="w-7 h-7 rounded-full items-center justify-center bg-white/90 border border-slate-200"
+            className="w-7 h-7 rounded-full items-center justify-center border"
+            style={{
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            }}
             accessibilityRole="button"
             accessibilityLabel="Close notification"
           >
-            <X size={14} color={TOKENS.colors.slate[600]} />
+            <X size={14} color={colors.textMuted} />
           </Touchable>
         </View>
       ) : null}
 
-      {/* 4. DUAL ACTIONS: CIRCULAR PAUSE BUTTON + WIDE END RIDE PILL BUTTON */}
-      <View className="flex-row items-center gap-3 mt-1">
-        {/* Pause / Resume Circle Button */}
+      {/* 4. DUAL ACTIONS */}
+      <View className="flex-row items-center gap-3 mt-0.5">
         <AppButton
           variant="circle"
           onPress={onTogglePause}
           iconLeft={
             isPaused ? (
-              <Play size={22} color={TOKENS.colors.slate[800]} />
+              <Play size={22} color={colors.text} />
             ) : (
-              <Pause size={22} color={TOKENS.colors.slate[800]} />
+              <Pause size={22} color={colors.text} />
             )
           }
           accessibilityLabel={isPaused ? "Resume ride" : "Pause ride"}
         />
 
-        {/* End Ride Button (Matching Reference Screen 3 in HyperGrid Brand Blue) */}
         <View className="flex-1">
           <AppButton
             variant="primary"

@@ -1,14 +1,21 @@
-import type { PotholeCluster } from "@/types/api";
-import { TOKENS } from "@/lib/theme/tokens";
 import { MapPin, Radio } from "lucide-react-native";
+import React from "react";
 import { Text, View } from "react-native";
 import Svg, { Circle, G, Line } from "react-native-svg";
+
+import { useOptionalTheme } from "@/contexts/theme-context";
+import type { PotholeCluster } from "@/types/api";
 
 export interface ClusterRadialCardProps {
   cluster: PotholeCluster;
 }
 
-export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
+export const ClusterRadialCard = React.memo(function ClusterRadialCard({
+  cluster,
+}: {
+  cluster: PotholeCluster;
+}) {
+  const { isDark, colors } = useOptionalTheme();
   const confidencePct = Math.round((cluster.confidence_avg || 0) * 100);
   const detectionCount = cluster.detection_count || 1;
   const severity = cluster.severity || "medium";
@@ -16,43 +23,43 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
   const severityConfig = {
     severe: {
       ratio: 0.95,
-      color: "#EF4444",
+      color: colors.danger,
       label: "SEVERE",
-      bg: "bg-rose-50",
-      text: "text-rose-700",
-      border: "border-rose-200",
+      bg: colors.dangerSoft,
+      text: colors.dangerText,
+      border: colors.danger,
     },
     high: {
       ratio: 0.85,
-      color: "#EF4444",
+      color: colors.danger,
       label: "HIGH",
-      bg: "bg-rose-50",
-      text: "text-rose-700",
-      border: "border-rose-200",
+      bg: colors.dangerSoft,
+      text: colors.dangerText,
+      border: colors.danger,
     },
     medium: {
       ratio: 0.6,
-      color: "#F59E0B",
+      color: colors.warning,
       label: "MEDIUM",
-      bg: "bg-amber-50",
-      text: "text-amber-700",
-      border: "border-amber-200",
+      bg: colors.warningSoft,
+      text: colors.warningText,
+      border: colors.warning,
     },
     low: {
       ratio: 0.35,
-      color: "#10B981",
+      color: colors.success,
       label: "LOW",
-      bg: "bg-emerald-50",
-      text: "text-emerald-700",
-      border: "border-emerald-200",
+      bg: colors.successSoft,
+      text: colors.successText,
+      border: colors.success,
     },
   }[severity] || {
     ratio: 0.6,
-    color: "#F59E0B",
+    color: colors.warning,
     label: "MEDIUM",
-    bg: "bg-amber-50",
-    text: "text-amber-700",
-    border: "border-amber-200",
+    bg: colors.warningSoft,
+    text: colors.warningText,
+    border: colors.warning,
   };
 
   const outerRatio = severityConfig.ratio;
@@ -72,25 +79,41 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
   const circInner = 2 * Math.PI * rInner;
 
   const spokeAngles = [0, 45, 90, 135, 180, 225, 270, 315];
+  const gridStroke = isDark ? "#232936" : "#E2E8F0";
+  const trackStroke = isDark ? "#1E2430" : "#F1F5F9";
 
   return (
     <View className="gap-3.5">
       {/* 1. RADIAL CHART CONTAINER WITH POLAR SPIDERWEB GRID */}
-      <View className="rounded-2xl border border-slate-200/90 bg-white p-4 items-center justify-center shadow-xs">
+      <View
+        className="rounded-2xl border p-4 items-center justify-center"
+        style={{ backgroundColor: colors.card, borderColor: colors.border }}
+      >
         <View className="flex-row items-center justify-between w-full mb-1">
           <View>
-            <Text className="font-chivo-bold text-sm text-slate-900">
+            <Text
+              className="font-inter-bold text-sm"
+              style={{ color: colors.text }}
+            >
               Cluster Severity & AI Analysis
             </Text>
-            <Text className="font-quicksand text-[11px] text-slate-600">
+            <Text
+              className="font-inter text-[11px]"
+              style={{ color: colors.textMuted }}
+            >
               Concentric multi-metric telemetry evaluation
             </Text>
           </View>
           <View
-            className={`px-2 py-0.5 rounded-full border ${severityConfig.bg} ${severityConfig.border}`}
+            className="px-2.5 py-0.5 rounded-full border"
+            style={{
+              backgroundColor: severityConfig.bg,
+              borderColor: severityConfig.border,
+            }}
           >
             <Text
-              className={`font-mono-bold text-[10px] ${severityConfig.text}`}
+              className="font-mono-bold text-[10px]"
+              style={{ color: severityConfig.text }}
             >
               {severityConfig.label}
             </Text>
@@ -117,7 +140,7 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
                     y1={y1}
                     x2={x2}
                     y2={y2}
-                    stroke="#E2E8F0"
+                    stroke={gridStroke}
                     strokeWidth={1}
                   />
                 );
@@ -129,7 +152,7 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
               cx={center}
               cy={center}
               r={28}
-              stroke="#E2E8F0"
+              stroke={gridStroke}
               strokeWidth={1}
               fill="none"
             />
@@ -137,7 +160,7 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
               cx={center}
               cy={center}
               r={rInner}
-              stroke="#F1F5F9"
+              stroke={trackStroke}
               strokeWidth={strokeW}
               fill="none"
             />
@@ -145,7 +168,7 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
               cx={center}
               cy={center}
               r={rMiddle}
-              stroke="#F1F5F9"
+              stroke={trackStroke}
               strokeWidth={strokeW}
               fill="none"
             />
@@ -153,7 +176,7 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
               cx={center}
               cy={center}
               r={rOuter}
-              stroke="#F1F5F9"
+              stroke={trackStroke}
               strokeWidth={strokeW}
               fill="none"
             />
@@ -161,12 +184,11 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
               cx={center}
               cy={center}
               r={82}
-              stroke="#E2E8F0"
+              stroke={gridStroke}
               strokeWidth={1}
               fill="none"
             />
 
-            {/* Colored Arcs */}
             {/* INNER RING: Report Count */}
             <Circle
               cx={center}
@@ -186,7 +208,7 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
               cx={center}
               cy={center}
               r={rMiddle}
-              stroke={TOKENS.colors.brand.DEFAULT}
+              stroke={colors.brand}
               strokeWidth={strokeW}
               fill="none"
               strokeDasharray={`${circMiddle} ${circMiddle}`}
@@ -212,17 +234,29 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
 
           {/* Center Hole Badge */}
           <View className="absolute items-center justify-center">
-            <Text className="font-mono-bold text-sm text-slate-900 leading-tight">
+            <Text
+              className="font-mono-bold text-sm leading-tight"
+              style={{ color: colors.text }}
+            >
               {confidencePct}%
             </Text>
-            <Text className="font-quicksand-bold text-[9px] text-brand uppercase tracking-wider">
+            <Text
+              className="font-inter-bold text-[9px] uppercase tracking-wider"
+              style={{ color: colors.brandText }}
+            >
               AI Conf
             </Text>
           </View>
         </View>
 
         {/* 3-Column Legend */}
-        <View className="flex-row divide-x divide-slate-200/80 rounded-xl bg-slate-50 border border-slate-200/70 p-2.5 w-full mt-2">
+        <View
+          className="flex-row rounded-xl border p-2.5 w-full mt-2"
+          style={{
+            backgroundColor: colors.cardMuted,
+            borderColor: colors.border,
+          }}
+        >
           <View className="flex-1 items-center px-1">
             <View className="flex-row items-center gap-1 mb-0.5">
               <View
@@ -230,28 +264,42 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
                 className="h-2 w-2 rounded-full"
               />
               <Text
-                className="font-quicksand-semibold text-[10px] text-slate-600"
+                className="font-inter-semibold text-[10px]"
+                style={{ color: colors.textMuted }}
                 numberOfLines={1}
               >
                 Severity
               </Text>
             </View>
-            <Text className="font-mono-bold text-xs text-slate-900">
+            <Text
+              className="font-mono-bold text-xs"
+              style={{ color: colors.text }}
+            >
               {severityConfig.label}
             </Text>
           </View>
 
-          <View className="flex-1 items-center px-1">
+          <View
+            className="flex-1 items-center px-1 border-x"
+            style={{ borderColor: colors.border }}
+          >
             <View className="flex-row items-center gap-1 mb-0.5">
-              <View className="h-2 w-2 rounded-full bg-brand" />
+              <View
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: colors.brand }}
+              />
               <Text
-                className="font-quicksand-semibold text-[10px] text-slate-600"
+                className="font-inter-semibold text-[10px]"
+                style={{ color: colors.textMuted }}
                 numberOfLines={1}
               >
                 Confidence
               </Text>
             </View>
-            <Text className="font-mono-bold text-xs text-slate-900">
+            <Text
+              className="font-mono-bold text-xs"
+              style={{ color: colors.text }}
+            >
               {confidencePct}%
             </Text>
           </View>
@@ -260,13 +308,17 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
             <View className="flex-row items-center gap-1 mb-0.5">
               <View className="h-2 w-2 rounded-full bg-[#38BDF8]" />
               <Text
-                className="font-quicksand-semibold text-[10px] text-slate-600"
+                className="font-inter-semibold text-[10px]"
+                style={{ color: colors.textMuted }}
                 numberOfLines={1}
               >
                 Detections
               </Text>
             </View>
-            <Text className="font-mono-bold text-xs text-slate-900">
+            <Text
+              className="font-mono-bold text-xs"
+              style={{ color: colors.text }}
+            >
               {detectionCount}
             </Text>
           </View>
@@ -274,31 +326,64 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
       </View>
 
       {/* 2. LOCATION & REMEDIATION STATUS ROW */}
-      <View className="rounded-2xl border border-slate-200/80 bg-slate-50 p-3.5 gap-2.5">
-        <View className="flex-row items-center justify-between border-b border-slate-200/60 pb-2">
+      <View
+        className="rounded-2xl border p-3.5 gap-2.5"
+        style={{
+          backgroundColor: colors.cardMuted,
+          borderColor: colors.border,
+        }}
+      >
+        <View
+          className="flex-row items-center justify-between border-b pb-2"
+          style={{ borderBottomColor: colors.border }}
+        >
           <View className="flex-row items-center gap-1.5">
-            <MapPin size={14} color="#64748B" />
-            <Text className="font-quicksand-semibold text-xs text-slate-600">
+            <MapPin size={14} color={colors.textMuted} />
+            <Text
+              className="font-inter-semibold text-xs"
+              style={{ color: colors.textMuted }}
+            >
               Coordinates
             </Text>
           </View>
-          <Text className="font-mono-bold text-xs text-slate-900">
+          <Text
+            className="font-mono-bold text-xs"
+            style={{ color: colors.text }}
+          >
             {cluster.center_latitude.toFixed(4)},{" "}
             {cluster.center_longitude.toFixed(4)}
           </Text>
         </View>
 
-        <View className="flex-row items-center justify-between border-b border-slate-200/60 pb-2">
+        <View
+          className="flex-row items-center justify-between border-b pb-2"
+          style={{ borderBottomColor: colors.border }}
+        >
           <View className="flex-row items-center gap-1.5">
-            <Radio size={14} color="#64748B" />
-            <Text className="font-quicksand-semibold text-xs text-slate-600">
+            <Radio size={14} color={colors.textMuted} />
+            <Text
+              className="font-inter-semibold text-xs"
+              style={{ color: colors.textMuted }}
+            >
               DBSCAN Cluster Area
             </Text>
           </View>
-          <View className="flex-row items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 border border-emerald-200/60">
-            <View className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            <Text className="font-mono-bold text-[10px] text-emerald-700">
-              ~{cluster.radius_meters || 18}m radius • {cluster.user_count || 1}{" "}
+          <View
+            className="flex-row items-center gap-1.5 rounded-full px-2.5 py-0.5 border"
+            style={{
+              backgroundColor: colors.successSoft,
+              borderColor: colors.success,
+            }}
+          >
+            <View
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: colors.success }}
+            />
+            <Text
+              className="font-mono-bold text-[10px]"
+              style={{ color: colors.successText }}
+            >
+              ~{cluster.radius_meters || 18}m radius · {cluster.user_count || 1}{" "}
               User(s)
             </Text>
           </View>
@@ -306,14 +391,29 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
 
         <View className="flex-row items-center justify-between">
           <View className="flex-row items-center gap-1.5">
-            <Radio size={14} color="#64748B" />
-            <Text className="font-quicksand-semibold text-xs text-slate-600">
+            <Radio size={14} color={colors.textMuted} />
+            <Text
+              className="font-inter-semibold text-xs"
+              style={{ color: colors.textMuted }}
+            >
               Remediation Status
             </Text>
           </View>
-          <View className="flex-row items-center gap-1 rounded-full bg-sky-50 px-2.5 py-0.5 border border-sky-200/60">
-            <View className="h-1.5 w-1.5 rounded-full bg-brand" />
-            <Text className="font-mono-bold text-[11px] text-brand">
+          <View
+            className="flex-row items-center gap-1.5 rounded-full px-2.5 py-0.5 border"
+            style={{
+              backgroundColor: colors.brandSoft,
+              borderColor: colors.brandBorder,
+            }}
+          >
+            <View
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: colors.brand }}
+            />
+            <Text
+              className="font-mono-bold text-[11px]"
+              style={{ color: colors.brandText }}
+            >
               {cluster.status.toUpperCase()}
             </Text>
           </View>
@@ -321,4 +421,4 @@ export function ClusterRadialCard({ cluster }: { cluster: PotholeCluster }) {
       </View>
     </View>
   );
-}
+});

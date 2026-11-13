@@ -25,7 +25,9 @@ export function TopFloatingHeader({
     <View
       className={cn(
         "absolute inset-x-0 top-0 z-30 flex-row items-center justify-between px-4",
-        transparentBackground ? "bg-transparent" : "bg-white/90 backdrop-blur-md border-b border-slate-100",
+        transparentBackground
+          ? "bg-transparent"
+          : "bg-white/95 dark:bg-[#10131A]/95 backdrop-blur-md border-b border-slate-100 dark:border-[#232936]",
         className
       )}
       style={{

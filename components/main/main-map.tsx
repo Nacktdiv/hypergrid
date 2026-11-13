@@ -8,7 +8,7 @@ import {
   X,
   ZoomIn,
 } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   InteractionManager,
   Modal,
@@ -27,6 +27,7 @@ import {
 } from "@/components/map/map-data";
 import { MapCanvasSkeleton } from "@/components/ui/skeleton";
 import { Touchable } from "@/components/ui/touchable";
+import { useOptionalTheme } from "@/contexts/theme-context";
 import { type VehicleId } from "@/contexts/vehicle-context";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
 import { useUserLocation } from "@/hooks/use-user-location";
@@ -35,18 +36,13 @@ import { ClusterRadialCard } from "./cluster-radial-card";
 
 type FilterStatus = "all" | PotholeStatus;
 
-/**
- * Peta utama interaktif — Leaflet + OpenStreetMap.
- *
- * Dilengkapi:
- *   - Transisi masuk instan dengan Skeleton Loader saat memuat data klaster & GPS
- *   - Ikon lokasi marker dinamis (Mobil / Motor / Sepeda)
- *   - Menampilkan seluruh klaster PostGIS publik dari database (bukan hanya history user)
- *   - Filter chip status klaster (Semua, Aktif, Terverifikasi, Selesai)
- *   - Multi-Level LOD:
- *     * Level Jauh (zoom < 16): Titik Ringkasan Ruas Jalan Makro (~1 km) + Modal Ringkasan Area
- *     * Level Dekat (zoom >= 16): Titik-titik Klaster Representatif + Modal Road Damage Details
- */
+export type MainMapFocusTarget = {
+  latitude: number;
+  longitude: number;
+  zoom?: number;
+  ts?: number;
+};
+
 export type MainMapProps = {
   vehicleId: VehicleId;
   fullBleed?: boolean;
@@ -55,9 +51,10 @@ export type MainMapProps = {
   onOpenClusterDetail?: (cluster: PotholeCluster) => void;
   currentCoords?: LatLng | null;
   plannedRoute?: LatLng[];
+  focusTarget?: MainMapFocusTarget | null;
 };
 
-export function MainMap({
+export const MainMap = React.memo(function MainMap({
   vehicleId,
   fullBleed = false,
   showOverlayControls = true,
@@ -65,7 +62,9 @@ export function MainMap({
   onOpenClusterDetail,
   currentCoords: externalCoords,
   plannedRoute,
+  focusTarget,
 }: MainMapProps) {
+  const { colors } = useOptionalTheme();
   const {
     clusters,
     isLoading: isClustersLoading,
@@ -87,11 +86,15 @@ export function MainMap({
   const [isClusterModalVisible, setIsClusterModalVisible] = useState(false);
   const [selectedArea, setSelectedArea] = useState<AreaSummary | null>(null);
   const [isAreaModalVisible, setIsAreaModalVisible] = useState(false);
-  const [focusCoords, setFocusCoords] = useState<{
-    latitude: number;
-    longitude: number;
-    zoom?: number;
+  const [manualFocus, setManualFocus] = useState<{
+    baseTarget: MainMapFocusTarget | null | undefined;
+    coords: MainMapFocusTarget;
   } | null>(null);
+
+  const activeFocusCoords =
+    manualFocus && (!focusTarget || manualFocus.baseTarget === focusTarget)
+      ? manualFocus.coords
+      : focusTarget ?? null;
 
   const [hasFetchedInitial, setHasFetchedInitial] = useState(
     () => clusters.length > 0 || !isClustersLoading,
@@ -110,7 +113,6 @@ export function MainMap({
     }
   }, [fetchClusters, vehicleId]);
 
-  // Ambil seluruh klaster lubang jalan nyata di database setelah transisi halaman selesai
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
       loadInitialClusters();
@@ -118,7 +120,6 @@ export function MainMap({
     return () => task.cancel();
   }, [loadInitialClusters]);
 
-  // Filter klaster berdasarkan tab yang dipilih
   const filteredClusters = useMemo(() => {
     if (activeFilter === "all") return clusters;
     return clusters.filter((c) => c.status === activeFilter);
@@ -127,7 +128,6 @@ export function MainMap({
   const mapData: MapData = useMemo(() => {
     const baseCenter = liveCoords || { latitude: -6.2088, longitude: 106.8456 };
 
-    // Titik representatif tunggal hasil konsolidasi DBSCAN lintas pengguna
     const liveDamagePoints: DamagePoint[] = filteredClusters.map((c) => ({
       id: c.id,
       position: {
@@ -174,62 +174,68 @@ export function MainMap({
     plannedRoute,
   ]);
 
-  // Handler KLIK KEDUA (Re-click pada pin yang sedang aktif) -> Baru buka modal Road Damage Details
-  const handleMarkerPress = (point: DamagePoint) => {
-    const found = clusters.find((c) => c.id === point.id);
-    if (found) {
-      setSelectedCluster(found);
-      setIsClusterModalVisible(true);
-      onOpenClusterDetail?.(found);
-    }
-  };
+  const handleMarkerPress = useCallback(
+    (point: DamagePoint) => {
+      const found = clusters.find((c) => c.id === point.id);
+      if (found) {
+        setSelectedCluster(found);
+        setIsClusterModalVisible(true);
+        onOpenClusterDetail?.(found);
+      }
+    },
+    [clusters, onOpenClusterDetail],
+  );
 
-  // Handler KLIK PERTAMA (Pemilihan titik pertama kali) -> Tampilkan koridor ruas jalan & pin kerusakan TANPA buka modal
-  const handlePointSelected = (point: DamagePoint, area?: AreaSummary) => {
-    const found = clusters.find((c) => c.id === point.id);
-    if (found) {
-      setSelectedCluster(found);
-    }
-    if (area) {
-      setSelectedArea(area);
-    }
-  };
+  const handlePointSelected = useCallback(
+    (point: DamagePoint, area?: AreaSummary) => {
+      const found = clusters.find((c) => c.id === point.id);
+      if (found) {
+        setSelectedCluster(found);
+      }
+      if (area) {
+        setSelectedArea(area);
+      }
+    },
+    [clusters],
+  );
 
-  // Handler Reset Seleksi saat user klik di area kosong peta
-  const handleClearSelection = () => {
+  const handleClearSelection = useCallback(() => {
     setSelectedCluster(null);
     setSelectedArea(null);
     setIsAreaModalVisible(false);
     setIsClusterModalVisible(false);
-  };
+  }, []);
 
   if (!liveCoords || (!hasFetchedInitial && isClustersLoading)) {
     return (
       <View
         className={
           fullBleed
-            ? "flex-1 w-full h-full items-center justify-center bg-slate-100"
-            : "flex-1 w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100"
+            ? "flex-1 w-full h-full items-center justify-center"
+            : "flex-1 w-full items-center justify-center overflow-hidden rounded-2xl border"
         }
-        style={
+        style={[
           fullBleed
             ? { width: "100%", height: "100%" }
-            : { height: 340, width: "100%" }
-        }
+            : { height: 340, width: "100%" },
+          { backgroundColor: colors.canvas, borderColor: colors.border },
+        ]}
       >
         {errorMsg ? (
           <View className="items-center gap-2 p-4">
-            <ShieldAlert size={28} color="#F59E0B" />
-            <Text className="text-center font-quicksand-bold text-xs text-slate-800">
+            <ShieldAlert size={28} color={colors.warning} />
+            <Text
+              className="text-center font-inter-bold text-xs"
+              style={{ color: colors.text }}
+            >
               {errorMsg}
             </Text>
             <Touchable
               onPress={() => getImmediateLocation()}
-              className="mt-2 rounded-xl bg-sky-500 px-4 py-2"
+              className="mt-2 rounded-xl px-4 py-2"
+              style={{ backgroundColor: colors.brand }}
             >
-              <Text className="font-quicksand-bold text-xs text-white">
-                Coba Lagi
-              </Text>
+              <Text className="font-inter-bold text-xs text-white">Retry</Text>
             </Touchable>
           </View>
         ) : (
@@ -239,52 +245,86 @@ export function MainMap({
     );
   }
 
+  const activeSeverity =
+    selectedCluster?.severity || selectedArea?.worstSeverity || "medium";
+  const severityTone =
+    activeSeverity === "severe" || activeSeverity === "high"
+      ? { bg: colors.dangerSoft, border: colors.danger, icon: colors.danger }
+      : activeSeverity === "medium"
+        ? {
+            bg: colors.warningSoft,
+            border: colors.warning,
+            icon: colors.warning,
+          }
+        : {
+            bg: colors.successSoft,
+            border: colors.success,
+            icon: colors.success,
+          };
+
   return (
     <View
       className={
         fullBleed
           ? "flex-1 w-full h-full overflow-hidden"
-          : "flex-1 w-full overflow-hidden rounded-2xl border border-[#CAD5E2]"
+          : "flex-1 w-full overflow-hidden rounded-2xl border"
       }
-      style={
+      style={[
         fullBleed
           ? { width: "100%", height: "100%" }
-          : { height: 340, width: "100%" }
-      }
+          : { height: 340, width: "100%" },
+        { borderColor: colors.border },
+      ]}
     >
       <LeafletMap
         data={mapData}
         vehicleType={vehicleId}
-        focusCoords={focusCoords}
+        focusCoords={activeFocusCoords}
         onDamagePress={handleMarkerPress}
         onPointSelected={handlePointSelected}
         onClearSelection={handleClearSelection}
-        onAreaSummaryPress={(area) => setSelectedArea(area)}
+        onAreaSummaryPress={setSelectedArea}
       />
 
       {showOverlayControls ? (
         <>
-          {/* SWISS DESIGN GPS LIVE TELEMETRY BADGE */}
-          <View className="absolute bottom-3 left-3 flex-row items-center gap-1.5 rounded-md border border-slate-900 bg-slate-950/90 px-2.5 py-1 shadow-md">
+          <View
+            className="absolute bottom-3 left-3 flex-row items-center gap-1.5 rounded-md border px-2.5 py-1 shadow-md"
+            style={{
+              backgroundColor: colors.pill,
+              borderColor: colors.border,
+            }}
+          >
             <View
-              className={`h-2 w-2 rounded-full ${liveCoords ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}
+              className={`h-2 w-2 rounded-full ${liveCoords ? "bg-emerald-400" : "bg-amber-400"}`}
             />
-            <Text className="font-mono text-[9px] font-bold uppercase tracking-wider text-white">
+            <Text
+              className="font-mono text-[9px] font-bold uppercase tracking-wider"
+              style={{ color: colors.text }}
+            >
               GPS{" "}
               {liveCoords
                 ? `${liveCoords.latitude.toFixed(4)}, ${liveCoords.longitude.toFixed(4)}`
-                : "SEARCHING COORDINATES..."}
+                : "SEARCHING..."}
             </Text>
           </View>
 
-          {/* RE-CENTER GPS BUTTON */}
           <Touchable
             className="absolute bottom-3 right-3"
             onPress={() => getImmediateLocation()}
           >
-            <View className="flex-row items-center gap-1 rounded-md border border-slate-900 bg-white/95 px-2 py-1 shadow-md">
-              <MapPin size={11} color="#0F172A" />
-              <Text className="font-mono-bold text-[9px] uppercase tracking-wider text-slate-900">
+            <View
+              className="flex-row items-center gap-1 rounded-md border px-2 py-1 shadow-md"
+              style={{
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+              }}
+            >
+              <MapPin size={11} color={colors.brand} />
+              <Text
+                className="font-mono-bold text-[9px] uppercase tracking-wider"
+                style={{ color: colors.text }}
+              >
                 My Location
               </Text>
             </View>
@@ -293,13 +333,20 @@ export function MainMap({
       ) : null}
 
       {showOverlayControls ? (
-        /* FLOATING STATUS BADGE POSTGIS & FILTER CHIPS */
         <View className="absolute inset-x-3 top-3 gap-2">
           <View className="flex-row items-center justify-between">
-            {/* Status Badge */}
-            <View className="self-start flex-row items-center gap-1.5 rounded-full border border-slate-200/90 bg-white/95 px-2.5 py-1 shadow-sm backdrop-blur-md">
-              <Database size={12} color="#1DA1F2" />
-              <Text className="font-mono text-[10px] text-slate-700">
+            <View
+              className="self-start flex-row items-center gap-1.5 rounded-full border px-2.5 py-1 shadow-sm"
+              style={{
+                backgroundColor: colors.pill,
+                borderColor: colors.border,
+              }}
+            >
+              <Database size={12} color={colors.brand} />
+              <Text
+                className="font-mono text-[10px]"
+                style={{ color: colors.textSecondary }}
+              >
                 {clusters.length > 0
                   ? `DBSCAN: ${filteredClusters.length} Road Hazard Clusters`
                   : "No Clusters Nearby"}
@@ -307,7 +354,6 @@ export function MainMap({
             </View>
           </View>
 
-          {/* Filter Chips Horizontal Bar */}
           <View className="flex-row gap-1.5">
             <FilterChip
               active={activeFilter === "all"}
@@ -340,15 +386,26 @@ export function MainMap({
         visible={isClusterModalVisible && Boolean(selectedCluster)}
         onRequestClose={() => setIsClusterModalVisible(false)}
       >
-        <View className="flex-1 justify-end bg-black/40">
-          <View className="rounded-t-[32px] bg-white p-6 border-t border-slate-200/80 shadow-lg">
+        <View
+          className="flex-1 justify-end"
+          style={{ backgroundColor: colors.overlay }}
+        >
+          <View
+            className="rounded-t-[32px] p-6 border-t shadow-lg"
+            style={{
+              backgroundColor: colors.sheet,
+              borderTopColor: colors.border,
+            }}
+          >
             {selectedCluster ? (
               <View className="gap-3.5">
-                {/* Header */}
                 <View className="flex-row items-center justify-between pb-1">
                   <View className="flex-row items-center gap-2">
-                    <ShieldAlert size={22} color="#EF4444" />
-                    <Text className="font-chivo-bold text-lg text-slate-900">
+                    <ShieldAlert size={22} color={colors.danger} />
+                    <Text
+                      className="font-inter-bold text-lg"
+                      style={{ color: colors.text }}
+                    >
                       Road Damage Details
                     </Text>
                   </View>
@@ -357,27 +414,39 @@ export function MainMap({
                     accessibilityRole="button"
                     accessibilityLabel="Close road damage details"
                   >
-                    <View className="rounded-full bg-slate-100 p-1.5">
-                      <X size={18} color="#64748B" />
+                    <View
+                      className="rounded-full p-1.5"
+                      style={{ backgroundColor: colors.subtle }}
+                    >
+                      <X size={18} color={colors.textMuted} />
                     </View>
                   </Touchable>
                 </View>
 
-                {/* Radial Assessment Card */}
                 <ClusterRadialCard cluster={selectedCluster} />
 
-                {/* Official Public Works Status Notice (Read-only for Mobile Users) */}
-                <View className="rounded-xl border border-slate-200/90 bg-slate-50 p-3 mt-0.5">
+                <View
+                  className="rounded-xl border p-3 mt-0.5"
+                  style={{
+                    backgroundColor: colors.cardMuted,
+                    borderColor: colors.border,
+                  }}
+                >
                   <View className="flex-row items-center gap-1.5">
-                    <ShieldAlert size={14} color="#64748B" />
-                    <Text className="font-quicksand-bold text-[11px] text-slate-800">
+                    <ShieldAlert size={14} color={colors.textMuted} />
+                    <Text
+                      className="font-inter-bold text-[11px]"
+                      style={{ color: colors.text }}
+                    >
                       Public Road Hazard Data
                     </Text>
                   </View>
-                  <Text className="mt-1 font-quicksand text-[11px] leading-relaxed text-slate-600">
-                    Verification, work orders, and road repairs are managed
-                    exclusively by the Public Works Department (Dinas PU) via
-                    the Web Admin Dashboard.
+                  <Text
+                    className="mt-1 font-inter text-[11px] leading-relaxed"
+                    style={{ color: colors.textMuted }}
+                  >
+                    Verification, work orders, and road repairs are managed by
+                    the Public Works Department via the Web Admin Dashboard.
                   </Text>
                 </View>
               </View>
@@ -386,14 +455,19 @@ export function MainMap({
         </View>
       </Modal>
 
-      {/* COMPACT ROAD HAZARD CALLOUT (Muncul saat titik atau ruas jalan diklik) */}
+      {/* COMPACT ROAD HAZARD CALLOUT */}
       {selectedArea || selectedCluster ? (
         <View
           style={{ bottom: bottomOffset ?? (fullBleed ? 124 : 16) }}
           className="absolute inset-x-4 z-30"
         >
-          <View className="flex-row items-center justify-between rounded-2xl border border-slate-200/90 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur-md">
-            {/* Left: Info & Tap Target to open details */}
+          <View
+            className="flex-row items-center justify-between rounded-2xl border px-3 py-2.5 shadow-lg"
+            style={{
+              backgroundColor: colors.pill,
+              borderColor: colors.border,
+            }}
+          >
             <Pressable
               onPress={() => {
                 if (selectedCluster) {
@@ -406,65 +480,45 @@ export function MainMap({
               className="flex-1 flex-row items-center gap-2.5 mr-2 active:opacity-75"
             >
               <View
-                className={`h-8 w-8 rounded-xl items-center justify-center border ${
-                  (selectedCluster?.severity || selectedArea?.worstSeverity) ===
-                  "severe"
-                    ? "bg-red-50 border-red-200"
-                    : (selectedCluster?.severity ||
-                          selectedArea?.worstSeverity) === "high"
-                      ? "bg-rose-50 border-rose-200"
-                      : (selectedCluster?.severity ||
-                            selectedArea?.worstSeverity) === "medium"
-                        ? "bg-amber-50 border-amber-200"
-                        : "bg-yellow-50 border-yellow-200"
-                }`}
+                className="h-8 w-8 rounded-xl items-center justify-center border"
+                style={{
+                  backgroundColor: severityTone.bg,
+                  borderColor: severityTone.border,
+                }}
               >
-                <AlertTriangle
-                  size={15}
-                  color={
-                    (selectedCluster?.severity ||
-                      selectedArea?.worstSeverity) === "severe"
-                      ? "#991B1B"
-                      : (selectedCluster?.severity ||
-                            selectedArea?.worstSeverity) === "high"
-                        ? "#EF4444"
-                        : (selectedCluster?.severity ||
-                              selectedArea?.worstSeverity) === "medium"
-                          ? "#F59E0B"
-                          : "#CA8A04"
-                  }
-                />
+                <AlertTriangle size={15} color={severityTone.icon} />
               </View>
 
               <View className="flex-1">
                 <Text
                   numberOfLines={1}
-                  className="font-chivo-bold text-xs text-slate-900"
+                  className="font-inter-bold text-xs"
+                  style={{ color: colors.text }}
                 >
                   {selectedArea && selectedArea.clusterCount > 1
-                    ? `Ruas Jalan: ${
+                    ? `Road Segment: ${
                         selectedArea.roadLengthMeters >= 1000
                           ? `${(selectedArea.roadLengthMeters / 1000).toFixed(1)} km`
                           : `${selectedArea.roadLengthMeters} m`
                       }`
                     : selectedCluster
-                      ? `Klaster Bahaya Jalan (${selectedCluster.road_length_meters ? `${selectedCluster.road_length_meters}m` : "Area Klaster"})`
-                      : "Titik Bahaya Jalan"}
+                      ? `Hazard Cluster (${selectedCluster.road_length_meters ? `${selectedCluster.road_length_meters}m` : "Cluster Area"})`
+                      : "Road Hazard Spot"}
                 </Text>
                 <Text
                   numberOfLines={1}
-                  className="font-quicksand text-[11px] text-slate-500"
+                  className="font-inter text-[11px]"
+                  style={{ color: colors.textMuted }}
                 >
                   {selectedCluster
-                    ? `${selectedCluster.detection_count} Deteksi Sub-Klaster • ${selectedCluster.severity.toUpperCase()}`
+                    ? `${selectedCluster.detection_count} Detections · ${selectedCluster.severity.toUpperCase()}`
                     : selectedArea
-                      ? `${selectedArea.clusterCount} Titik Kerusakan • ${selectedArea.totalReports} Laporan`
-                      : "Ketuk untuk melihat detail"}
+                      ? `${selectedArea.clusterCount} Clusters · ${selectedArea.totalReports} Reports`
+                      : "Tap to view details"}
                 </Text>
               </View>
             </Pressable>
 
-            {/* Right: Inline Action Button & Close */}
             <View className="flex-row items-center gap-1.5 shrink-0">
               <Pressable
                 onPress={() => {
@@ -475,11 +529,12 @@ export function MainMap({
                     setIsAreaModalVisible(true);
                   }
                 }}
-                className="flex-row items-center gap-1 rounded-xl bg-custom-primary px-3 py-1.5 shadow-xs active:opacity-90"
+                className="flex-row items-center gap-1 rounded-xl px-3 py-1.5 active:opacity-90"
+                style={{ backgroundColor: colors.brand }}
                 accessibilityRole="button"
-                accessibilityLabel="Lihat detail kerusakan jalan"
+                accessibilityLabel="View road hazard details"
               >
-                <Text className="font-quicksand-bold text-[11px] text-white">
+                <Text className="font-inter-bold text-[11px] text-white">
                   Detail
                 </Text>
                 <ChevronRight size={13} color="#ffffff" />
@@ -487,11 +542,12 @@ export function MainMap({
 
               <Pressable
                 onPress={handleClearSelection}
-                className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+                className="h-7 w-7 items-center justify-center rounded-full"
+                style={{ backgroundColor: colors.subtle }}
                 accessibilityRole="button"
-                accessibilityLabel="Tutup informasi"
+                accessibilityLabel="Close hazard banner"
               >
-                <X size={13} color="#64748B" />
+                <X size={13} color={colors.textMuted} />
               </Pressable>
             </View>
           </View>
@@ -505,124 +561,199 @@ export function MainMap({
         visible={isAreaModalVisible && Boolean(selectedArea)}
         onRequestClose={() => setIsAreaModalVisible(false)}
       >
-        <View className="flex-1 justify-end bg-black/40">
-          <View className="rounded-t-[32px] bg-white p-6 border-t border-slate-200/80 shadow-lg max-h-[85%]">
+        <View
+          className="flex-1 justify-end"
+          style={{ backgroundColor: colors.overlay }}
+        >
+          <View
+            className="rounded-t-[32px] p-6 border-t shadow-lg max-h-[85%]"
+            style={{
+              backgroundColor: colors.sheet,
+              borderTopColor: colors.border,
+            }}
+          >
             {selectedArea ? (
               <View className="gap-4">
-                {/* Header */}
                 <View className="flex-row items-center justify-between pb-1">
                   <View className="flex-row items-center gap-2.5">
-                    <View className="rounded-xl bg-sky-100 p-2">
-                      <Layers size={20} color="#1DA1F2" />
+                    <View
+                      className="rounded-xl p-2"
+                      style={{ backgroundColor: colors.brandSoft }}
+                    >
+                      <Layers size={20} color={colors.brand} />
                     </View>
                     <View>
-                      <Text className="font-chivo-bold text-lg text-slate-900">
-                        Ruas Jalan:{" "}
+                      <Text
+                        className="font-inter-bold text-lg"
+                        style={{ color: colors.text }}
+                      >
+                        Road Segment:{" "}
                         {selectedArea.roadLengthMeters >= 1000
                           ? `${(selectedArea.roadLengthMeters / 1000).toFixed(1)} km`
                           : `${selectedArea.roadLengthMeters} m`}
                       </Text>
-                      <Text className="font-quicksand text-xs text-slate-500">
-                        {selectedArea.clusterCount} titik kerusakan di sepanjang
-                        bentang jalan ini
+                      <Text
+                        className="font-inter text-xs"
+                        style={{ color: colors.textMuted }}
+                      >
+                        {selectedArea.clusterCount} hazard clusters along this
+                        corridor
                       </Text>
                     </View>
                   </View>
                   <Touchable
                     onPress={() => setIsAreaModalVisible(false)}
                     accessibilityRole="button"
-                    accessibilityLabel="Tutup rincian ruas jalan"
+                    accessibilityLabel="Close road segment details"
                   >
-                    <View className="rounded-full bg-slate-100 p-1.5">
-                      <X size={18} color="#64748B" />
+                    <View
+                      className="rounded-full p-1.5"
+                      style={{ backgroundColor: colors.subtle }}
+                    >
+                      <X size={18} color={colors.textMuted} />
                     </View>
                   </Touchable>
                 </View>
 
-                {/* 3 Metrics Overview */}
                 <View className="flex-row gap-2.5">
-                  <View className="flex-1 rounded-2xl bg-slate-50 p-3 border border-slate-200/80">
-                    <Text className="font-quicksand text-[11px] text-slate-500">
-                      Total Klaster
+                  <View
+                    className="flex-1 rounded-2xl p-3 border"
+                    style={{
+                      backgroundColor: colors.cardMuted,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <Text
+                      className="font-inter text-[11px]"
+                      style={{ color: colors.textMuted }}
+                    >
+                      Clusters
                     </Text>
-                    <Text className="font-chivo-bold text-xl text-slate-900 mt-0.5">
+                    <Text
+                      className="font-inter-bold text-xl mt-0.5"
+                      style={{ color: colors.text }}
+                    >
                       {selectedArea.clusterCount}
                     </Text>
                   </View>
-                  <View className="flex-1 rounded-2xl bg-slate-50 p-3 border border-slate-200/80">
-                    <Text className="font-quicksand text-[11px] text-slate-500">
-                      Total Laporan
+                  <View
+                    className="flex-1 rounded-2xl p-3 border"
+                    style={{
+                      backgroundColor: colors.cardMuted,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <Text
+                      className="font-inter text-[11px]"
+                      style={{ color: colors.textMuted }}
+                    >
+                      Reports
                     </Text>
-                    <Text className="font-chivo-bold text-xl text-slate-900 mt-0.5">
+                    <Text
+                      className="font-inter-bold text-xl mt-0.5"
+                      style={{ color: colors.text }}
+                    >
                       {selectedArea.totalReports}
                     </Text>
                   </View>
-                  <View className="flex-1 rounded-2xl bg-slate-50 p-3 border border-slate-200/80">
-                    <Text className="font-quicksand text-[11px] text-slate-500">
-                      Status Terparah
+                  <View
+                    className="flex-1 rounded-2xl p-3 border"
+                    style={{
+                      backgroundColor: colors.cardMuted,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <Text
+                      className="font-inter text-[11px]"
+                      style={{ color: colors.textMuted }}
+                    >
+                      Peak Severity
                     </Text>
                     <Text
-                      className={`font-chivo-bold text-sm uppercase mt-1 ${
-                        selectedArea.worstSeverity === "severe"
-                          ? "text-red-700"
-                          : selectedArea.worstSeverity === "high"
-                            ? "text-rose-600"
+                      className="font-inter-bold text-sm uppercase mt-1"
+                      style={{
+                        color:
+                          selectedArea.worstSeverity === "severe" ||
+                          selectedArea.worstSeverity === "high"
+                            ? colors.dangerText
                             : selectedArea.worstSeverity === "medium"
-                              ? "text-amber-600"
-                              : "text-yellow-600"
-                      }`}
+                              ? colors.warningText
+                              : colors.successText,
+                      }}
                     >
                       {selectedArea.worstSeverity}
                     </Text>
                   </View>
                 </View>
 
-                {/* Breakdown Severity Distribution */}
-                <View className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-3.5 gap-2">
-                  <Text className="font-quicksand-bold text-xs text-slate-700">
-                    Distribusi Tingkat Keparahan
+                <View
+                  className="rounded-2xl border p-3.5 gap-2"
+                  style={{
+                    backgroundColor: colors.cardMuted,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Text
+                    className="font-inter-bold text-xs"
+                    style={{ color: colors.text }}
+                  >
+                    Severity Breakdown
                   </Text>
                   <View className="flex-row items-center justify-between gap-1.5">
-                    <View className="flex-1 items-center rounded-xl bg-red-100/80 py-1.5 px-2">
-                      <Text className="font-quicksand-bold text-[10px] text-red-800">
-                        Severe
-                      </Text>
-                      <Text className="font-chivo-bold text-sm text-red-900">
-                        {selectedArea.severityCounts.severe}
-                      </Text>
-                    </View>
-                    <View className="flex-1 items-center rounded-xl bg-orange-100/80 py-1.5 px-2">
-                      <Text className="font-quicksand-bold text-[10px] text-orange-800">
-                        High
-                      </Text>
-                      <Text className="font-chivo-bold text-sm text-orange-900">
-                        {selectedArea.severityCounts.high}
-                      </Text>
-                    </View>
-                    <View className="flex-1 items-center rounded-xl bg-amber-100/80 py-1.5 px-2">
-                      <Text className="font-quicksand-bold text-[10px] text-amber-800">
-                        Medium
-                      </Text>
-                      <Text className="font-chivo-bold text-sm text-amber-900">
-                        {selectedArea.severityCounts.medium}
-                      </Text>
-                    </View>
-                    <View className="flex-1 items-center rounded-xl bg-yellow-100/80 py-1.5 px-2">
-                      <Text className="font-quicksand-bold text-[10px] text-yellow-800">
-                        Low
-                      </Text>
-                      <Text className="font-chivo-bold text-sm text-yellow-900">
-                        {selectedArea.severityCounts.low}
-                      </Text>
-                    </View>
+                    {[
+                      {
+                        label: "Severe",
+                        val: selectedArea.severityCounts.severe,
+                        bg: colors.dangerSoft,
+                        tx: colors.dangerText,
+                      },
+                      {
+                        label: "High",
+                        val: selectedArea.severityCounts.high,
+                        bg: colors.dangerSoft,
+                        tx: colors.dangerText,
+                      },
+                      {
+                        label: "Medium",
+                        val: selectedArea.severityCounts.medium,
+                        bg: colors.warningSoft,
+                        tx: colors.warningText,
+                      },
+                      {
+                        label: "Low",
+                        val: selectedArea.severityCounts.low,
+                        bg: colors.successSoft,
+                        tx: colors.successText,
+                      },
+                    ].map((b) => (
+                      <View
+                        key={b.label}
+                        className="flex-1 items-center rounded-xl py-1.5 px-2"
+                        style={{ backgroundColor: b.bg }}
+                      >
+                        <Text
+                          className="font-inter-bold text-[10px]"
+                          style={{ color: b.tx }}
+                        >
+                          {b.label}
+                        </Text>
+                        <Text
+                          className="font-inter-bold text-sm"
+                          style={{ color: b.tx }}
+                        >
+                          {b.val}
+                        </Text>
+                      </View>
+                    ))}
                   </View>
                 </View>
 
-                {/* List of Clusters in Area */}
                 <View className="gap-1.5">
-                  <Text className="font-quicksand-bold text-xs text-slate-700">
-                    Daftar Titik Klaster di Ruas Ini (
-                    {selectedArea.clusters.length})
+                  <Text
+                    className="font-inter-bold text-xs"
+                    style={{ color: colors.text }}
+                  >
+                    Clusters Along Corridor ({selectedArea.clusters.length})
                   </Text>
                   <ScrollView
                     className="max-h-40"
@@ -642,38 +773,52 @@ export function MainMap({
                             }
                           }}
                         >
-                          <View className="flex-row items-center justify-between rounded-xl border border-slate-200/90 bg-white px-3 py-2 shadow-sm">
+                          <View
+                            className="flex-row items-center justify-between rounded-xl border px-3 py-2"
+                            style={{
+                              backgroundColor: colors.card,
+                              borderColor: colors.border,
+                            }}
+                          >
                             <View className="flex-row items-center gap-2">
                               <View
-                                className={`h-2.5 w-2.5 rounded-full ${
-                                  pt.severity === "severe"
-                                    ? "bg-red-700"
-                                    : pt.severity === "high"
-                                      ? "bg-red-500"
+                                className="h-2.5 w-2.5 rounded-full"
+                                style={{
+                                  backgroundColor:
+                                    pt.severity === "severe" ||
+                                    pt.severity === "high"
+                                      ? colors.danger
                                       : pt.severity === "medium"
-                                        ? "bg-amber-500"
-                                        : "bg-yellow-400"
-                                }`}
+                                        ? colors.warning
+                                        : colors.success,
+                                }}
                               />
-                              <Text className="font-mono text-[11px] text-slate-800">
+                              <Text
+                                className="font-mono text-[11px]"
+                                style={{ color: colors.text }}
+                              >
                                 {pt.position.latitude.toFixed(4)},{" "}
                                 {pt.position.longitude.toFixed(4)}
                               </Text>
                             </View>
                             <View className="flex-row items-center gap-1.5">
-                              <Text className="font-quicksand text-[11px] text-slate-500">
-                                {pt.reportCount} lap
+                              <Text
+                                className="font-inter text-[11px]"
+                                style={{ color: colors.textMuted }}
+                              >
+                                {pt.reportCount} det
                               </Text>
                               <Text
-                                className={`font-quicksand-bold text-[10px] uppercase ${
-                                  pt.severity === "severe"
-                                    ? "text-red-700"
-                                    : pt.severity === "high"
-                                      ? "text-rose-600"
+                                className="font-inter-bold text-[10px] uppercase"
+                                style={{
+                                  color:
+                                    pt.severity === "severe" ||
+                                    pt.severity === "high"
+                                      ? colors.dangerText
                                       : pt.severity === "medium"
-                                        ? "text-amber-600"
-                                        : "text-yellow-600"
-                                }`}
+                                        ? colors.warningText
+                                        : colors.successText,
+                                }}
                               >
                                 {pt.severity}
                               </Text>
@@ -685,22 +830,26 @@ export function MainMap({
                   </ScrollView>
                 </View>
 
-                {/* Primary Action Button: Zoom in to area */}
                 <Touchable
                   onPress={() => {
                     const center = selectedArea.center;
                     setIsAreaModalVisible(false);
-                    setFocusCoords({
-                      latitude: center.latitude,
-                      longitude: center.longitude,
-                      zoom: 17.5,
+                    setManualFocus({
+                      baseTarget: focusTarget,
+                      coords: {
+                        latitude: center.latitude,
+                        longitude: center.longitude,
+                        zoom: 17.5,
+                        ts: Date.now(),
+                      },
                     });
                   }}
-                  className="mt-1 flex-row items-center justify-center gap-2 rounded-2xl bg-custom-primary py-3.5 shadow-md active:opacity-90"
+                  className="mt-1 flex-row items-center justify-center gap-2 rounded-2xl py-3.5"
+                  style={{ backgroundColor: colors.brand }}
                 >
                   <ZoomIn size={18} color="#ffffff" />
-                  <Text className="font-quicksand-bold text-sm text-white">
-                    Perbesar & Lihat Klaster di Peta
+                  <Text className="font-inter-bold text-sm text-white">
+                    Zoom & Inspect on Map
                   </Text>
                 </Touchable>
               </View>
@@ -710,7 +859,7 @@ export function MainMap({
       </Modal>
     </View>
   );
-}
+});
 
 function FilterChip({
   label,
@@ -721,19 +870,19 @@ function FilterChip({
   active: boolean;
   onPress: () => void;
 }) {
+  const { colors } = useOptionalTheme();
   return (
     <Touchable onPress={onPress}>
       <View
-        className={`rounded-full border px-2.5 py-1 shadow-sm ${
-          active
-            ? "border-custom-primary bg-custom-primary"
-            : "border-slate-200/90 bg-white/95"
-        }`}
+        className="rounded-full border px-2.5 py-1 shadow-sm"
+        style={{
+          backgroundColor: active ? colors.brand : colors.card,
+          borderColor: active ? colors.brand : colors.border,
+        }}
       >
         <Text
-          className={`font-quicksand-bold text-[10px] ${
-            active ? "text-white" : "text-slate-600"
-          }`}
+          className="font-inter-bold text-[10px]"
+          style={{ color: active ? "#FFFFFF" : colors.textSecondary }}
         >
           {label}
         </Text>

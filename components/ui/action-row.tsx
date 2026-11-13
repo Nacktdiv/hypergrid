@@ -29,25 +29,25 @@ export function ActionRow({
   const content = (
     <View
       className={cn(
-        "flex-row items-center justify-between py-3 px-3.5 rounded-item bg-slate-50 border border-slate-200/70",
+        "flex-row items-center justify-between py-3 px-3.5 rounded-item bg-slate-50 dark:bg-[#1E2430] border border-slate-200/70 dark:border-[#2B3344]",
         className
       )}
     >
       <View className="flex-row items-center gap-3 flex-1 mr-2">
-        <View className="h-9 w-9 items-center justify-center rounded-xl bg-white border border-slate-200/80 shadow-xs">
+        <View className="h-9 w-9 items-center justify-center rounded-xl bg-white dark:bg-[#151922] border border-slate-200/80 dark:border-[#232936]">
           {icon}
         </View>
         <View className="flex-1">
           <Text
             numberOfLines={1}
-            className="font-quicksand-bold text-sm text-slate-900"
+            className="font-inter-bold text-sm text-slate-900 dark:text-slate-50"
           >
             {title}
           </Text>
           {subtitle ? (
             <Text
               numberOfLines={1}
-              className="font-quicksand text-xs text-slate-500"
+              className="font-inter text-xs text-slate-500 dark:text-slate-400"
             >
               {subtitle}
             </Text>

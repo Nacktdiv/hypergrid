@@ -1,38 +1,39 @@
 import * as Haptics from "expo-haptics";
 import {
-    ArrowRight,
-    Building2,
-    Compass,
-    Landmark,
-    MapPin,
-    Search,
-    Train,
-    Trophy,
-    X,
+  ArrowRight,
+  Building2,
+  Compass,
+  Landmark,
+  MapPin,
+  Search,
+  Train,
+  Trophy,
+  X,
 } from "lucide-react-native";
 import React, {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
 import {
-    ActivityIndicator,
-    Keyboard,
-    Modal,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Keyboard,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { LatLng } from "@/components/map/map-data";
+import { useOptionalTheme } from "@/contexts/theme-context";
 import {
-    routingService,
-    type SearchLocationResult,
+  routingService,
+  type SearchLocationResult,
 } from "@/services/api/routing.service";
 
 export interface TripPlannerSheetProps {
@@ -42,12 +43,16 @@ export interface TripPlannerSheetProps {
   onSelectDestination: (destName: string, destCoords: LatLng) => void;
 }
 
-interface PopularPlace {
+export interface PopularPlace {
   name: string;
   address: string;
   category: string;
   icon: React.ComponentType<{ size: number; color: string }>;
   coords: LatLng;
+}
+
+export interface PopularPlaceWithDistance extends PopularPlace {
+  distanceMeters: number;
 }
 
 function calculateHaversineMeters(a: LatLng, b: LatLng): number {
@@ -65,7 +70,14 @@ function calculateHaversineMeters(a: LatLng, b: LatLng): number {
   return R * 2 * Math.atan2(Math.sqrt(hav), Math.sqrt(1 - hav));
 }
 
-const POPULAR_DESTINATIONS: PopularPlace[] = [
+export function formatDistanceLabel(meters: number): string {
+  if (meters >= 1000) {
+    return `${(meters / 1000).toFixed(1)} km`;
+  }
+  return `${Math.round(meters)} m`;
+}
+
+export const POPULAR_DESTINATIONS: PopularPlace[] = [
   {
     name: "Bundaran HI",
     address: "Menteng, Central Jakarta",
@@ -124,6 +136,18 @@ const POPULAR_DESTINATIONS: PopularPlace[] = [
   },
 ];
 
+const DEFAULT_ORIGIN: LatLng = { latitude: -6.2088, longitude: 106.8206 };
+
+export function getPopularDestinationsWithDistance(
+  origin?: LatLng | null,
+): PopularPlaceWithDistance[] {
+  const ref = origin || DEFAULT_ORIGIN;
+  return POPULAR_DESTINATIONS.map((dest) => ({
+    ...dest,
+    distanceMeters: calculateHaversineMeters(ref, dest.coords),
+  })).sort((a, b) => a.distanceMeters - b.distanceMeters);
+}
+
 export function TripPlannerSheet({
   visible,
   onClose,
@@ -131,17 +155,13 @@ export function TripPlannerSheet({
   onSelectDestination,
 }: TripPlannerSheetProps) {
   const insets = useSafeAreaInsets();
+  const { colors } = useOptionalTheme();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchLocationResult[]>(
     [],
   );
   const [isSearching, setIsSearching] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const defaultStart: LatLng = useMemo(
-    () => userCoords || { latitude: -6.2088, longitude: 106.8206 },
-    [userCoords],
-  );
 
   // Debounced geocoding search using OpenStreetMap Nominatim
   useEffect(() => {
@@ -186,24 +206,10 @@ export function TripPlannerSheet({
     [onClose, onSelectDestination],
   );
 
-  const formatDistance = (meters: number) => {
-    if (meters >= 1000) {
-      return `${(meters / 1000).toFixed(1)} km`;
-    }
-    return `${Math.round(meters)} m`;
-  };
-
-  // Sort popular destinations by actual distance from current user coordinates
-  const nearbyPopularDestinations = useMemo(() => {
-    const origin = userCoords || defaultStart;
-    return POPULAR_DESTINATIONS.map((dest) => {
-      const distance = calculateHaversineMeters(origin, dest.coords);
-      return {
-        ...dest,
-        distanceMeters: distance,
-      };
-    }).sort((a, b) => a.distanceMeters - b.distanceMeters);
-  }, [userCoords, defaultStart]);
+  const nearbyPopularDestinations = useMemo(
+    () => getPopularDestinationsWithDistance(userCoords),
+    [userCoords],
+  );
 
   return (
     <Modal
@@ -212,7 +218,10 @@ export function TripPlannerSheet({
       visible={visible}
       onRequestClose={onClose}
     >
-      <View className="flex-1 justify-end bg-black/50">
+      <View
+        className="flex-1 justify-end"
+        style={{ backgroundColor: colors.overlay }}
+      >
         <Pressable
           onPress={onClose}
           className="flex-1"
@@ -221,25 +230,45 @@ export function TripPlannerSheet({
         />
 
         <View
-          className="max-h-[82%] rounded-t-[30px] bg-white px-5 pt-3 shadow-2xl"
+          className="max-h-[82%] rounded-t-[30px] border-t px-5 pt-3 shadow-2xl"
           style={{
+            backgroundColor: colors.sheet,
+            borderTopColor: colors.border,
             paddingBottom: Math.max(insets.bottom, 16) + 8,
           }}
         >
           {/* Subtle Drag Handle */}
-          <View className="w-10 h-1 bg-slate-300 rounded-full self-center mb-3" />
+          <View
+            className="w-10 h-1 rounded-full self-center mb-3"
+            style={{ backgroundColor: colors.borderStrong }}
+          />
 
-          {/* Modal Header: Clean neutral icon, English typography */}
-          <View className="flex-row items-center justify-between pb-3 border-b border-slate-100">
+          {/* Modal Header */}
+          <View
+            className="flex-row items-center justify-between pb-3 border-b"
+            style={{ borderBottomColor: colors.border }}
+          >
             <View className="flex-row items-center gap-3">
-              <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-100 border border-slate-200/80">
-                <Compass size={18} color="#0F172A" />
+              <View
+                className="h-9 w-9 items-center justify-center rounded-xl border"
+                style={{
+                  backgroundColor: colors.brandSoft,
+                  borderColor: colors.brandBorder,
+                }}
+              >
+                <Compass size={18} color={colors.brand} />
               </View>
               <View>
-                <Text className="font-chivo-bold text-base text-slate-900 leading-tight">
+                <Text
+                  className="font-inter-bold text-base leading-tight"
+                  style={{ color: colors.text }}
+                >
                   Trip Planner
                 </Text>
-                <Text className="font-quicksand text-[11px] text-slate-500 mt-0.5">
+                <Text
+                  className="font-inter text-[11px] mt-0.5"
+                  style={{ color: colors.textMuted }}
+                >
                   Eco route & road safety scanning
                 </Text>
               </View>
@@ -247,11 +276,15 @@ export function TripPlannerSheet({
 
             <Pressable
               onPress={onClose}
-              className="h-8 w-8 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200 border border-slate-200"
+              className="h-8 w-8 items-center justify-center rounded-full border"
+              style={{
+                backgroundColor: colors.subtle,
+                borderColor: colors.border,
+              }}
               accessibilityRole="button"
               accessibilityLabel="Close"
             >
-              <X size={15} color="#475569" />
+              <X size={15} color={colors.textSecondary} />
             </Pressable>
           </View>
 
@@ -260,63 +293,91 @@ export function TripPlannerSheet({
             keyboardShouldPersistTaps="handled"
             contentContainerClassName="pt-3 pb-2 gap-3.5"
           >
-            {/* 1. WAYPOINT JOURNEY CARD (DEPARTURE & DESTINATION INPUT) */}
-            <View className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5">
+            {/* 1. WAYPOINT JOURNEY CARD */}
+            <View
+              className="rounded-2xl border p-3.5"
+              style={{
+                backgroundColor: colors.cardMuted,
+                borderColor: colors.border,
+              }}
+            >
               <View className="flex-row items-stretch">
                 {/* Visual Waypoint Connectors */}
                 <View className="items-center justify-between py-2 pr-3">
-                  <View className="h-2.5 w-2.5 rounded-full bg-sky-500 ring-4 ring-sky-100" />
-                  <View className="w-0.5 flex-1 bg-slate-300 my-1" />
-                  <View className="h-3 w-3 items-center justify-center rounded-full bg-rose-500">
+                  <View
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: colors.brand }}
+                  />
+                  <View
+                    className="w-0.5 flex-1 my-1"
+                    style={{ backgroundColor: colors.borderStrong }}
+                  />
+                  <View className="h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500">
                     <MapPin size={8} color="#FFFFFF" />
                   </View>
                 </View>
 
                 {/* Form Fields */}
                 <View className="flex-1 gap-2">
-                  {/* Departure */}
                   <View className="py-0.5">
-                    <Text className="font-quicksand-bold text-[10px] text-slate-400 uppercase tracking-wider">
+                    <Text
+                      className="font-inter-bold text-[10px] uppercase tracking-wider"
+                      style={{ color: colors.textMuted }}
+                    >
                       Departure
                     </Text>
                     <Text
-                      className="font-quicksand-bold text-xs text-slate-800 mt-0.5"
+                      className="font-inter-bold text-xs mt-0.5"
+                      style={{ color: colors.text }}
                       numberOfLines={1}
                     >
                       Current GPS Location
                     </Text>
                   </View>
 
-                  <View className="h-[1px] bg-slate-200/80" />
+                  <View
+                    className="h-[1px]"
+                    style={{ backgroundColor: colors.border }}
+                  />
 
-                  {/* Destination Input */}
                   <View>
-                    <Text className="font-quicksand-bold text-[10px] text-slate-400 uppercase tracking-wider mb-1">
+                    <Text
+                      className="font-inter-bold text-[10px] uppercase tracking-wider mb-1"
+                      style={{ color: colors.textMuted }}
+                    >
                       Destination
                     </Text>
-                    <View className="flex-row items-center px-3 py-2 rounded-xl bg-white border border-slate-200 focus:border-brand shadow-2xs">
+                    <View
+                      className="flex-row items-center px-3 py-2 rounded-xl border"
+                      style={{
+                        backgroundColor: colors.card,
+                        borderColor: colors.border,
+                      }}
+                    >
                       <TextInput
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                         placeholder="Search destination or address..."
-                        placeholderTextColor="#94A3B8"
-                        className="flex-1 font-quicksand-bold text-xs text-slate-900 py-0.5"
+                        placeholderTextColor={colors.textMuted}
+                        className="flex-1 font-inter-semibold text-xs py-0.5"
+                        style={{ color: colors.text }}
                         autoCorrect={false}
                         returnKeyType="search"
                       />
                       {isSearching ? (
-                        <ActivityIndicator size="small" color="#1DA1F2" />
+                        <ActivityIndicator size="small" color={colors.brand} />
                       ) : searchQuery.length > 0 ? (
                         <Pressable
                           onPress={() => setSearchQuery("")}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          className="h-5 w-5 rounded-full items-center justify-center bg-slate-100 active:bg-slate-200"
+                          className="h-5 w-5 rounded-full items-center justify-center"
+                          style={{ backgroundColor: colors.subtle }}
                           accessibilityLabel="Clear query"
                         >
-                          <X size={12} color="#64748B" />
+                          <X size={12} color={colors.textMuted} />
                         </Pressable>
                       ) : (
-                        <Search size={15} color="#94A3B8" />
+                        <Search size={15} color={colors.textMuted} />
                       )}
                     </View>
                   </View>
@@ -326,12 +387,27 @@ export function TripPlannerSheet({
 
             {/* 2. LIVE SEARCH RESULTS */}
             {searchResults.length > 0 ? (
-              <View className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs">
-                <View className="px-3.5 pt-2.5 pb-1 border-b border-slate-100 flex-row items-center justify-between">
-                  <Text className="font-quicksand-bold text-[11px] text-slate-500 uppercase tracking-wider">
+              <View
+                className="rounded-2xl border overflow-hidden"
+                style={{
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                }}
+              >
+                <View
+                  className="px-3.5 pt-2.5 pb-1.5 border-b flex-row items-center justify-between"
+                  style={{ borderBottomColor: colors.border }}
+                >
+                  <Text
+                    className="font-inter-bold text-[11px] uppercase tracking-wider"
+                    style={{ color: colors.textMuted }}
+                  >
                     Search Results
                   </Text>
-                  <Text className="font-quicksand text-[10px] text-slate-400">
+                  <Text
+                    className="font-inter text-[10px]"
+                    style={{ color: colors.textMuted }}
+                  >
                     {searchResults.length} places
                   </Text>
                 </View>
@@ -345,38 +421,47 @@ export function TripPlannerSheet({
                         longitude: res.longitude,
                       })
                     }
-                    className="flex-row items-center justify-between p-3 border-b border-slate-100 last:border-b-0 active:bg-slate-50"
+                    className="flex-row items-center justify-between p-3 border-b last:border-b-0"
+                    style={{ borderBottomColor: colors.border }}
                     accessibilityRole="button"
                     accessibilityLabel={`Choose destination ${res.name}`}
                   >
                     <View className="flex-1 pr-2">
                       <Text
-                        className="font-quicksand-bold text-xs text-slate-900"
+                        className="font-inter-bold text-xs"
+                        style={{ color: colors.text }}
                         numberOfLines={1}
                       >
                         {res.name}
                       </Text>
                       <Text
-                        className="font-quicksand text-[11px] text-slate-500 mt-0.5"
+                        className="font-inter text-[11px] mt-0.5"
+                        style={{ color: colors.textMuted }}
                         numberOfLines={1}
                       >
                         {res.address}
                       </Text>
                     </View>
-                    <ArrowRight size={14} color="#94A3B8" />
+                    <ArrowRight size={14} color={colors.textMuted} />
                   </Pressable>
                 ))}
               </View>
             ) : null}
 
-            {/* 3. NEARBY POPULAR DESTINATIONS (ALWAYS POPULATED & SORTED) */}
+            {/* 3. NEARBY POPULAR DESTINATIONS */}
             {searchResults.length === 0 ? (
               <View className="gap-2">
                 <View className="flex-row items-center justify-between px-1">
-                  <Text className="font-quicksand-bold text-[11px] text-slate-500 uppercase tracking-wider">
-                    Nearby Popular Destinations
+                  <Text
+                    className="font-inter-bold text-[11px] uppercase tracking-wider"
+                    style={{ color: colors.textMuted }}
+                  >
+                    Popular Destinations
                   </Text>
-                  <Text className="font-quicksand text-[10px] text-slate-400">
+                  <Text
+                    className="font-inter text-[10px]"
+                    style={{ color: colors.textMuted }}
+                  >
                     Sorted by nearest
                   </Text>
                 </View>
@@ -388,42 +473,66 @@ export function TripPlannerSheet({
                       <Pressable
                         key={dest.name}
                         onPress={() => handleSelect(dest.name, dest.coords)}
-                        className="flex-row items-center justify-between p-3 rounded-2xl border border-slate-200 bg-white active:bg-slate-50 shadow-2xs"
+                        className="flex-row items-center justify-between p-3 rounded-2xl border"
+                        style={{
+                          backgroundColor: colors.card,
+                          borderColor: colors.border,
+                        }}
                         accessibilityRole="button"
                         accessibilityLabel={`Plan route to ${dest.name}`}
                       >
                         <View className="flex-row items-center gap-2.5 flex-1 pr-2">
-                          <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-100">
-                            <IconComp size={17} color="#0F172A" />
+                          <View
+                            className="h-9 w-9 items-center justify-center rounded-xl"
+                            style={{ backgroundColor: colors.subtle }}
+                          >
+                            <IconComp size={17} color={colors.text} />
                           </View>
                           <View className="flex-1 justify-center">
                             <View className="flex-row items-center gap-1.5 flex-wrap">
                               <Text
-                                className="font-quicksand-bold text-xs text-slate-900"
+                                className="font-inter-bold text-xs"
+                                style={{ color: colors.text }}
                                 numberOfLines={1}
                               >
                                 {dest.name}
                               </Text>
-                              <View className="px-1.5 py-0.5 rounded-md bg-slate-100">
-                                <Text className="font-quicksand-semibold text-[9px] text-slate-600">
+                              <View
+                                className="px-1.5 py-0.5 rounded-md"
+                                style={{ backgroundColor: colors.subtle }}
+                              >
+                                <Text
+                                  className="font-inter-semibold text-[9px]"
+                                  style={{ color: colors.textSecondary }}
+                                >
                                   {dest.category}
                                 </Text>
                               </View>
-                              <View className="px-1.5 py-0.5 rounded-md bg-sky-50 border border-sky-100">
-                                <Text className="font-mono-bold text-[9px] text-sky-700">
-                                  {formatDistance(dest.distanceMeters)}
+                              <View
+                                className="px-1.5 py-0.5 rounded-md border"
+                                style={{
+                                  backgroundColor: colors.brandSoft,
+                                  borderColor: colors.brandBorder,
+                                }}
+                              >
+                                <Text
+                                  className="font-mono-bold text-[9px]"
+                                  style={{ color: colors.brandText }}
+                                >
+                                  {formatDistanceLabel(dest.distanceMeters)}
                                 </Text>
                               </View>
                             </View>
                             <Text
-                              className="font-quicksand text-[11px] text-slate-500 mt-0.5"
+                              className="font-inter text-[11px] mt-0.5"
+                              style={{ color: colors.textMuted }}
                               numberOfLines={1}
                             >
                               {dest.address}
                             </Text>
                           </View>
                         </View>
-                        <ArrowRight size={14} color="#94A3B8" />
+                        <ArrowRight size={14} color={colors.textMuted} />
                       </Pressable>
                     );
                   })}

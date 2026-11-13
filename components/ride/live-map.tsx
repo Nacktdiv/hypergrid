@@ -5,6 +5,7 @@ import { Text, View } from "react-native";
 import { LeafletMap } from "@/components/map/leaflet-map";
 import type { DamagePoint, LatLng, MapData } from "@/components/map/map-data";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useOptionalTheme } from "@/contexts/theme-context";
 import { cn } from "@/lib/utils";
 
 export interface LiveMapProps {
@@ -33,6 +34,8 @@ export const LiveMap = React.memo(function LiveMap({
   liveDetections = [],
   onDamagePress,
 }: LiveMapProps) {
+  const { colors, isDark } = useOptionalTheme();
+
   // Koordinat aktif pengguna (real-time atau titik terakhir jejak rute)
   const activeCoord: LatLng | null = useMemo(() => {
     if (currentCoords) return currentCoords;
@@ -71,19 +74,34 @@ export const LiveMap = React.memo(function LiveMap({
   // Tampilkan Skeleton saat GPS & data peta sedang dimuat
   if (!mapData || !activeCoord) {
     return (
-      <View className="flex-1 items-center justify-center bg-[#0B0F19] px-6">
-        <View className="w-full max-w-xs items-center gap-3.5 rounded-2xl border border-slate-800 bg-slate-900/90 px-6 py-6 shadow-2xl">
-          <View className="rounded-full bg-sky-500/10 p-3">
-            <Navigation size={26} color="#1DA1F2" />
+      <View
+        className="flex-1 items-center justify-center px-6"
+        style={{ backgroundColor: colors.canvas }}
+      >
+        <View
+          className="w-full max-w-xs items-center gap-3.5 rounded-3xl border px-6 py-6 shadow-sm"
+          style={{
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          }}
+        >
+          <View
+            className="rounded-full p-3"
+            style={{ backgroundColor: colors.brandSoft }}
+          >
+            <Navigation size={26} color={colors.brand} />
           </View>
-          <Skeleton dark className="h-4 w-40 rounded-lg" />
-          <Skeleton dark className="h-3 w-52 rounded-md" />
+          <Skeleton dark={isDark} className="h-4 w-40 rounded-lg" />
+          <Skeleton dark={isDark} className="h-3 w-52 rounded-md" />
           <View className="w-full flex-row gap-2 pt-2">
-            <Skeleton dark className="flex-1 h-8 rounded-xl" />
-            <Skeleton dark className="flex-1 h-8 rounded-xl" />
+            <Skeleton dark={isDark} className="flex-1 h-8 rounded-xl" />
+            <Skeleton dark={isDark} className="flex-1 h-8 rounded-xl" />
           </View>
-          <Text className="mt-1 text-center font-quicksand text-[11px] text-slate-400">
-            Menyiapkan peta & memuat titik klaster jalan...
+          <Text
+            className="mt-1 text-center font-inter text-xs"
+            style={{ color: colors.textMuted }}
+          >
+            Preparing live telemetry map and hazard clusters...
           </Text>
         </View>
       </View>

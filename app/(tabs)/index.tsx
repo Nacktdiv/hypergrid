@@ -1,17 +1,26 @@
 import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import {
   AlertTriangle,
-  MapPin,
+  ChevronRight,
+  Clock,
+  Compass,
   Navigation,
   RefreshCw,
   Search,
   ShieldAlert,
   ShieldCheck,
   User,
-  X
+  X,
 } from "lucide-react-native";
-import { useCallback, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -24,31 +33,44 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { MainMap } from "@/components/main/main-map";
+import {
+  MainMap,
+  type MainMapFocusTarget,
+} from "@/components/main/main-map";
 import { PlayButton } from "@/components/main/play-button";
-import { TripPlannerSheet } from "@/components/main/trip-planner-sheet";
+import {
+  formatDistanceLabel,
+  getPopularDestinationsWithDistance,
+  TripPlannerSheet,
+} from "@/components/main/trip-planner-sheet";
 import { VehicleSelector } from "@/components/main/vehicle-selector";
 import type { LatLng } from "@/components/map/map-data";
-import { AppButton } from "@/components/ui/app-button";
 import { EmergencyModal } from "@/components/ui/emergency-modal";
+import { useAuth } from "@/contexts/auth-context";
+import { useAppTheme } from "@/contexts/theme-context";
 import { useVehicle } from "@/contexts/vehicle-context";
 import { usePotholeClusters } from "@/hooks/use-pothole-clusters";
 import { useUserLocation } from "@/hooks/use-user-location";
-import { TOKENS } from "@/lib/theme/tokens";
 import {
   routingService,
   type PlannedRoute,
 } from "@/services/api/routing.service";
 
-const PEEK_HEIGHT = 48;
+const PEEK_HEIGHT = 44;
+
+type DrawerMode = "browse" | "launch";
 
 export default function StartScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const { colors } = useAppTheme();
   const { vehicleId, setVehicle } = useVehicle();
   const { clusters, fetchClusters } = usePotholeClusters();
   const { coords: liveCoords, getImmediateLocation } = useUserLocation();
 
+  const [drawerMode, setDrawerMode] = useState<DrawerMode>("browse");
+  const [areaTitle, setAreaTitle] = useState("Current Location");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isEmergencyVisible, setIsEmergencyVisible] = useState(false);
@@ -56,9 +78,13 @@ export default function StartScreen() {
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
   const [activeRoute, setActiveRoute] = useState<PlannedRoute | null>(null);
   const [drawerHeight, setDrawerHeight] = useState(330);
+  const [focusTarget, setFocusTarget] = useState<MainMapFocusTarget | null>(
+    null,
+  );
 
-  // Animated translateY for the bottom drawer
+  // UI-thread only animation (translateY transform uses useNativeDriver: true)
   const [drawerY] = useState(() => new Animated.Value(0));
+  const lastGeocodeCoordsRef = useRef<LatLng | null>(null);
 
   const maxCollapse = Math.max(0, drawerHeight - PEEK_HEIGHT);
 
@@ -67,9 +93,9 @@ export default function StartScreen() {
       setIsCollapsed(collapseState);
       Animated.spring(drawerY, {
         toValue,
-        useNativeDriver: false,
+        useNativeDriver: true,
         bounciness: 2,
-        speed: 15,
+        speed: 16,
       }).start();
     },
     [drawerY],
@@ -83,7 +109,33 @@ export default function StartScreen() {
     }
   }, [isCollapsed, maxCollapse, snapTo]);
 
-  // PanResponder to handle smooth 1:1 drag gestures like Google Maps
+  // Reverse geocode current area name only when user moves significantly (> 150m)
+  useEffect(() => {
+    if (!liveCoords) return;
+    const prev = lastGeocodeCoordsRef.current;
+    if (prev) {
+      const dLat = (liveCoords.latitude - prev.latitude) * 111320;
+      const dLon =
+        (liveCoords.longitude - prev.longitude) *
+        111320 *
+        Math.cos((liveCoords.latitude * Math.PI) / 180);
+      if (dLat * dLat + dLon * dLon < 150 * 150) {
+        return;
+      }
+    }
+    lastGeocodeCoordsRef.current = liveCoords;
+    let active = true;
+    routingService.reverseGeocode(liveCoords).then((place) => {
+      if (!active || !place) return;
+      if (!place.startsWith("[")) {
+        setAreaTitle(place);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [liveCoords]);
+
   const panResponder = useMemo(() => {
     let touchStartOffset = 0;
     return PanResponder.create({
@@ -96,106 +148,132 @@ export default function StartScreen() {
         });
       },
       onPanResponderMove: (_, gestureState) => {
-        const limit = Math.max(0, drawerHeight - PEEK_HEIGHT);
         const nextY = Math.min(
           Math.max(0, touchStartOffset + gestureState.dy),
-          limit,
+          maxCollapse,
         );
         drawerY.setValue(nextY);
       },
       onPanResponderRelease: (_, gestureState) => {
-        const limit = Math.max(0, drawerHeight - PEEK_HEIGHT);
         const currentY = Math.min(
           Math.max(0, touchStartOffset + gestureState.dy),
-          limit,
+          maxCollapse,
         );
-
-        // Fast downward swipe or pulled down past 35% -> collapse completely
-        const shouldCollapse = gestureState.vy > 0.3 || currentY > limit * 0.35;
-        const target = shouldCollapse ? limit : 0;
+        const shouldCollapse =
+          gestureState.vy > 0.3 || currentY > maxCollapse * 0.35;
+        const target = shouldCollapse ? maxCollapse : 0;
 
         setIsCollapsed(shouldCollapse);
         Animated.spring(drawerY, {
           toValue: target,
-          useNativeDriver: false,
+          useNativeDriver: true,
           bounciness: 2,
-          speed: 15,
+          speed: 16,
         }).start();
       },
     });
-  }, [drawerY, drawerHeight]);
+  }, [drawerY, maxCollapse]);
 
   const handleDrawerLayout = useCallback((e: LayoutChangeEvent) => {
     const { height } = e.nativeEvent.layout;
     if (height > 60) {
-      setDrawerHeight(height);
+      setDrawerHeight((prev) => (Math.abs(prev - height) > 1 ? height : prev));
     }
   }, []);
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await Promise.allSettled([
       fetchClusters({ limit: 500 }, true),
       getImmediateLocation(),
     ]);
     setIsRefreshing(false);
-  };
+  }, [fetchClusters, getImmediateLocation]);
 
-  // Direct route calculation on map without leaving screen ("gak pindah halaman")
-  const handleSelectDestination = async (
-    destName: string,
-    destCoords: LatLng,
-  ) => {
-    setIsTripPlannerVisible(false);
-    setIsCalculatingRoute(true);
-    try {
-      const start = liveCoords || { latitude: -6.2088, longitude: 106.8206 };
-      const route = await routingService.calculateRoute(
-        start,
-        destCoords,
-        destName,
-        clusters,
-      );
-      if (route) {
-        setActiveRoute(route);
-        Haptics.notificationAsync(
-          Haptics.NotificationFeedbackType.Success,
-        ).catch(() => {});
-      } else {
-        Alert.alert(
-          "Route Not Found",
-          "Could not calculate driving directions to this location. Please try another destination.",
-        );
-      }
-    } catch (err) {
-      console.warn("[StartScreen] Route calculation error:", err);
-      Alert.alert(
-        "Route Error",
-        "Failed to calculate route. Please try again.",
-      );
-    } finally {
-      setIsCalculatingRoute(false);
+  const handleRecenter = useCallback(async () => {
+    Haptics.selectionAsync().catch(() => {});
+    const target = liveCoords || (await getImmediateLocation());
+    if (target) {
+      setFocusTarget({
+        latitude: target.latitude,
+        longitude: target.longitude,
+        zoom: 16.5,
+        ts: Date.now(),
+      });
+    } else {
+      await getImmediateLocation();
     }
-  };
+  }, [getImmediateLocation, liveCoords]);
 
-  const recenterBottom = useMemo(
-    () =>
-      drawerY.interpolate({
-        inputRange: [0, Math.max(1, drawerHeight - PEEK_HEIGHT)],
-        outputRange: [drawerHeight + 14, PEEK_HEIGHT + 14],
-        extrapolate: "clamp",
-      }),
-    [drawerY, drawerHeight],
+  const handleOpenLaunchMode = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    setDrawerMode("launch");
+    snapTo(0, false);
+  }, [snapTo]);
+
+  const handleCancelLaunch = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    setActiveRoute(null);
+    setDrawerMode("browse");
+    snapTo(0, false);
+  }, [snapTo]);
+
+  const handleSelectDestination = useCallback(
+    async (destName: string, destCoords: LatLng) => {
+      setIsTripPlannerVisible(false);
+      setIsCalculatingRoute(true);
+      try {
+        const start = liveCoords || { latitude: -6.2088, longitude: 106.8206 };
+        const route = await routingService.calculateRoute(
+          start,
+          destCoords,
+          destName,
+          clusters,
+        );
+        if (route) {
+          setActiveRoute(route);
+          setDrawerMode("launch");
+          snapTo(0, false);
+          Haptics.notificationAsync(
+            Haptics.NotificationFeedbackType.Success,
+          ).catch(() => {});
+        } else {
+          Alert.alert(
+            "Route Not Found",
+            "Could not calculate driving directions to this location. Please try another destination.",
+          );
+        }
+      } catch (err) {
+        console.warn("[StartScreen] Route calculation error:", err);
+        Alert.alert(
+          "Route Error",
+          "Failed to calculate route. Please try again.",
+        );
+      } finally {
+        setIsCalculatingRoute(false);
+      }
+    },
+    [clusters, liveCoords, snapTo],
   );
 
-  // Offset right floating buttons if the route insight card is currently displayed
-  const floatingControlsBottom = useMemo(
-    () => (activeRoute ? Animated.add(recenterBottom, 152) : recenterBottom),
-    [activeRoute, recenterBottom],
+  const topThreePopular = useMemo(
+    () => getPopularDestinationsWithDistance(liveCoords).slice(0, 3),
+    [liveCoords],
   );
+
+  // Floating controls ride on UI thread in lockstep with drawerY transform
+  const routeCardBottom = drawerHeight + 12;
+  const floatingControlsBottom = activeRoute
+    ? drawerHeight + 160
+    : drawerHeight + 14;
+
+  const userInitial = (user?.name || "U").trim().charAt(0).toUpperCase();
 
   return (
-    <View className="flex-1 bg-surface-canvas relative">
+    <View
+      className="flex-1 relative"
+      style={{ backgroundColor: colors.canvas }}
+    >
       {/* 1. FULL-BLEED INTERACTIVE LEAFLET MAP */}
       <View className="absolute inset-0 w-full h-full">
         <MainMap
@@ -204,213 +282,310 @@ export default function StartScreen() {
           showOverlayControls={false}
           currentCoords={liveCoords}
           plannedRoute={activeRoute?.coordinates}
-          bottomOffset={activeRoute ? 240 : 124}
+          focusTarget={focusTarget}
+          bottomOffset={activeRoute ? drawerHeight + 168 : drawerHeight + 16}
         />
       </View>
 
-      {/* 2. UNIFIED TOP NAVIGATION & SEARCH BAR */}
+      {/* 2. UNIFIED TOP SEARCH & USER AVATAR CAPSULE PILL */}
       <View
-        className="absolute inset-x-4 z-20 flex-row items-center gap-2.5"
-        style={{ top: Math.max(insets.top, 12) + 6 }}
+        className="absolute inset-x-4 z-20"
+        style={{ top: Math.max(insets.top, 10) + 6 }}
       >
-        {/* Profile Avatar Button */}
-        <Pressable
-          onPress={() => router.push("/(tabs)/profile")}
-          accessibilityLabel="Open user profile"
-          accessibilityRole="button"
-          className="h-11 w-11 items-center justify-center rounded-full bg-white border border-slate-200 shadow-xs active:bg-slate-100"
+        <View
+          className="flex-row items-center h-13 pl-2 pr-1.5 rounded-full border shadow-md"
+          style={{
+            backgroundColor: colors.pill,
+            borderColor: colors.border,
+          }}
         >
-          <User size={18} color={TOKENS.colors.slate[800]} />
-        </Pressable>
-
-        {/* Integrated Trip Planner & Search Capsule */}
-        <View className="flex-1 flex-row items-center h-11 px-3.5 rounded-full bg-white border border-slate-200 shadow-xs">
           <Pressable
             onPress={() => setIsTripPlannerVisible(true)}
             accessibilityRole="button"
-            accessibilityLabel="Plan route and scan road hazards"
-            className="flex-1 flex-row items-center h-full active:opacity-75"
+            accessibilityLabel="Search destination"
+            className="flex-1 flex-row items-center gap-2.5 h-full py-1.5 active:opacity-80"
           >
-            {isCalculatingRoute ? (
-              <View className="flex-row items-center gap-2 flex-1">
-                <ActivityIndicator size="small" color="#1DA1F2" />
+            <View
+              className="h-9 w-9 rounded-full items-center justify-center"
+              style={{ backgroundColor: colors.brandSoft }}
+            >
+              {isCalculatingRoute ? (
+                <ActivityIndicator size="small" color={colors.brand} />
+              ) : (
+                <Search size={17} color={colors.brand} />
+              )}
+            </View>
+
+            <View className="flex-1">
+              {isCalculatingRoute ? (
                 <Text
-                  className="font-quicksand-bold text-xs text-sky-600 flex-1"
+                  className="font-inter-semibold text-[13px]"
+                  style={{ color: colors.brandText }}
                   numberOfLines={1}
                 >
-                  Calculating optimal eco route...
+                  Calculating optimal route...
                 </Text>
-              </View>
-            ) : activeRoute ? (
-              <View className="flex-row items-center gap-2 flex-1 pr-1.5">
-                <Navigation size={13} color="#1DA1F2" />
+              ) : activeRoute ? (
+                <View className="flex-row items-center gap-1.5">
+                  <Navigation size={13} color={colors.brand} />
+                  <Text
+                    className="font-inter-semibold text-[13px] flex-1"
+                    style={{ color: colors.text }}
+                    numberOfLines={1}
+                  >
+                    {activeRoute.destinationName} ·{" "}
+                    {(activeRoute.distanceMeters / 1000).toFixed(1)} km
+                  </Text>
+                </View>
+              ) : (
                 <Text
-                  className="font-quicksand-bold text-xs text-slate-800 flex-1"
+                  className="font-inter-medium text-[14px]"
+                  style={{ color: colors.textMuted }}
                   numberOfLines={1}
                 >
-                  {activeRoute.destinationName} •{" "}
-                  {(activeRoute.distanceMeters / 1000).toFixed(1)} km
+                  Search destination...
                 </Text>
-              </View>
-            ) : (
-              <View className="flex-row items-center gap-2 flex-1">
-                <Search size={16} color="#64748B" />
-                <Text
-                  className="font-quicksand-semibold text-xs text-slate-400 flex-1"
-                  numberOfLines={1}
-                >
-                  Where to? Search destination...
-                </Text>
-              </View>
-            )}
+              )}
+            </View>
           </Pressable>
 
           {activeRoute && !isCalculatingRoute ? (
             <Pressable
-              onPress={() => setActiveRoute(null)}
+              onPress={handleCancelLaunch}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              className="h-5 w-5 rounded-full items-center justify-center bg-slate-100 active:bg-slate-200 ml-1.5"
+              className="h-8 w-8 rounded-full items-center justify-center mr-1.5"
+              style={{ backgroundColor: colors.subtle }}
               accessibilityRole="button"
               accessibilityLabel="Clear active route"
             >
-              <X size={12} color="#64748B" />
+              <X size={14} color={colors.textSecondary} />
             </Pressable>
           ) : null}
+
+          {/* Right Avatar Circle Inside Capsule */}
+          <Pressable
+            onPress={() => router.push("/(tabs)/profile")}
+            accessibilityLabel="Open user profile"
+            accessibilityRole="button"
+            className="h-9 w-9 rounded-full items-center justify-center border-2 overflow-hidden"
+            style={{
+              backgroundColor: colors.brandSoft,
+              borderColor: colors.brand,
+            }}
+          >
+            {user?.image ? (
+              <Image
+                source={{ uri: user.image }}
+                style={{ width: "100%", height: "100%" }}
+                contentFit="cover"
+              />
+            ) : user?.name ? (
+              <Text
+                className="font-inter-bold text-xs"
+                style={{ color: colors.brandText }}
+              >
+                {userInitial}
+              </Text>
+            ) : (
+              <User size={16} color={colors.brand} />
+            )}
+          </Pressable>
         </View>
       </View>
 
-      {/* 3. FLOATING MAP CONTROLS: UNIFORM SOS EMERGENCY, RELOAD, & RE-CENTER */}
+      {/* 3. FLOATING MAP CONTROLS (UI-THREAD TRANSFORM) */}
       <Animated.View
         className="absolute right-4 z-10 items-end gap-2.5"
         style={{
           bottom: floatingControlsBottom,
+          transform: [{ translateY: drawerY }],
         }}
       >
-        {/* Uniform Circular SOS Emergency Floating Button */}
         <Pressable
           onPress={() => setIsEmergencyVisible(true)}
           accessibilityRole="button"
           accessibilityLabel="Open Emergency Assistance Center"
-          className="h-12 w-12 rounded-full bg-rose-600 border border-rose-700 items-center justify-center shadow-md active:bg-rose-700"
+          className="h-11 w-11 rounded-full bg-rose-600 border border-rose-700 items-center justify-center shadow-md active:bg-rose-700"
         >
           <View className="items-center justify-center">
-            <AlertTriangle size={16} color="#FFFFFF" strokeWidth={2.5} />
-            <Text className="font-chivo-bold text-[9px] text-white tracking-wider mt-0.5">
+            <AlertTriangle size={14} color="#FFFFFF" strokeWidth={2.5} />
+            <Text className="font-inter-extrabold text-[8px] text-white tracking-wider mt-0.5">
               SOS
             </Text>
           </View>
         </Pressable>
 
-        {/* Refresh Map & Potholes Button */}
-        <AppButton
-          variant="circle"
-          size="sm"
+        <Pressable
           onPress={handleRefresh}
-          loading={isRefreshing}
-          iconLeft={<RefreshCw size={16} color={TOKENS.colors.slate[700]} />}
+          accessibilityRole="button"
           accessibilityLabel="Refresh map and pothole data"
-        />
+          className="h-11 w-11 rounded-full border items-center justify-center shadow-sm active:opacity-80"
+          style={{
+            backgroundColor: colors.pill,
+            borderColor: colors.border,
+          }}
+        >
+          {isRefreshing ? (
+            <ActivityIndicator size="small" color={colors.brand} />
+          ) : (
+            <RefreshCw size={17} color={colors.textSecondary} />
+          )}
+        </Pressable>
 
-        {/* Center Map on User Location */}
-        <AppButton
-          variant="circle"
-          size="sm"
-          onPress={() => getImmediateLocation()}
-          iconLeft={<MapPin size={18} color={TOKENS.colors.brand.DEFAULT} />}
+        <Pressable
+          onPress={handleRecenter}
+          accessibilityRole="button"
           accessibilityLabel="Center map on my location"
-        />
+          className="h-11 w-11 rounded-full border items-center justify-center shadow-sm active:opacity-80"
+          style={{
+            backgroundColor: colors.pill,
+            borderColor: colors.border,
+          }}
+        >
+          <Compass size={19} color={colors.text} />
+        </Pressable>
+
+        <Pressable
+          onPress={() => setIsTripPlannerVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Plan driving route"
+          className="h-11 w-11 rounded-full items-center justify-center shadow-md active:opacity-90"
+          style={{ backgroundColor: colors.brand }}
+        >
+          <Navigation size={18} color="#FFFFFF" />
+        </Pressable>
       </Animated.View>
 
-      {/* 4. FLOATING ROUTE INSIGHT CARD (DIRECT ON MAP, NO PAGE SWITCH) */}
+      {/* 4. FLOATING ROUTE INSIGHT CARD */}
       {activeRoute ? (
         <Animated.View
           className="absolute inset-x-4 z-10"
           style={{
-            bottom: recenterBottom,
+            bottom: routeCardBottom,
+            transform: [{ translateY: drawerY }],
           }}
         >
-          <View className="rounded-2xl border border-slate-200/90 bg-white/95 p-3.5 shadow-lg">
-            {/* Top row: Destination name & Safety/Eco badge */}
-            <View className="flex-row items-center justify-between pb-2.5 border-b border-slate-100">
-              <View className="flex-1 pr-2">
-                <View className="flex-row items-center gap-1.5">
-                  <Navigation size={13} color="#1DA1F2" />
-                  <Text
-                    className="font-chivo-bold text-sm text-slate-900"
-                    numberOfLines={1}
-                  >
-                    {activeRoute.destinationName}
-                  </Text>
-                </View>
+          <View
+            className="rounded-2xl border p-3.5 shadow-lg"
+            style={{
+              backgroundColor: colors.pill,
+              borderColor: colors.border,
+            }}
+          >
+            <View
+              className="flex-row items-center justify-between pb-2.5 border-b"
+              style={{ borderBottomColor: colors.border }}
+            >
+              <View className="flex-1 pr-2 flex-row items-center gap-1.5">
+                <Navigation size={13} color={colors.brand} />
+                <Text
+                  className="font-inter-bold text-sm flex-1"
+                  style={{ color: colors.text }}
+                  numberOfLines={1}
+                >
+                  {activeRoute.destinationName}
+                </Text>
               </View>
 
               <View
-                className={`px-2.5 py-0.5 rounded-full border flex-row items-center gap-1 ${
-                  activeRoute.hazards.safetyRating === "dangerous"
-                    ? "bg-rose-50 border-rose-200"
-                    : activeRoute.hazards.safetyRating === "caution"
-                      ? "bg-amber-50 border-amber-200"
-                      : "bg-emerald-50 border-emerald-200"
-                }`}
+                className="px-2.5 py-0.5 rounded-full border flex-row items-center gap-1"
+                style={{
+                  backgroundColor:
+                    activeRoute.hazards.safetyRating === "dangerous"
+                      ? colors.dangerSoft
+                      : activeRoute.hazards.safetyRating === "caution"
+                        ? colors.warningSoft
+                        : colors.successSoft,
+                  borderColor:
+                    activeRoute.hazards.safetyRating === "dangerous"
+                      ? colors.danger
+                      : activeRoute.hazards.safetyRating === "caution"
+                        ? colors.warning
+                        : colors.success,
+                }}
               >
                 {activeRoute.hazards.safetyRating === "dangerous" ? (
-                  <AlertTriangle size={11} color="#E11D48" />
+                  <AlertTriangle size={11} color={colors.danger} />
                 ) : activeRoute.hazards.safetyRating === "caution" ? (
-                  <ShieldAlert size={11} color="#D97706" />
+                  <ShieldAlert size={11} color={colors.warning} />
                 ) : (
-                  <ShieldCheck size={11} color="#059669" />
+                  <ShieldCheck size={11} color={colors.success} />
                 )}
                 <Text
-                  className={`font-quicksand-bold text-[10px] ${
-                    activeRoute.hazards.safetyRating === "dangerous"
-                      ? "text-rose-700"
-                      : activeRoute.hazards.safetyRating === "caution"
-                        ? "text-amber-700"
-                        : "text-emerald-700"
-                  }`}
+                  className="font-inter-bold text-[10px]"
+                  style={{
+                    color:
+                      activeRoute.hazards.safetyRating === "dangerous"
+                        ? colors.dangerText
+                        : activeRoute.hazards.safetyRating === "caution"
+                          ? colors.warningText
+                          : colors.successText,
+                  }}
                 >
                   {activeRoute.hazards.safetyRating === "safe"
-                    ? "Eco & Smooth Route"
-                    : `${activeRoute.hazards.totalHazards} Potholes Alert`}
+                    ? "Eco & Smooth"
+                    : `${activeRoute.hazards.totalHazards} Hazards`}
                 </Text>
               </View>
             </View>
 
-            {/* Metrics Row: 3 columns (Distance, Duration, Hazards) */}
-            <View className="flex-row items-center justify-between pt-2.5 pb-2">
+            <View className="flex-row items-center justify-between pt-2.5">
               <View className="items-center flex-1">
-                <Text className="font-quicksand text-[10px] text-slate-400">
+                <Text
+                  className="font-inter text-[10px]"
+                  style={{ color: colors.textMuted }}
+                >
                   Distance
                 </Text>
-                <Text className="font-mono-bold text-xs text-slate-800 mt-0.5">
+                <Text
+                  className="font-mono-bold text-xs mt-0.5"
+                  style={{ color: colors.text }}
+                >
                   {(activeRoute.distanceMeters / 1000).toFixed(1)} km
                 </Text>
               </View>
 
-              <View className="w-[1px] h-6 bg-slate-100" />
+              <View
+                className="w-[1px] h-6"
+                style={{ backgroundColor: colors.border }}
+              />
 
               <View className="items-center flex-1">
-                <Text className="font-quicksand text-[10px] text-slate-400">
+                <Text
+                  className="font-inter text-[10px]"
+                  style={{ color: colors.textMuted }}
+                >
                   Est. Time
                 </Text>
-                <Text className="font-mono-bold text-xs text-slate-800 mt-0.5">
+                <Text
+                  className="font-mono-bold text-xs mt-0.5"
+                  style={{ color: colors.text }}
+                >
                   {Math.max(1, Math.round(activeRoute.durationSeconds / 60))}{" "}
                   min
                 </Text>
               </View>
 
-              <View className="w-[1px] h-6 bg-slate-100" />
+              <View
+                className="w-[1px] h-6"
+                style={{ backgroundColor: colors.border }}
+              />
 
               <View className="items-center flex-1">
-                <Text className="font-quicksand text-[10px] text-slate-400">
+                <Text
+                  className="font-inter text-[10px]"
+                  style={{ color: colors.textMuted }}
+                >
                   Hazards
                 </Text>
                 <Text
-                  className={`font-mono-bold text-xs mt-0.5 ${
-                    activeRoute.hazards.totalHazards > 0
-                      ? "text-amber-600"
-                      : "text-emerald-600"
-                  }`}
+                  className="font-mono-bold text-xs mt-0.5"
+                  style={{
+                    color:
+                      activeRoute.hazards.totalHazards > 0
+                        ? colors.warningText
+                        : colors.successText,
+                  }}
                 >
                   {activeRoute.hazards.totalHazards === 0
                     ? "Clear"
@@ -418,29 +593,11 @@ export default function StartScreen() {
                 </Text>
               </View>
             </View>
-
-            {/* Footer Action: Cancel Route & Slide Prompt */}
-            <View className="flex-row items-center justify-between pt-2 border-t border-slate-100">
-              <Text className="font-quicksand text-[11px] text-slate-400">
-                Slide below to start
-              </Text>
-
-              <Pressable
-                onPress={() => setActiveRoute(null)}
-                className="h-8 px-3.5 rounded-lg border border-slate-200 bg-slate-50 items-center justify-center active:bg-slate-100"
-                accessibilityRole="button"
-                accessibilityLabel="Cancel route"
-              >
-                <Text className="font-quicksand-bold text-xs text-slate-600">
-                  Cancel Route
-                </Text>
-              </Pressable>
-            </View>
           </View>
         </Animated.View>
       ) : null}
 
-      {/* 5. GOOGLE MAPS STYLE SWIPEABLE BOTTOM DRAWER */}
+      {/* 5. 2-STATE SWIPEABLE BOTTOM DRAWER */}
       <Animated.View
         onLayout={handleDrawerLayout}
         style={{
@@ -448,54 +605,189 @@ export default function StartScreen() {
         }}
         className="absolute inset-x-0 bottom-0 z-20"
       >
-        <View className="rounded-t-sheet bg-white border-t border-slate-200/90 px-5 pt-2 pb-6 shadow-sm">
-          {/* DRAG HANDLE & DRAWER TOGGLE HEADER */}
+        <View
+          className="rounded-t-[28px] border-t px-5 pt-2 pb-5 shadow-lg"
+          style={{
+            backgroundColor: colors.sheet,
+            borderTopColor: colors.border,
+          }}
+        >
+          {/* Drag Handle */}
           <View {...panResponder.panHandlers} className="items-center py-1.5">
             <Pressable
               onPress={toggleDrawer}
               accessibilityRole="button"
               accessibilityLabel={
                 isCollapsed
-                  ? "Expand vehicle drawer"
-                  : "Swipe down to collapse drawer"
+                  ? "Expand bottom drawer"
+                  : "Swipe down to collapse bottom drawer"
               }
-              className="active:opacity-80"
+              className="py-0.5 px-6"
             >
-              <View className="items-center py-0.5 px-4">
-                <View className="w-12 h-1.5 bg-gray-300 rounded-full mb-1.5" />
-                <View className="flex-row items-center gap-1.5">
-                  {/* {isCollapsed ? (
-                    <>
-                      <ChevronUp
-                        size={14}
-                        color={TOKENS.colors.brand.DEFAULT}
-                      />
-                      <Text className="font-quicksand-bold text-[11px] text-brand">
-                        Swipe up for vehicle controls
-                      </Text>
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDown size={14} color="#64748B" />
-                      <Text className="font-quicksand text-[11px] text-slate-600">
-                        Swipe down for full map
-                      </Text>
-                    </>
-                  )} */}
-                </View>
-              </View>
+              <View
+                className="w-11 h-1.5 rounded-full"
+                style={{ backgroundColor: colors.borderStrong }}
+              />
             </Pressable>
           </View>
 
-          {/* DRAWER CONTENT: VEHICLE SELECTOR & START RIDE */}
-          <View className="gap-4 pt-6">
-            <VehicleSelector onSelect={setVehicle} selected={vehicleId} />
-            <PlayButton activeRoute={activeRoute} />
-          </View>
+          {drawerMode === "browse" ? (
+            /* BROWSE STATE: Current Location + "Ride" pill + Popular Destinations */
+            <View className="gap-3.5 pt-1">
+              <View className="flex-row items-center justify-between gap-3">
+                <View className="flex-1">
+                  <Text
+                    className="font-inter-bold text-lg tracking-tight"
+                    style={{ color: colors.text }}
+                    numberOfLines={1}
+                  >
+                    {areaTitle}
+                  </Text>
+                  <Text
+                    className="font-inter text-xs mt-0.5"
+                    style={{ color: colors.textMuted }}
+                    numberOfLines={1}
+                  >
+                    {liveCoords
+                      ? `${clusters.length} hazard clusters indexed nearby`
+                      : "Waiting for GPS lock..."}
+                  </Text>
+                </View>
+
+                <Pressable
+                  onPress={handleOpenLaunchMode}
+                  accessibilityRole="button"
+                  accessibilityLabel="Prepare Ride"
+                  className="flex-row items-center gap-1.5 px-4 py-2.5 rounded-full active:opacity-85"
+                  style={{ backgroundColor: colors.brand }}
+                >
+                  <Navigation size={14} color="#FFFFFF" />
+                  <Text className="font-inter-bold text-xs text-white">
+                    Ride
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View className="flex-row items-center justify-between pt-1">
+                <Text
+                  className="font-inter-bold text-xs uppercase tracking-wider"
+                  style={{ color: colors.textMuted }}
+                >
+                  Popular Destinations
+                </Text>
+                <Pressable
+                  onPress={() => setIsTripPlannerVisible(true)}
+                  className="flex-row items-center gap-1"
+                >
+                  <Clock size={12} color={colors.brand} />
+                  <Text
+                    className="font-inter-semibold text-xs"
+                    style={{ color: colors.brandText }}
+                  >
+                    Quick
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View className="gap-2">
+                {topThreePopular.map((dest) => {
+                  const IconComp = dest.icon;
+                  return (
+                    <Pressable
+                      key={dest.name}
+                      onPress={() =>
+                        handleSelectDestination(dest.name, dest.coords)
+                      }
+                      className="flex-row items-center justify-between rounded-2xl border px-3.5 py-2.5 active:opacity-80"
+                      style={{
+                        backgroundColor: colors.card,
+                        borderColor: colors.border,
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Navigate to ${dest.name}`}
+                    >
+                      <View className="flex-row items-center gap-3 flex-1 pr-2">
+                        <View
+                          className="h-9 w-9 rounded-xl items-center justify-center"
+                          style={{ backgroundColor: colors.subtle }}
+                        >
+                          <IconComp size={16} color={colors.brand} />
+                        </View>
+                        <View className="flex-1">
+                          <Text
+                            className="font-inter-bold text-[13px]"
+                            style={{ color: colors.text }}
+                            numberOfLines={1}
+                          >
+                            {dest.name}
+                          </Text>
+                          <Text
+                            className="font-inter text-[11px] mt-0.5"
+                            style={{ color: colors.textMuted }}
+                            numberOfLines={1}
+                          >
+                            {dest.category} ·{" "}
+                            {formatDistanceLabel(dest.distanceMeters)}
+                          </Text>
+                        </View>
+                      </View>
+                      <ChevronRight size={15} color={colors.textMuted} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : (
+            /* LAUNCH STATE: Free Ride / Destination + Cancel + Vehicle Selector + SlideCommit */
+            <View className="gap-4 pt-1">
+              <View className="flex-row items-center justify-between gap-3">
+                <View className="flex-1">
+                  <Text
+                    className="font-inter-bold text-lg tracking-tight"
+                    style={{ color: colors.text }}
+                    numberOfLines={1}
+                  >
+                    {activeRoute ? activeRoute.destinationName : "Free Ride"}
+                  </Text>
+                  <Text
+                    className="font-inter text-xs mt-0.5"
+                    style={{ color: colors.textMuted }}
+                    numberOfLines={1}
+                  >
+                    {activeRoute
+                      ? `${(activeRoute.distanceMeters / 1000).toFixed(1)} km · ${Math.max(1, Math.round(activeRoute.durationSeconds / 60))} min`
+                      : "Continuous Edge AI pothole scanning"}
+                  </Text>
+                </View>
+
+                <Pressable
+                  onPress={handleCancelLaunch}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel ride setup"
+                  className="flex-row items-center gap-1 px-3 py-1.5 rounded-full border"
+                  style={{
+                    backgroundColor: colors.subtle,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <X size={13} color={colors.textSecondary} />
+                  <Text
+                    className="font-inter-semibold text-xs"
+                    style={{ color: colors.textSecondary }}
+                  >
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
+
+              <VehicleSelector onSelect={setVehicle} selected={vehicleId} />
+              <PlayButton activeRoute={activeRoute} />
+            </View>
+          )}
         </View>
       </Animated.View>
 
-      {/* MODAL PERENCANAAN RUTE NAVIGASI (DESTINATION PICKER) */}
+      {/* TRIP PLANNER DESTINATION MODAL */}
       <TripPlannerSheet
         visible={isTripPlannerVisible}
         onClose={() => setIsTripPlannerVisible(false)}
@@ -503,7 +795,7 @@ export default function StartScreen() {
         onSelectDestination={handleSelectDestination}
       />
 
-      {/* MODAL PUSAT BANTUAN DARURAT (HOTLINE & SHARE LIVE LOCATION) */}
+      {/* EMERGENCY SOS MODAL */}
       <EmergencyModal
         visible={isEmergencyVisible}
         onClose={() => setIsEmergencyVisible(false)}

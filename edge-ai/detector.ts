@@ -78,8 +78,10 @@ export class EdgeRoadDamageDetector {
         ? samples.reduce((s, c) => s + c.speedKmh, 0) / samples.length
         : 0;
 
-    // Filter fisis: Jika kendaraan diam/hampir berhenti (< 5 km/h), abaikan
-    if (speedKmh < 5.0) {
+    // Filter fisis: gunakan kecepatan minimal terkalibrasi profil kendaraan
+    const minSpeed =
+      vehicleConfig?.minMovingSpeed ?? EDGE_AI_CONFIG.minDetectionSpeedKmh;
+    if (speedKmh < minSpeed) {
       return this._notAnomaly(samples, latitude, longitude);
     }
 
@@ -93,7 +95,10 @@ export class EdgeRoadDamageDetector {
       vertSignals.length > 0 ? Math.max(...vertSignals) : 0;
 
     // Filter validasi fisik anomali jalan (tolak HP jatuh, diutak-atik, guncangan liar gyro)
-    const validation = validateRoadAnomaly(samples, vertSignals);
+    const validation = validateRoadAnomaly(samples, vertSignals, {
+      minMovingSpeed: minSpeed,
+      zShockThreshold: vehicleConfig?.zShockThreshold,
+    });
     if (!validation.isValid) {
       return this._notAnomaly(samples, latitude, longitude);
     }
@@ -141,6 +146,7 @@ export class EdgeRoadDamageDetector {
       speedKmh: Math.round(speedKmh * 10) / 10,
       zAccelPeak: Math.round(maxVertDyn * 100) / 100,
       modelVersion: EDGE_AI_CONFIG.modelVersion,
+      vehicleType: vehicleConfig?.vehicleType,
       detectedAt: timestamp,
     };
 
@@ -229,8 +235,8 @@ export class EdgeRoadDamageDetector {
 
     // 4. Evaluasi kondisi komprehensif
     const isShockSignificant = maxVertDyn >= threshold;
-    const isSharpImpulse = crestFactor >= 1.55; // Puncak tunggal tajam, bukan dengung getaran rata
-    const isVerticalDominant = maxVertDyn >= maxHorizDyn * 0.55; // Bukan belokan tajam / rem
+    const isSharpImpulse = crestFactor >= 1.25; // Toleran terhadap double-impulse roda depan & belakang dalam 1.5s
+    const isVerticalDominant = maxVertDyn >= maxHorizDyn * 0.45; // Toleran terhadap kemiringan mount HP
 
     const isAnomaly =
       isShockSignificant && isSharpImpulse && isVerticalDominant;
@@ -253,8 +259,8 @@ export class EdgeRoadDamageDetector {
     const probability = Math.min(
       0.96,
       Math.max(
-        0.55,
-        0.52 + (excess / (threshold * 1.2)) * 0.35 + (crestFactor - 1.55) * 0.04
+        0.58,
+        0.56 + (excess / (threshold * 1.1)) * 0.36 + (crestFactor - 1.25) * 0.05
       )
     );
 
@@ -295,6 +301,7 @@ export class EdgeRoadDamageDetector {
       speedKmh: Math.round(speedAvg * 10) / 10,
       zAccelPeak: Math.round(maxVertDyn * 100) / 100,
       modelVersion: `${EDGE_AI_CONFIG.modelVersion}-heuristic`,
+      vehicleType: config?.vehicleType,
       detectedAt: timestamp,
     };
 
@@ -326,7 +333,7 @@ export class EdgeRoadDamageDetector {
     }
   ): EdgeDetectionResult {
     // 1. Kecepatan minimal
-    if (frame.speedKmh != null && frame.speedKmh < (vehicleConfig?.minMovingSpeed ?? 8.0)) {
+    if (frame.speedKmh != null && frame.speedKmh < (vehicleConfig?.minMovingSpeed ?? 2.5)) {
       return this._notAnomaly([], frame.latitude, frame.longitude);
     }
 
@@ -339,7 +346,7 @@ export class EdgeRoadDamageDetector {
       return this._notAnomaly([], frame.latitude, frame.longitude);
     }
 
-    const shockThresh = vehicleConfig?.zShockThreshold ?? 1.10;
+    const shockThresh = vehicleConfig?.zShockThreshold ?? 1.05;
     // Hanya picu anomali jika deviasi guncangan dinamis murni >= shockThresh
     const isAnomaly = dynamicZ >= shockThresh;
 
@@ -358,7 +365,7 @@ export class EdgeRoadDamageDetector {
 
     const probability = Math.min(
       1.0,
-      Math.max(0.5, ((dynamicZ - shockThresh) / 2.0) * 0.5 + 0.5)
+      Math.max(0.55, ((dynamicZ - shockThresh) / 1.8) * 0.45 + 0.55)
     );
     const { confidenceScore, confidenceTier } = getConfidenceTier(probability);
 
@@ -397,6 +404,7 @@ export class EdgeRoadDamageDetector {
         frame.speedKmh != null ? Math.round(frame.speedKmh * 10) / 10 : undefined,
       zAccelPeak: Math.round(dynamicZ * 100) / 100,
       modelVersion: `${EDGE_AI_CONFIG.modelVersion}-fallback`,
+      vehicleType: vehicleConfig?.vehicleType,
       detectedAt: frame.timestamp || new Date().toISOString(),
     };
 

@@ -1,42 +1,34 @@
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import {
-    CheckCircle2,
-    Mail,
-    Server,
-    Settings,
-    ShieldCheck,
-    X,
-    XCircle,
+  CheckCircle2,
+  Mail,
+  Server,
+  Settings,
+  ShieldCheck,
+  X,
+  XCircle,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Touchable } from "@/components/ui/touchable";
+import { useAppTheme } from "@/contexts/theme-context";
 import { useAuth } from "@/hooks/use-auth";
 import { getApiBaseUrl, setRuntimeApiBaseUrl } from "@/services/api/config";
 import { healthService } from "@/services/api/health.service";
 
-/**
- * Auth / Login Screen (Terintegrasi Better-Auth & Server Settings).
- *
- * Referensi desain: Figma page "Final Page Mobile" → frame `Login` #114:1019.
- * Mendukung:
- *   - Auto-redirect jika sesi aktif
- *   - Masuk / Daftar Akun Petugas via Email & Password (Better-Auth)
- *   - Masuk cepat Google / Demo Petugas
- *   - Pengaturan Base URL Server & Health Check diagnostik (tombol Settings)
- */
 export default function Index() {
   const router = useRouter();
+  const { colors, isDark } = useAppTheme();
   const {
     isOnboardingCompleted,
     signIn,
@@ -47,7 +39,6 @@ export default function Index() {
   } = useAuth();
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  // State Dialog Autentikasi
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [email, setEmail] = useState("petugas@hypergrid.io");
@@ -55,7 +46,6 @@ export default function Index() {
   const [name, setName] = useState("Budi Santoso");
   const [authSubmitting, setAuthSubmitting] = useState(false);
 
-  // State Dialog Konfigurasi Server
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [serverUrlInput, setServerUrlInput] = useState(getApiBaseUrl());
   const [healthStatus, setHealthStatus] = useState<
@@ -63,7 +53,6 @@ export default function Index() {
   >("idle");
   const [healthMsg, setHealthMsg] = useState("");
 
-  // Session expired notice from middleware
   useEffect(() => {
     if (sessionExpiredNotice) {
       Alert.alert("Session Expired", sessionExpiredNotice, [
@@ -88,12 +77,10 @@ export default function Index() {
         }
         await signUp({ email: email.trim(), password, name: name.trim() });
         setAuthModalVisible(false);
-        // User baru register selalu diarahkan ke onboarding terlebih dahulu
         router.replace("/(onboarding)");
       } else {
         await signIn({ email: email.trim(), password });
         setAuthModalVisible(false);
-        // User login biasa: jika belum pernah onboarding ke onboarding, jika sudah langsung ke tabs
         if (!isOnboardingCompleted) {
           router.replace("/(onboarding)");
         } else {
@@ -103,7 +90,7 @@ export default function Index() {
     } catch (err: any) {
       Alert.alert(
         "Sign In Failed",
-        err.message || "Please check your server connection or credentials.",
+        err.message || "Please check your server connection or credentials."
       );
     } finally {
       setAuthSubmitting(false);
@@ -124,7 +111,7 @@ export default function Index() {
     } catch (err: any) {
       Alert.alert(
         "Google Sign-In",
-        err.message || "Failed to sign in with Google OAuth.",
+        err.message || "Failed to sign in with Google OAuth."
       );
     } finally {
       setGoogleLoading(false);
@@ -152,35 +139,50 @@ export default function Index() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-custom-white">
-      <View className="flex-1 items-center justify-center gap-10 px-4">
-        {/* Ilustrasi — Figma `hipergrid_final 1` #114:1023 (264×280) */}
+    <SafeAreaView
+      className="flex-1"
+      style={{ backgroundColor: colors.canvas }}
+    >
+      <View className="flex-1 items-center justify-center gap-8 px-5">
         <Image
           contentFit="contain"
           source={require("@/assets/login/hipergrid-final.png")}
-          style={{ height: 260, width: 245 }}
+          style={{ height: 245, width: 235 }}
         />
 
         <View className="items-center gap-2">
-          <Text className="text-center font-chivo-bold text-[32px] leading-[38px] text-[#0F172A]">
+          <Text
+            className="text-center font-inter-extrabold text-[30px] leading-[36px] tracking-tight"
+            style={{ color: colors.text }}
+          >
             Log in to your account
           </Text>
-          <Text className="text-center font-quicksand text-sm text-slate-500">
+          <Text
+            className="text-center font-inter text-sm px-4"
+            style={{ color: colors.textMuted }}
+          >
             AI Road Damage Detection & Spatial Mapping Platform
           </Text>
         </View>
 
-        {/* Session Expired Notice Banner */}
         {sessionExpiredNotice ? (
-          <View className="w-full max-w-[320px] rounded-2xl border border-rose-200 bg-rose-50 p-3">
-            <Text className="font-quicksand-bold text-xs text-rose-700">
+          <View
+            className="w-full max-w-[320px] rounded-2xl border p-3"
+            style={{
+              backgroundColor: colors.dangerSoft,
+              borderColor: isDark ? "rgba(239,68,68,0.35)" : "#FECDD3",
+            }}
+          >
+            <Text
+              className="font-inter-bold text-xs"
+              style={{ color: colors.dangerText }}
+            >
               {sessionExpiredNotice}
             </Text>
           </View>
         ) : null}
 
-        <View className="w-full max-w-[280px] gap-2.5">
-          {/* Officer Sign In Button */}
+        <View className="w-full max-w-[290px] gap-3">
           <Touchable
             accessibilityHint="Sign in with your email"
             accessibilityLabel="Sign In"
@@ -190,24 +192,32 @@ export default function Index() {
               setAuthModalVisible(true);
             }}
           >
-            <View className="flex-row items-center justify-center gap-2.5 rounded-[12px] bg-custom-primary px-4 py-3 shadow-sm">
+            <View
+              className="flex-row items-center justify-center gap-2.5 rounded-2xl px-4 py-3.5 shadow-sm"
+              style={{ backgroundColor: colors.brand }}
+            >
               <Mail color="#FFFFFF" size={18} />
-              <Text className="font-quicksand-semibold text-base text-white">
+              <Text className="font-inter-bold text-base text-white">
                 Sign In
               </Text>
             </View>
           </Touchable>
 
-          {/* Sign In with Google Button */}
           <Touchable
             accessibilityHint="Sign in with Google account"
             accessibilityLabel="Sign in with Google"
             accessibilityRole="button"
             onPress={handleGoogleSignIn}
           >
-            <View className="flex-row items-center justify-center gap-3 rounded-[12px] border-[2px] border-[#E2E8F0] bg-white px-4 py-3">
+            <View
+              className="flex-row items-center justify-center gap-3 rounded-2xl border px-4 py-3.5"
+              style={{
+                backgroundColor: colors.card,
+                borderColor: colors.borderStrong,
+              }}
+            >
               {googleLoading ? (
-                <ActivityIndicator size="small" color="#0F172A" />
+                <ActivityIndicator size="small" color={colors.text} />
               ) : (
                 <>
                   <Image
@@ -215,7 +225,10 @@ export default function Index() {
                     source={require("@/assets/icons/google.png")}
                     style={{ height: 18, width: 18 }}
                   />
-                  <Text className="font-quicksand-semibold text-sm text-[#0F172A]">
+                  <Text
+                    className="font-inter-bold text-sm"
+                    style={{ color: colors.text }}
+                  >
                     Sign in with Google
                   </Text>
                 </>
@@ -225,7 +238,7 @@ export default function Index() {
         </View>
       </View>
 
-      {/* Settings Button */}
+      {/* Server Settings FAB */}
       <View className="absolute bottom-6 right-6">
         <Touchable
           accessibilityLabel="Open server settings"
@@ -237,73 +250,118 @@ export default function Index() {
             setSettingsModalVisible(true);
           }}
         >
-          <View className="h-[48px] w-[48px] items-center justify-center rounded-full bg-[#3B82F6] shadow-md">
-            <Settings color="#F8FAFC" size={24} />
+          <View
+            className="h-12 w-12 items-center justify-center rounded-full shadow-md"
+            style={{ backgroundColor: colors.brand }}
+          >
+            <Settings color="#FFFFFF" size={22} />
           </View>
         </Touchable>
       </View>
 
-      {/* EMAIL AUTHENTICATION MODAL (BETTER-AUTH) */}
+      {/* EMAIL AUTHENTICATION MODAL */}
       <Modal
         animationType="slide"
         transparent
         visible={authModalVisible}
         onRequestClose={() => setAuthModalVisible(false)}
       >
-        <View className="flex-1 justify-end bg-black/40">
-          <View className="rounded-t-[32px] bg-white p-6 shadow-xl">
+        <View
+          className="flex-1 justify-end"
+          style={{ backgroundColor: colors.overlay }}
+        >
+          <View
+            className="rounded-t-[32px] p-6 border-t shadow-xl"
+            style={{
+              backgroundColor: colors.sheet,
+              borderTopColor: colors.border,
+            }}
+          >
             <View className="mb-4 flex-row items-center justify-between">
               <View className="flex-row items-center gap-2">
-                <ShieldCheck size={22} color="#1DA1F2" />
-                <Text className="font-chivo-bold text-xl text-[#0F172A]">
+                <ShieldCheck size={22} color={colors.brand} />
+                <Text
+                  className="font-inter-extrabold text-xl"
+                  style={{ color: colors.text }}
+                >
                   {isRegisterMode ? "User Registration" : "Sign In"}
                 </Text>
               </View>
               <Touchable onPress={() => setAuthModalVisible(false)}>
-                <View className="rounded-full bg-slate-100 p-1">
-                  <X size={20} color="#64748B" />
+                <View
+                  className="rounded-full p-2"
+                  style={{ backgroundColor: colors.subtle }}
+                >
+                  <X size={18} color={colors.textMuted} />
                 </View>
               </Touchable>
             </View>
 
             <View className="gap-4">
               {isRegisterMode ? (
-                <View className="gap-1">
-                  <Text className="font-quicksand-semibold text-xs text-slate-500">
+                <View className="gap-1.5">
+                  <Text
+                    className="font-inter-semibold text-xs"
+                    style={{ color: colors.textMuted }}
+                  >
                     Full Name
                   </Text>
                   <TextInput
                     autoCapitalize="words"
-                    className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-quicksand text-sm text-[#0F172A]"
+                    className="rounded-xl border px-4 py-3 font-inter text-sm"
+                    style={{
+                      backgroundColor: colors.cardMuted,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    }}
                     placeholder="Alex Johnson"
+                    placeholderTextColor={colors.textMuted}
                     value={name}
                     onChangeText={setName}
                   />
                 </View>
               ) : null}
 
-              <View className="gap-1">
-                <Text className="font-quicksand-semibold text-xs text-slate-500">
+              <View className="gap-1.5">
+                <Text
+                  className="font-inter-semibold text-xs"
+                  style={{ color: colors.textMuted }}
+                >
                   Email
                 </Text>
                 <TextInput
                   autoCapitalize="none"
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-quicksand text-sm text-[#0F172A]"
+                  className="rounded-xl border px-4 py-3 font-inter text-sm"
+                  style={{
+                    backgroundColor: colors.cardMuted,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  }}
                   keyboardType="email-address"
                   placeholder="user@hypergrid.io"
+                  placeholderTextColor={colors.textMuted}
                   value={email}
                   onChangeText={setEmail}
                 />
               </View>
 
-              <View className="gap-1">
-                <Text className="font-quicksand-semibold text-xs text-slate-500">
+              <View className="gap-1.5">
+                <Text
+                  className="font-inter-semibold text-xs"
+                  style={{ color: colors.textMuted }}
+                >
                   Password
                 </Text>
                 <TextInput
                   autoCapitalize="none"
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-quicksand text-sm text-[#0F172A]"
+                  className="rounded-xl border px-4 py-3 font-inter text-sm"
+                  style={{
+                    backgroundColor: colors.cardMuted,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  }}
                   placeholder="••••••••"
+                  placeholderTextColor={colors.textMuted}
                   secureTextEntry
                   value={password}
                   onChangeText={setPassword}
@@ -311,25 +369,34 @@ export default function Index() {
               </View>
 
               <Touchable onPress={handleEmailAuth}>
-                <View className="mt-2 items-center rounded-xl bg-custom-primary py-3.5">
+                <View
+                  className="mt-2 items-center rounded-2xl py-3.5"
+                  style={{ backgroundColor: colors.brand }}
+                >
                   {authSubmitting ? (
                     <ActivityIndicator color="#FFFFFF" size="small" />
                   ) : (
-                    <Text className="font-quicksand-bold text-base text-white">
+                    <Text className="font-inter-bold text-base text-white">
                       {isRegisterMode ? "Register Now" : "Sign In"}
                     </Text>
                   )}
                 </View>
               </Touchable>
 
-              <View className="mt-2 flex-row items-center justify-center gap-1.5">
-                <Text className="font-quicksand text-xs text-slate-500">
+              <View className="mt-1 flex-row items-center justify-center gap-1.5">
+                <Text
+                  className="font-inter text-xs"
+                  style={{ color: colors.textMuted }}
+                >
                   {isRegisterMode
                     ? "Already have an account?"
                     : "Don't have an account?"}
                 </Text>
                 <Touchable onPress={() => setIsRegisterMode((prev) => !prev)}>
-                  <Text className="font-quicksand-bold text-xs text-custom-primary">
+                  <Text
+                    className="font-inter-bold text-xs"
+                    style={{ color: colors.brand }}
+                  >
                     {isRegisterMode ? "Sign in here" : "Register here"}
                   </Text>
                 </Touchable>
@@ -346,76 +413,118 @@ export default function Index() {
         visible={settingsModalVisible}
         onRequestClose={() => setSettingsModalVisible(false)}
       >
-        <View className="flex-1 items-center justify-center bg-black/50 p-4">
-          <View className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl">
+        <View
+          className="flex-1 items-center justify-center p-4"
+          style={{ backgroundColor: colors.overlay }}
+        >
+          <View
+            className="w-full max-w-sm rounded-3xl p-6 border shadow-2xl"
+            style={{
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            }}
+          >
             <View className="mb-4 flex-row items-center justify-between">
               <View className="flex-row items-center gap-2">
-                <Server size={22} color="#3B82F6" />
-                <Text className="font-chivo-bold text-lg text-[#0F172A]">
+                <Server size={20} color={colors.brand} />
+                <Text
+                  className="font-inter-extrabold text-lg"
+                  style={{ color: colors.text }}
+                >
                   API Server Configuration
                 </Text>
               </View>
               <Touchable onPress={() => setSettingsModalVisible(false)}>
-                <View className="rounded-full bg-slate-100 p-1">
-                  <X size={18} color="#64748B" />
+                <View
+                  className="rounded-full p-1.5"
+                  style={{ backgroundColor: colors.subtle }}
+                >
+                  <X size={16} color={colors.textMuted} />
                 </View>
               </Touchable>
             </View>
 
             <View className="gap-3">
-              <Text className="font-quicksand text-xs text-slate-500">
+              <Text
+                className="font-inter text-xs leading-5"
+                style={{ color: colors.textMuted }}
+              >
                 Set HyperGrid NestJS backend Base URL for your dev environment
                 (Emulator: 10.0.2.2, iOS: localhost, Physical Device: LAN IP).
               </Text>
 
               <TextInput
                 autoCapitalize="none"
-                className="rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-mono text-xs text-[#0F172A]"
+                className="rounded-xl border px-3 py-2.5 font-mono text-xs"
+                style={{
+                  backgroundColor: colors.cardMuted,
+                  borderColor: colors.border,
+                  color: colors.text,
+                }}
                 placeholder={
                   process.env.EXPO_PUBLIC_API_URL ||
                   "https://hg-server.onrender.com"
                 }
+                placeholderTextColor={colors.textMuted}
                 value={serverUrlInput}
                 onChangeText={setServerUrlInput}
               />
 
-              {/* Status Health */}
               {healthStatus !== "idle" ? (
-                <View className="flex-row items-center gap-2 rounded-xl bg-slate-50 p-2.5">
+                <View
+                  className="flex-row items-center gap-2 rounded-xl border p-2.5"
+                  style={{
+                    backgroundColor: colors.cardMuted,
+                    borderColor: colors.border,
+                  }}
+                >
                   {healthStatus === "checking" ? (
-                    <ActivityIndicator size="small" color="#3B82F6" />
+                    <ActivityIndicator size="small" color={colors.brand} />
                   ) : healthStatus === "ok" ? (
-                    <CheckCircle2 size={16} color="#10B981" />
+                    <CheckCircle2 size={16} color={colors.success} />
                   ) : (
-                    <XCircle size={16} color="#EF4444" />
+                    <XCircle size={16} color={colors.danger} />
                   )}
                   <Text
-                    className={`font-mono text-[11px] ${
-                      healthStatus === "ok"
-                        ? "text-emerald-700"
-                        : healthStatus === "error"
-                          ? "text-rose-600"
-                          : "text-slate-600"
-                    }`}
+                    className="font-mono text-[11px] flex-1"
+                    style={{
+                      color:
+                        healthStatus === "ok"
+                          ? colors.successText
+                          : healthStatus === "error"
+                            ? colors.dangerText
+                            : colors.textSecondary,
+                    }}
                   >
                     {healthMsg}
                   </Text>
                 </View>
               ) : null}
 
-              {/* Test Connection & Save Buttons */}
-              <View className="mt-2 flex-row gap-2">
+              <View className="mt-2 flex-row gap-2.5">
                 <Touchable className="flex-1" onPress={handleTestServer}>
-                  <View className="items-center rounded-xl border border-slate-300 bg-slate-100 py-2.5">
-                    <Text className="font-quicksand-semibold text-xs text-slate-700">
+                  <View
+                    className="items-center rounded-xl border py-3"
+                    style={{
+                      backgroundColor: colors.subtle,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <Text
+                      className="font-inter-semibold text-xs"
+                      style={{ color: colors.textSecondary }}
+                    >
                       Test Connection
                     </Text>
                   </View>
                 </Touchable>
 
                 <Touchable className="flex-1" onPress={handleSaveServerConfig}>
-                  <View className="items-center rounded-xl bg-[#3B82F6] py-2.5">
-                    <Text className="font-quicksand-semibold text-xs text-white">
+                  <View
+                    className="items-center rounded-xl py-3"
+                    style={{ backgroundColor: colors.brand }}
+                  >
+                    <Text className="font-inter-bold text-xs text-white">
                       Save
                     </Text>
                   </View>

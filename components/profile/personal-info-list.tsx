@@ -1,9 +1,16 @@
 import React from "react";
 import { Text, View } from "react-native";
-import { IdCard, Mail, Phone, Radio, type LucideIcon } from "lucide-react-native";
+import {
+  IdCard,
+  Mail,
+  Phone,
+  Radio,
+  type LucideIcon,
+} from "lucide-react-native";
 
 import { AppCard } from "@/components/ui/app-card";
 import { Touchable } from "@/components/ui/touchable";
+import { useOptionalTheme } from "@/contexts/theme-context";
 import type { AuthUser } from "@/types/api";
 
 import { PERSONAL_INFO, type PersonalInfoField } from "./mock-data";
@@ -20,20 +27,25 @@ export type ExtendedUserProfile = AuthUser & {
   vehiclePlate?: string;
 };
 
-export function PersonalInfoList({
+export const PersonalInfoList = React.memo(function PersonalInfoList({
   user,
   onEdit,
 }: {
   user?: ExtendedUserProfile | null;
   onEdit?: () => void;
-} = {}) {
+}) {
+  const { colors } = useOptionalTheme();
+
   const displayFields = PERSONAL_INFO.map((field) => {
     if (user) {
       if (field.id === "email" && user.email) {
         return { ...field, value: user.email };
       }
       if (field.id === "driver" && (user.name || user.id)) {
-        return { ...field, value: `${user.name} (${user.id.substring(0, 10)})` };
+        return {
+          ...field,
+          value: `${user.name} (${user.id.substring(0, 10)})`,
+        };
       }
       if (field.id === "phone" && user.phone) {
         return { ...field, value: user.phone };
@@ -46,24 +58,48 @@ export function PersonalInfoList({
   });
 
   return (
-    <AppCard variant="default" className="gap-4 p-4">
-      <View className="flex-row items-center justify-between pb-2 border-b border-slate-100">
-        <Text className="font-quicksand-bold text-base text-slate-900">
+    <AppCard
+      variant="default"
+      className="gap-4 p-4"
+      style={{
+        backgroundColor: colors.card,
+        borderColor: colors.border,
+      }}
+    >
+      <View
+        className="flex-row items-center justify-between pb-2.5 border-b"
+        style={{ borderBottomColor: colors.border }}
+      >
+        <Text
+          className="font-inter-bold text-base"
+          style={{ color: colors.text }}
+        >
           Personal Information
         </Text>
 
-        <Touchable
-          accessibilityLabel="Edit personal information"
-          accessibilityRole="button"
-          onPress={onEdit}
-          scaleTo={0.92}
-        >
-          <View className="rounded-full bg-sky-50 px-3 py-1">
-            <Text className="font-quicksand-bold text-xs text-brand">
-              Edit
-            </Text>
-          </View>
-        </Touchable>
+        {onEdit ? (
+          <Touchable
+            accessibilityLabel="Edit personal information"
+            accessibilityRole="button"
+            onPress={onEdit}
+            scaleTo={0.92}
+          >
+            <View
+              className="rounded-full px-3 py-1 border"
+              style={{
+                backgroundColor: colors.brandSoft,
+                borderColor: colors.brandBorder,
+              }}
+            >
+              <Text
+                className="font-inter-bold text-xs"
+                style={{ color: colors.brandText }}
+              >
+                Edit
+              </Text>
+            </View>
+          </Touchable>
+        ) : null}
       </View>
 
       <View className="gap-3.5">
@@ -73,22 +109,35 @@ export function PersonalInfoList({
       </View>
     </AppCard>
   );
-}
+});
 
 function InfoRow({ field }: { field: PersonalInfoField }) {
+  const { colors } = useOptionalTheme();
   const Icon = ICONS[field.icon];
 
   return (
     <View className="flex-row items-center gap-3.5">
-      <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-50 border border-slate-200/70">
-        <Icon size={18} color="#64748B" />
+      <View
+        className="h-9 w-9 items-center justify-center rounded-xl border"
+        style={{
+          backgroundColor: colors.subtle,
+          borderColor: colors.border,
+        }}
+      >
+        <Icon size={17} color={colors.brand} />
       </View>
 
       <View className="flex-1">
-        <Text className="font-quicksand-semibold text-xs text-slate-600">
+        <Text
+          className="font-inter-medium text-xs"
+          style={{ color: colors.textMuted }}
+        >
           {field.label}
         </Text>
-        <Text className="font-quicksand-bold text-sm text-slate-900 mt-0.5">
+        <Text
+          className="font-inter-semibold text-sm mt-0.5"
+          style={{ color: colors.text }}
+        >
           {field.value}
         </Text>
       </View>

@@ -1,13 +1,14 @@
 import { useRouter } from "expo-router";
-import { Compass, Navigation } from "lucide-react-native";
+import { Compass, Navigation, RefreshCw } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  InteractionManager,
+  FlatList,
   RefreshControl,
-  ScrollView,
   Text,
   View,
+  type ListRenderItemInfo,
 } from "react-native";
+import { InteractionManager } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -23,6 +24,7 @@ import type { DamagePoint, LatLng } from "@/components/map/map-data";
 import { AppButton } from "@/components/ui/app-button";
 import { AppCard } from "@/components/ui/app-card";
 import { HistoryContentSkeleton } from "@/components/ui/skeleton";
+import { useAppTheme } from "@/contexts/theme-context";
 import { useAuth } from "@/hooks/use-auth";
 import { useDetections } from "@/hooks/use-detections";
 import { historyStorage } from "@/services/api/history-storage";
@@ -30,27 +32,22 @@ import { tokenStorage } from "@/services/api/token-storage";
 import { tripStorage, type SavedTripRecord } from "@/services/api/trip-storage";
 
 /**
- * Screen 7 — Riwayat Perjalanan (Swiss Design & Data Riil Server).
- *
- * Arsitektur Transisi Instan + In-Memory useState / Storage Cache:
- *   - Menggunakan data yang sudah ada di memori (`historyStorage.getMemoryCache()` / `useState`)
- *     agar perpindahan antar tab (`Start` <-> `History` <-> `Profile`) instan (0 ms) dan hemat resource.
- *   - Menampilkan Skeleton Loader hanya jika cache belum tersedia atau saat berpindah tanggal.
+ * Trip History & Telemetry Logs (FlatList virtualized + Light/Dark themed).
  */
 export default function HistoryScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
   const { user } = useAuth();
 
-  // Tanggal terpilih (format ISO: YYYY-MM-DD, default hari ini)
   const [selectedDate, setSelectedDate] = useState<string>(() =>
-    formatToIsoDate(new Date()),
+    formatToIsoDate(new Date())
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSkeletonVisible, setIsSkeletonVisible] = useState<boolean>(
-    () => historyStorage.getMemoryCache() === null,
+    () => historyStorage.getMemoryCache() === null
   );
   const [savedTrips, setSavedTrips] = useState<SavedTripRecord[]>(
-    () => tripStorage.getMemoryCache() || [],
+    () => tripStorage.getMemoryCache() || []
   );
   const fetchRequestIdRef = useRef(0);
   const dateSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -91,12 +88,9 @@ export default function HistoryScreen() {
         }
       }
     },
-    [fetchDetections, user],
+    [fetchDetections, user]
   );
 
-  // Saat masuk ke halaman History:
-  // Jika data sudah ada di memoryCache / useState, tampilkan langsung (0ms) tanpa skeleton berat.
-  // Sinkronisasi background hanya dijalankan jika cache belum pernah di-sync dalam 25 detik terakhir.
   useEffect(() => {
     const hasMemoryCache = historyStorage.getMemoryCache() !== null;
     const isCacheFresh =
@@ -117,8 +111,6 @@ export default function HistoryScreen() {
     };
   }, [loadDataFromBackend]);
 
-  // Saat user memilih tanggal baru: langsung ubah tanggal aktif & tampilkan skeleton singkat,
-  // lalu gunakan data di useState/storage (atau revalidate jika cache belum pernah di-sync)
   const handleSelectDate = useCallback(
     (newDate: string) => {
       if (newDate === selectedDate && !isSkeletonVisible) return;
@@ -158,16 +150,15 @@ export default function HistoryScreen() {
         }
       });
     },
-    [selectedDate, isSkeletonVisible, fetchDetections, user],
+    [selectedDate, isSkeletonVisible, fetchDetections, user]
   );
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await loadDataFromBackend(true);
     setIsRefreshing(false);
-  };
+  }, [loadDataFromBackend]);
 
-  // 1. FILTER DATA PERJALANAN & DETEKSI NYATA KHUSUS PADA TANGGAL YANG DIPILIH
   const tripsOnDate = useMemo(() => {
     return savedTrips.filter((t) => {
       const dateObj = new Date(t.startTime);
@@ -183,7 +174,7 @@ export default function HistoryScreen() {
       if (!d.detectedAt) return false;
       if (String(d.id).startsWith("ride_")) return false;
       if (typeof d.confidence === "number" && d.confidence <= 0) return false;
-      if (typeof d.speedKmh === "number" && d.speedKmh < 3.5) return false;
+      if (typeof d.speedKmh === "number" && d.speedKmh < 1.5) return false;
       if (typeof d.zAccelPeak === "number" && d.zAccelPeak < 0.6) return false;
 
       const dateObj = new Date(d.detectedAt);
@@ -194,7 +185,6 @@ export default function HistoryScreen() {
 
   const hasTripOnDate = tripsOnDate.length > 0 || detectionsOnDate.length > 0;
 
-  // 2. SUSUN RUTE & TITIK KERUSAKAN NYATA UNTUK PETA
   const { realRouteCoordinates, realDamagePoints } = useMemo(() => {
     if (!hasTripOnDate) {
       return { realRouteCoordinates: [], realDamagePoints: [] };
@@ -202,13 +192,11 @@ export default function HistoryScreen() {
 
     const coords: LatLng[] = [];
 
-    // Tambahkan titik koordinat dari sesi perjalanan
     for (const trip of tripsOnDate) {
       if (trip.startCoords) coords.push(trip.startCoords);
       if (trip.destinationCoords) coords.push(trip.destinationCoords);
     }
 
-    // Tambahkan titik koordinat dari deteksi jalan
     for (const d of detectionsOnDate) {
       coords.push({ latitude: d.latitude, longitude: d.longitude });
     }
@@ -231,7 +219,6 @@ export default function HistoryScreen() {
     };
   }, [hasTripOnDate, tripsOnDate, detectionsOnDate]);
 
-  // 3. METRIK SWISS DESIGN BERDASARKAN DATA NYATA
   const dynamicMetrics: Metric[] = useMemo(() => {
     if (!hasTripOnDate) {
       return [
@@ -247,7 +234,7 @@ export default function HistoryScreen() {
           label: "Avg AI Confidence",
           value: "0%",
           unit: "AI",
-          accent: "#1DA1F2",
+          accent: colors.brand,
         },
         {
           id: "peak",
@@ -278,7 +265,7 @@ export default function HistoryScreen() {
     const maxPeak = Math.max(
       ...detectionsOnDate.map((d) => d.zAccelPeak || 0),
       ...tripsOnDate.map((t) => t.maxGForce || 0),
-      0,
+      0
     ).toFixed(1);
 
     return [
@@ -294,7 +281,7 @@ export default function HistoryScreen() {
         label: "Avg AI Confidence",
         value: `${avgConfidence}%`,
         unit: "Score",
-        accent: "#1DA1F2",
+        accent: colors.brand,
       },
       {
         id: "peak",
@@ -304,13 +291,11 @@ export default function HistoryScreen() {
         accent: "#1D4ED8",
       },
     ];
-  }, [hasTripOnDate, tripsOnDate, detectionsOnDate]);
+  }, [hasTripOnDate, tripsOnDate, detectionsOnDate, colors.brand]);
 
-  // 4. DAFTAR ITEM RIWAYAT NYATA (LENGKAP DENGAN DETAIL DESTINASI / DETEKSI OTOMATIS)
   const historyEntries: HistoryEntry[] = useMemo(() => {
     const list: HistoryEntry[] = [];
 
-    // 1. Masukkan sesi perjalanan yang tersimpan
     for (const trip of tripsOnDate) {
       const startObj = new Date(trip.startTime);
       const endObj = new Date(trip.endTime);
@@ -344,7 +329,6 @@ export default function HistoryScreen() {
       });
     }
 
-    // 2. Jika belum ada sesi perjalanan penuh di tanggal ini, tampilkan deteksi anomali
     if (list.length === 0) {
       for (const det of detectionsOnDate) {
         const dateObj = new Date(det.detectedAt);
@@ -382,91 +366,92 @@ export default function HistoryScreen() {
 
   const showSkeleton = isSkeletonVisible || isDetectionsLoading;
 
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="gap-5 px-4 pt-2 pb-8"
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            colors={["#1DA1F2"]}
-            tintColor="#1DA1F2"
-          />
-        }
-      >
-        {/* HEADER */}
-        <View className="flex-row items-center justify-between">
-          <View>
-            <Text className="font-chivo-bold text-2xl text-gray-900">
+  const keyExtractor = useCallback((item: HistoryEntry) => item.id, []);
+
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<HistoryEntry>) => (
+      <HistoryItemCard entry={item} />
+    ),
+    []
+  );
+
+  const renderSeparator = useCallback(
+    () => <View style={{ height: 12 }} />,
+    []
+  );
+
+  const handleStartRide = useCallback(() => {
+    router.push("/ride");
+  }, [router]);
+
+  const listHeader = useMemo(
+    () => (
+      <View className="gap-5 mb-3">
+        <View className="flex-row items-center justify-between pt-1">
+          <View className="flex-1 pr-3">
+            <Text
+              className="font-inter-extrabold text-2xl tracking-tight"
+              style={{ color: colors.text }}
+            >
               History
             </Text>
-            <Text className="font-quicksand text-xs text-gray-600 mt-0.5">
+            <Text
+              className="font-inter text-xs mt-0.5"
+              style={{ color: colors.textMuted }}
+            >
               Driving telemetry and detected road anomalies
             </Text>
           </View>
-          {/* <AppButton
+
+          <AppButton
             variant="circle"
             size="sm"
             onPress={handleRefresh}
             loading={isRefreshing}
-            iconLeft={<RefreshCw size={18} color="#334155" />}
+            iconLeft={<RefreshCw size={18} color={colors.text} />}
             accessibilityLabel="Synchronize telemetry data"
-          /> */}
+          />
         </View>
 
-        {/* PEMILIH HARI INTUITIF (7 HARI TERAKHIR + TOMBOL KALENDER) */}
-        <View className="gap-2">
-          {/* <View className="flex-row items-center justify-between">
-            <Text className="text-xs font-bold tracking-wider text-gray-700">
-              Select Date:
-            </Text>
-            <Text className="font-mono text-[11px] text-brand">
-              {formatIsoToLongLabel(selectedDate)}
-            </Text>
-          </View> */}
+        <DaySelector onSelect={handleSelectDate} selectedId={selectedDate} />
 
-          <DaySelector onSelect={handleSelectDate} selectedId={selectedDate} />
-        </View>
-
-        {/* TAMPILKAN SKELETON SAAT PINDAH HALAMAN ATAU GANTI TANGGAL & SEDANG FETCH */}
         {showSkeleton ? (
           <HistoryContentSkeleton />
         ) : (
-          <>
-            {/* RINGKASAN METRIK TELEMETRI */}
+          <View className="gap-5">
             <MetricsSummary metrics={dynamicMetrics} />
 
-            {/* TAMPILAN PETA RIWAYAT: HANYA TAMPIL JIKA ADA DATA PERJALANAN NYATA */}
             {hasTripOnDate ? (
-              <View className="gap-2">
-                {/* <View className="flex-row items-center justify-between">
-                  <Text className="font-mono text-xs font-bold">
-                    Route Preview
-                  </Text>
-                  <Text className="text-xs text-muted-foreground">
-                    {realRouteCoordinates.length} Coordinates
-                  </Text>
-                </View> */}
-
-                <RouteMapPreview
-                  routeCoordinates={realRouteCoordinates}
-                  damagePoints={realDamagePoints}
-                />
-              </View>
+              <RouteMapPreview
+                routeCoordinates={realRouteCoordinates}
+                damagePoints={realDamagePoints}
+              />
             ) : (
-              /* EMPTY STATE BERBASIS DESIGN SYSTEM */
-              <AppCard variant="default" className="p-5 gap-3">
+              <AppCard
+                variant="default"
+                className="p-5 gap-3"
+                style={{
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                }}
+              >
                 <View className="gap-1">
-                  <Text className="font-chivo-bold text-lg text-gray-900">
+                  <Text
+                    className="font-inter-bold text-lg"
+                    style={{ color: colors.text }}
+                  >
                     No Driving Activity Detected
                   </Text>
-                  <Text className="font-quicksand text-xs leading-relaxed text-gray-700">
+                  <Text
+                    className="font-inter text-xs leading-5"
+                    style={{ color: colors.textSecondary }}
+                  >
                     No driving activity or road shock anomaly detections
                     recorded on{" "}
-                    <Text className="font-mono-bold text-gray-900">
+                    <Text
+                      className="font-mono-bold"
+                      style={{ color: colors.text }}
+                    >
                       {formatIsoToLongLabel(selectedDate)}
                     </Text>
                     . Map preview is hidden as no GPS telemetry routes were
@@ -474,67 +459,166 @@ export default function HistoryScreen() {
                   </Text>
                 </View>
 
-                {/* Metric Preview Row */}
-                <View className="flex-row divide-x divide-gray-200 rounded-2xl border border-gray-200 bg-gray-50 p-3 mt-2">
-                  <View className="flex-1 items-center gap-0.5">
-                    <Text className="font-mono text-[9px] uppercase font-bold text-gray-600">
+                <View
+                  className="flex-row rounded-2xl border p-3 mt-1"
+                  style={{
+                    backgroundColor: colors.cardMuted,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <View
+                    className="flex-1 items-center gap-0.5 border-r"
+                    style={{ borderRightColor: colors.border }}
+                  >
+                    <Text
+                      className="font-mono text-[9px] uppercase font-bold"
+                      style={{ color: colors.textMuted }}
+                    >
                       Anomaly Points
                     </Text>
-                    <Text className="font-mono-bold text-sm text-gray-900">
+                    <Text
+                      className="font-mono-bold text-sm"
+                      style={{ color: colors.text }}
+                    >
                       0
                     </Text>
                   </View>
-                  <View className="flex-1 items-center gap-0.5">
-                    <Text className="font-mono text-[9px] uppercase font-bold text-gray-600">
+                  <View
+                    className="flex-1 items-center gap-0.5 border-r"
+                    style={{ borderRightColor: colors.border }}
+                  >
+                    <Text
+                      className="font-mono text-[9px] uppercase font-bold"
+                      style={{ color: colors.textMuted }}
+                    >
                       Distance
                     </Text>
-                    <Text className="font-mono-bold text-sm text-gray-900">
+                    <Text
+                      className="font-mono-bold text-sm"
+                      style={{ color: colors.text }}
+                    >
                       0.0 KM
                     </Text>
                   </View>
                   <View className="flex-1 items-center gap-0.5">
-                    <Text className="font-mono text-[9px] uppercase font-bold text-gray-600">
+                    <Text
+                      className="font-mono text-[9px] uppercase font-bold"
+                      style={{ color: colors.textMuted }}
+                    >
                       Sensor Status
                     </Text>
-                    <Text className="font-mono-bold text-sm text-gray-900">
+                    <Text
+                      className="font-mono-bold text-sm"
+                      style={{ color: colors.text }}
+                    >
                       IDLE
                     </Text>
                   </View>
                 </View>
 
-                {/* Call To Action */}
-                <View className="mt-2">
+                <View className="mt-1">
                   <AppButton
                     variant="primary"
                     size="md"
                     label="Start Drive Mode Now"
                     iconLeft={<Navigation size={16} color="#FFFFFF" />}
-                    onPress={() => router.push("/ride")}
+                    onPress={handleStartRide}
                     accessibilityLabel="Start drive mode"
                   />
                 </View>
               </AppCard>
             )}
 
-            {/* DAFTAR LOG DETAIL PERJALANAN */}
-            <View className="gap-3">
-              {/* List Log Items */}
-              {historyEntries.length > 0 ? (
-                historyEntries.map((entry) => (
-                  <HistoryItemCard key={entry.id} entry={entry} />
-                ))
-              ) : (
-                <View className="items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-white py-8">
-                  <Compass size={24} color="#64748B" />
-                  <Text className="mt-2 font-quicksand-semibold text-xs text-gray-700">
-                    No telemetry logs recorded for this date.
-                  </Text>
-                </View>
-              )}
-            </View>
-          </>
+            {historyEntries.length > 0 ? (
+              <View className="flex-row items-center justify-between pt-1">
+                <Text
+                  className="font-inter-bold text-sm"
+                  style={{ color: colors.text }}
+                >
+                  Telemetry Logs
+                </Text>
+                <Text
+                  className="font-mono-bold text-xs"
+                  style={{ color: colors.textMuted }}
+                >
+                  {historyEntries.length}{" "}
+                  {historyEntries.length === 1 ? "entry" : "entries"}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         )}
-      </ScrollView>
+      </View>
+    ),
+    [
+      colors,
+      handleRefresh,
+      isRefreshing,
+      handleSelectDate,
+      selectedDate,
+      showSkeleton,
+      dynamicMetrics,
+      hasTripOnDate,
+      realRouteCoordinates,
+      realDamagePoints,
+      handleStartRide,
+      historyEntries.length,
+    ]
+  );
+
+  const listEmpty = useMemo(() => {
+    if (showSkeleton) return null;
+    return (
+      <View
+        className="items-center justify-center rounded-3xl border border-dashed py-8 px-4"
+        style={{
+          backgroundColor: colors.card,
+          borderColor: colors.borderStrong,
+        }}
+      >
+        <Compass size={24} color={colors.textMuted} />
+        <Text
+          className="mt-2 font-inter-semibold text-xs text-center"
+          style={{ color: colors.textSecondary }}
+        >
+          No telemetry logs recorded for this date.
+        </Text>
+      </View>
+    );
+  }, [showSkeleton, colors]);
+
+  return (
+    <SafeAreaView
+      className="flex-1"
+      style={{ backgroundColor: colors.canvas }}
+      edges={["top"]}
+    >
+      <FlatList
+        data={showSkeleton ? [] : historyEntries}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        ItemSeparatorComponent={renderSeparator}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={listEmpty}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        removeClippedSubviews={true}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingTop: 8,
+          paddingBottom: 32,
+        }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={[colors.brand]}
+            tintColor={colors.brand}
+          />
+        }
+      />
     </SafeAreaView>
   );
 }

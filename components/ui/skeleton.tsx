@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Animated, View, type ViewProps } from "react-native";
+
+import { useOptionalTheme } from "@/contexts/theme-context";
 import { cn } from "@/lib/utils";
 import { AppCard } from "./app-card";
 
@@ -11,7 +13,9 @@ export interface SkeletonProps extends ViewProps {
 /**
  * Komponen dasar Skeleton Pulse yang ringan (Native Driver 60fps).
  */
-export function Skeleton({ className, style, dark = false, ...props }: SkeletonProps) {
+export function Skeleton({ className, style, dark, ...props }: SkeletonProps) {
+  const { isDark } = useOptionalTheme();
+  const useDark = dark ?? isDark;
   const [opacity] = useState(() => new Animated.Value(0.45));
 
   useEffect(() => {
@@ -38,7 +42,7 @@ export function Skeleton({ className, style, dark = false, ...props }: SkeletonP
       style={[{ opacity }, style]}
       className={cn(
         "rounded-xl",
-        dark ? "bg-slate-800" : "bg-slate-200/90",
+        useDark ? "bg-[#1E2430]" : "bg-slate-200/90",
         className
       )}
       {...props}
@@ -66,7 +70,7 @@ export function HistoryContentSkeleton() {
           <Skeleton className="h-44 w-44 rounded-full" />
         </View>
 
-        <View className="flex-row gap-2 rounded-2xl bg-slate-50 border border-slate-200/70 p-3">
+        <View className="flex-row gap-2 rounded-2xl bg-slate-50 dark:bg-[#1E2430] border border-slate-200/70 dark:border-[#2B3344] p-3">
           <View className="flex-1 items-center gap-1.5">
             <Skeleton className="h-3 w-16 rounded-md" />
             <Skeleton className="h-4 w-10 rounded-md" />
@@ -91,7 +95,7 @@ export function HistoryContentSkeleton() {
           <Skeleton className="h-4 w-28 rounded-md" />
           <Skeleton className="h-3.5 w-24 rounded-md" />
         </View>
-        <Skeleton className="h-56 w-full rounded-2xl border border-slate-200" />
+        <Skeleton className="h-56 w-full rounded-2xl border border-slate-200 dark:border-[#232936]" />
       </View>
 
       {/* 3. Telemetry Log Entries Skeleton */}
@@ -170,21 +174,31 @@ export function ProfileContentSkeleton() {
 /**
  * Skeleton untuk Kanvas Peta (MainMap & LiveMap saat akuisisi GPS / fetch klaster).
  */
-export function MapCanvasSkeleton({ dark = false }: { dark?: boolean }) {
+export function MapCanvasSkeleton({ dark }: { dark?: boolean }) {
+  const { isDark } = useOptionalTheme();
+  const useDark = dark ?? isDark;
+
   return (
     <View
       className={cn(
         "flex-1 w-full h-full items-center justify-center p-6",
-        dark ? "bg-[#0B0F19]" : "bg-slate-100"
+        useDark ? "bg-[#090B10]" : "bg-[#F4F6F9]"
       )}
     >
-      <View className="w-full max-w-xs items-center gap-3.5 rounded-3xl border border-slate-200/80 bg-white/95 p-6 shadow-sm">
-        <Skeleton className="h-12 w-12 rounded-full" />
-        <Skeleton className="h-4 w-40 rounded-lg" />
-        <Skeleton className="h-3 w-52 rounded-md" />
+      <View
+        className={cn(
+          "w-full max-w-xs items-center gap-3.5 rounded-3xl border p-6 shadow-sm",
+          useDark
+            ? "border-[#232936] bg-[#151922]/95"
+            : "border-slate-200/80 bg-white/95"
+        )}
+      >
+        <Skeleton className="h-12 w-12 rounded-full" dark={useDark} />
+        <Skeleton className="h-4 w-40 rounded-lg" dark={useDark} />
+        <Skeleton className="h-3 w-52 rounded-md" dark={useDark} />
         <View className="w-full flex-row gap-2 pt-2">
-          <Skeleton className="flex-1 h-8 rounded-xl" />
-          <Skeleton className="flex-1 h-8 rounded-xl" />
+          <Skeleton className="flex-1 h-8 rounded-xl" dark={useDark} />
+          <Skeleton className="flex-1 h-8 rounded-xl" dark={useDark} />
         </View>
       </View>
     </View>

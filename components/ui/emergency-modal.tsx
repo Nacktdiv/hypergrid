@@ -29,6 +29,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { LatLng } from "@/components/map/map-data";
+import { useOptionalTheme } from "@/contexts/theme-context";
 
 export interface EmergencyModalProps {
   visible: boolean;
@@ -43,7 +44,7 @@ interface HotlineCardData {
   desc: string;
   icon: React.ComponentType<{ size: number; color: string }>;
   accentColor: string;
-  badgeBg: string;
+  badgeClass: string;
 }
 
 const SPECIFIC_HOTLINES: HotlineCardData[] = [
@@ -52,32 +53,36 @@ const SPECIFIC_HOTLINES: HotlineCardData[] = [
     name: "National Police",
     desc: "Security & Accidents",
     icon: Shield,
-    accentColor: "#2563EB",
-    badgeBg: "bg-blue-50 border-blue-200 text-blue-700",
+    accentColor: "#0A84FF",
+    badgeClass:
+      "bg-sky-50 dark:bg-sky-500/15 border-sky-200 dark:border-sky-500/30 text-sky-700 dark:text-sky-300",
   },
   {
     number: "119",
     name: "Medical Ambulance",
     desc: "Emergency & Hospital",
     icon: HeartPulse,
-    accentColor: "#059669",
-    badgeBg: "bg-emerald-50 border-emerald-200 text-emerald-700",
+    accentColor: "#10B981",
+    badgeClass:
+      "bg-emerald-50 dark:bg-emerald-500/15 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300",
   },
   {
     number: "14080",
     name: "Highway Towing",
     desc: "Toll Road Assistance",
     icon: Truck,
-    accentColor: "#D97706",
-    badgeBg: "bg-amber-50 border-amber-200 text-amber-700",
+    accentColor: "#F59E0B",
+    badgeClass:
+      "bg-amber-50 dark:bg-amber-500/15 border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-300",
   },
   {
     number: "113",
     name: "Fire & Rescue",
     desc: "Fire & Evacuation",
     icon: Flame,
-    accentColor: "#EA580C",
-    badgeBg: "bg-orange-50 border-orange-200 text-orange-700",
+    accentColor: "#F97316",
+    badgeClass:
+      "bg-orange-50 dark:bg-orange-500/15 border-orange-200 dark:border-orange-500/30 text-orange-700 dark:text-orange-300",
   },
 ];
 
@@ -88,6 +93,7 @@ export function EmergencyModal({
   speedKmh,
 }: EmergencyModalProps) {
   const insets = useSafeAreaInsets();
+  const { colors } = useOptionalTheme();
   const [copiedRecently, setCopiedRecently] = useState(false);
 
   const handleDial = useCallback(async (number: string, title: string) => {
@@ -127,12 +133,12 @@ export function EmergencyModal({
         : "Vehicle Stopped";
 
     return (
-      `🚨 *EMERGENCY ASSISTANCE (HYPERGRID SOS)* 🚨\n\n` +
+      `[HYPERGRID SOS] EMERGENCY ASSISTANCE\n\n` +
       `I require immediate assistance at this location:\n` +
-      `📍 *Coordinates:* ${lat}, ${lon}\n` +
-      `🗺️ *Google Maps Link:* ${mapUrl}\n` +
-      `🚗 *Speed:* ${speedStr}\n` +
-      `🕒 *Time:* ${dateStr} ${timeStr}\n\n` +
+      `Coordinates: ${lat}, ${lon}\n` +
+      `Google Maps: ${mapUrl}\n` +
+      `Speed: ${speedStr}\n` +
+      `Time: ${dateStr} ${timeStr}\n\n` +
       `Dispatched via HyperGrid Road Telemetry System.`
     );
   }, [currentCoords, speedKmh]);
@@ -181,7 +187,10 @@ export function EmergencyModal({
       visible={visible}
       onRequestClose={onClose}
     >
-      <View className="flex-1 justify-end bg-black/60">
+      <View
+        className="flex-1 justify-end"
+        style={{ backgroundColor: colors.overlay }}
+      >
         <Pressable
           onPress={onClose}
           className="flex-1"
@@ -190,25 +199,45 @@ export function EmergencyModal({
         />
 
         <View
-          className="max-h-[86%] rounded-t-[32px] bg-white px-5 pt-3 shadow-2xl"
+          className="max-h-[86%] rounded-t-[32px] border-t px-5 pt-3 shadow-2xl"
           style={{
+            backgroundColor: colors.sheet,
+            borderTopColor: colors.border,
             paddingBottom: Math.max(insets.bottom, 16) + 12,
           }}
         >
           {/* Centered Drag Handle */}
-          <View className="w-12 h-1.5 bg-slate-200 rounded-full self-center mb-3.5" />
+          <View
+            className="w-12 h-1.5 rounded-full self-center mb-3.5"
+            style={{ backgroundColor: colors.borderStrong }}
+          />
 
           {/* Modal Header */}
-          <View className="flex-row items-center justify-between pb-3.5 border-b border-slate-100">
+          <View
+            className="flex-row items-center justify-between pb-3.5 border-b"
+            style={{ borderBottomColor: colors.border }}
+          >
             <View className="flex-row items-center gap-3">
-              <View className="h-10 w-10 items-center justify-center rounded-2xl bg-rose-50 border border-rose-100">
-                <AlertTriangle size={20} color="#E11D48" strokeWidth={2.5} />
+              <View
+                className="h-10 w-10 items-center justify-center rounded-2xl border"
+                style={{
+                  backgroundColor: colors.dangerSoft,
+                  borderColor: colors.danger,
+                }}
+              >
+                <AlertTriangle size={20} color={colors.danger} strokeWidth={2.5} />
               </View>
               <View>
-                <Text className="font-chivo-bold text-lg text-slate-900 leading-tight">
+                <Text
+                  className="font-inter-bold text-lg leading-tight"
+                  style={{ color: colors.text }}
+                >
                   Emergency Assistance (SOS)
                 </Text>
-                <Text className="font-quicksand text-xs text-slate-500 mt-0.5">
+                <Text
+                  className="font-inter text-xs mt-0.5"
+                  style={{ color: colors.textMuted }}
+                >
                   National Hotlines & Instant Location Sharing
                 </Text>
               </View>
@@ -216,11 +245,15 @@ export function EmergencyModal({
 
             <Pressable
               onPress={onClose}
-              className="h-8 w-8 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200 border border-slate-200"
+              className="h-8 w-8 items-center justify-center rounded-full border"
+              style={{
+                backgroundColor: colors.subtle,
+                borderColor: colors.border,
+              }}
               accessibilityRole="button"
               accessibilityLabel="Close emergency dialog"
             >
-              <X size={16} color="#475569" />
+              <X size={16} color={colors.textSecondary} />
             </Pressable>
           </View>
 
@@ -229,24 +262,39 @@ export function EmergencyModal({
             contentContainerClassName="pt-3.5 pb-2 gap-4"
           >
             {/* 1. HERO EMERGENCY CALL 112 (TOLL-FREE) */}
-            <View className="rounded-2xl border-2 border-rose-200 bg-rose-50/70 p-4 gap-3">
+            <View
+              className="rounded-2xl border p-4 gap-3"
+              style={{
+                backgroundColor: colors.dangerSoft,
+                borderColor: colors.danger,
+              }}
+            >
               <View className="flex-row items-center justify-between">
                 <View className="px-2.5 py-0.5 rounded-full bg-rose-600">
                   <Text className="font-mono-bold text-[10px] text-white uppercase tracking-wider">
-                    Toll-Free • 24/7
+                    Toll-Free · 24/7
                   </Text>
                 </View>
-                <Text className="font-quicksand text-xs text-rose-800 font-semibold">
+                <Text
+                  className="font-inter-semibold text-xs"
+                  style={{ color: colors.dangerText }}
+                >
                   All GSM Operators
                 </Text>
               </View>
 
               <View className="flex-row items-center justify-between">
                 <View className="flex-1 pr-3">
-                  <Text className="font-chivo-bold text-xl text-slate-900">
+                  <Text
+                    className="font-inter-bold text-xl"
+                    style={{ color: colors.text }}
+                  >
                     National Emergency 112
                   </Text>
-                  <Text className="font-quicksand text-xs text-slate-600 mt-0.5">
+                  <Text
+                    className="font-inter text-xs mt-0.5"
+                    style={{ color: colors.textSecondary }}
+                  >
                     Unified dispatch service connecting to nearest responders.
                   </Text>
                 </View>
@@ -258,7 +306,7 @@ export function EmergencyModal({
                   accessibilityLabel="Call 112 now"
                 >
                   <PhoneCall size={16} color="#FFFFFF" />
-                  <Text className="font-chivo-bold text-xs text-white">
+                  <Text className="font-inter-bold text-xs text-white">
                     Call 112
                   </Text>
                 </Pressable>
@@ -266,17 +314,35 @@ export function EmergencyModal({
             </View>
 
             {/* 2. LIVE LOCATION TELEMETRY & QUICK SHARE */}
-            <View className="rounded-2xl border border-slate-200/90 bg-slate-50/80 p-4 gap-3">
+            <View
+              className="rounded-2xl border p-4 gap-3"
+              style={{
+                backgroundColor: colors.cardMuted,
+                borderColor: colors.border,
+              }}
+            >
               <View className="flex-row items-center justify-between">
                 <View className="flex-row items-center gap-2">
-                  <MapPin size={16} color="#1DA1F2" />
-                  <Text className="font-quicksand-bold text-xs text-slate-700 uppercase tracking-wider">
+                  <MapPin size={16} color={colors.brand} />
+                  <Text
+                    className="font-inter-bold text-xs uppercase tracking-wider"
+                    style={{ color: colors.textSecondary }}
+                  >
                     Your Current GPS Position
                   </Text>
                 </View>
-                <View className="flex-row items-center gap-1.5 px-2 py-0.5 rounded-full bg-white border border-slate-200">
-                  <Radio size={11} color="#10B981" />
-                  <Text className="font-mono-bold text-[10px] text-emerald-700">
+                <View
+                  className="flex-row items-center gap-1.5 px-2.5 py-0.5 rounded-full border"
+                  style={{
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Radio size={11} color={colors.success} />
+                  <Text
+                    className="font-mono-bold text-[10px]"
+                    style={{ color: colors.successText }}
+                  >
                     {speedKmh != null && speedKmh > 0
                       ? `~${Math.round(speedKmh)} km/h`
                       : "Vehicle Stopped"}
@@ -284,44 +350,61 @@ export function EmergencyModal({
                 </View>
               </View>
 
-              <View className="px-3 py-2 rounded-xl bg-white border border-slate-200">
-                <Text className="font-mono-bold text-xs text-slate-900">
+              <View
+                className="px-3 py-2.5 rounded-xl border"
+                style={{
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                }}
+              >
+                <Text
+                  className="font-mono-bold text-xs"
+                  style={{ color: colors.text }}
+                >
                   {currentCoords
                     ? `${currentCoords.latitude.toFixed(6)}, ${currentCoords.longitude.toFixed(6)}`
                     : "Acquiring GPS fix..."}
                 </Text>
-                <Text className="font-quicksand text-[11px] text-slate-500 mt-0.5">
+                <Text
+                  className="font-inter text-[11px] mt-0.5"
+                  style={{ color: colors.textMuted }}
+                >
                   Live coordinates and map link ready to dispatch to contacts.
                 </Text>
               </View>
 
               <View className="flex-row gap-2.5">
-                {/* Share WhatsApp */}
                 <Pressable
                   onPress={handleShareWhatsApp}
-                  className="flex-1 flex-row items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 active:bg-emerald-700 shadow-2xs"
+                  className="flex-1 flex-row items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 active:bg-emerald-700"
                   accessibilityRole="button"
                   accessibilityLabel="Send emergency coordinates via WhatsApp"
                 >
                   <MessageCircle size={15} color="#FFFFFF" />
-                  <Text className="font-quicksand-bold text-xs text-white">
+                  <Text className="font-inter-bold text-xs text-white">
                     Send WhatsApp
                   </Text>
                 </Pressable>
 
-                {/* Share Universal / SMS */}
                 <Pressable
                   onPress={handleShareUniversal}
-                  className="flex-1 flex-row items-center justify-center gap-2 py-2.5 rounded-xl bg-white border border-slate-300 active:bg-slate-100 shadow-2xs"
+                  className="flex-1 flex-row items-center justify-center gap-2 py-2.5 rounded-xl border"
+                  style={{
+                    backgroundColor: colors.card,
+                    borderColor: colors.borderStrong,
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel="Share location link"
                 >
                   {copiedRecently ? (
-                    <Check size={14} color="#10B981" />
+                    <Check size={14} color={colors.success} />
                   ) : (
-                    <Share2 size={14} color="#334155" />
+                    <Share2 size={14} color={colors.textSecondary} />
                   )}
-                  <Text className="font-quicksand-bold text-xs text-slate-800">
+                  <Text
+                    className="font-inter-bold text-xs"
+                    style={{ color: colors.text }}
+                  >
                     {copiedRecently ? "Copied!" : "Share Location"}
                   </Text>
                 </Pressable>
@@ -330,7 +413,10 @@ export function EmergencyModal({
 
             {/* 3. DIRECT EMERGENCY SERVICES (1-TAP CALL) */}
             <View className="gap-2.5">
-              <Text className="font-quicksand-bold text-xs text-slate-500 uppercase tracking-wider px-1">
+              <Text
+                className="font-inter-bold text-xs uppercase tracking-wider px-1"
+                style={{ color: colors.textMuted }}
+              >
                 Direct Emergency Services (1-Tap Call)
               </Text>
 
@@ -341,19 +427,23 @@ export function EmergencyModal({
                     <Pressable
                       key={item.number}
                       onPress={() => handleDial(item.number, item.name)}
-                      className="w-[48.2%] p-3 rounded-2xl border border-slate-200/90 bg-white active:bg-slate-50 shadow-2xs justify-between gap-2"
+                      className="w-[48.2%] p-3 rounded-2xl border justify-between gap-2"
+                      style={{
+                        backgroundColor: colors.card,
+                        borderColor: colors.border,
+                      }}
                       accessibilityRole="button"
                       accessibilityLabel={`Call ${item.name} at ${item.number}`}
                     >
                       <View className="flex-row items-center justify-between">
                         <View
                           className="h-8 w-8 items-center justify-center rounded-xl"
-                          style={{ backgroundColor: `${item.accentColor}15` }}
+                          style={{ backgroundColor: `${item.accentColor}20` }}
                         >
                           <IconComp size={16} color={item.accentColor} />
                         </View>
                         <View
-                          className={`px-2 py-0.5 rounded-md border ${item.badgeBg}`}
+                          className={`px-2 py-0.5 rounded-md border ${item.badgeClass}`}
                         >
                           <Text className="font-mono-bold text-[10px]">
                             {item.number}
@@ -362,21 +452,28 @@ export function EmergencyModal({
                       </View>
 
                       <View>
-                        <Text className="font-quicksand-bold text-xs text-slate-900 leading-tight">
+                        <Text
+                          className="font-inter-bold text-xs leading-tight"
+                          style={{ color: colors.text }}
+                        >
                           {item.name}
                         </Text>
                         <Text
-                          className="font-quicksand text-[10px] text-slate-500 mt-0.5"
+                          className="font-inter text-[10px] mt-0.5"
+                          style={{ color: colors.textMuted }}
                           numberOfLines={1}
                         >
                           {item.desc}
                         </Text>
                       </View>
 
-                      <View className="flex-row items-center gap-1 pt-1 border-t border-slate-100">
+                      <View
+                        className="flex-row items-center gap-1 pt-1.5 border-t"
+                        style={{ borderTopColor: colors.border }}
+                      >
                         <Phone size={11} color={item.accentColor} />
                         <Text
-                          className="font-quicksand-bold text-[10px]"
+                          className="font-inter-bold text-[10px]"
                           style={{ color: item.accentColor }}
                         >
                           Call Now

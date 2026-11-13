@@ -17,7 +17,7 @@ function isValidAnomalyDetection(item: RawDetection | null | undefined): item is
   // Tolak jika confidence <= 0
   if (typeof item.confidence === 'number' && item.confidence <= 0) return false;
   // Tolak jika kendaraan diam / tidak bergerak (< 3.5 km/h)
-  if (typeof item.speedKmh === 'number' && item.speedKmh < 3.5) return false;
+  if (typeof item.speedKmh === 'number' && item.speedKmh < 1.5) return false;
   // Tolak jika tidak ada lonjakan guncangan nyata (< 0.6G)
   if (typeof item.zAccelPeak === 'number' && item.zAccelPeak < 0.6) return false;
   return true;

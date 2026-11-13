@@ -86,19 +86,19 @@ export const VEHICLE_PROFILES: Record<VehicleId, VehicleProfile> = {
     image: require("@/assets/vehicles/car.png"),
     markerEmoji: "🚗",
     sensorConfig: {
-      zShockThreshold: 1.10, // Dynamic vertical shock di atas 1G gravitasi (total ~2.10G)
-      maxExtremeSpikeG: 4.20,
+      zShockThreshold: 1.05, // Dynamic vertical shock di atas 1G gravitasi (total ~2.05G)
+      maxExtremeSpikeG: 4.50,
       vibrationFactor: 1.0,
       idleVibration: 8, // Getaran halus kabin mobil saat idle
       shockGaugeMultiplier: 55,
-      speedEmaAlpha: 0.20,
+      speedEmaAlpha: 0.25,
       speedDisplayFactor: 1.03, // Standar deviasi speedometer mobil ~3%
-      minMovingSpeed: 4.0, // Di bawah 4 km/h dianggap diam (stop lamp / parkir)
+      minMovingSpeed: 2.0, // Di bawah 2.0 km/h dianggap diam
       maxSpeedGlitch: 180,
       severityThresholds: {
         severe: 2.2,
-        high: 1.6,
-        medium: 1.10,
+        high: 1.55,
+        medium: 1.05,
       },
     },
   },
@@ -111,19 +111,19 @@ export const VEHICLE_PROFILES: Record<VehicleId, VehicleProfile> = {
     image: require("@/assets/vehicles/vehicle-motor.png"),
     markerEmoji: "🏍️",
     sensorConfig: {
-      zShockThreshold: 1.45, // Stang motor bergetar lebih kuat, ambang shock dinamis >= 1.45G
-      maxExtremeSpikeG: 4.80,
+      zShockThreshold: 1.25, // Stang motor bergetar lebih kuat, ambang shock dinamis >= 1.25G
+      maxExtremeSpikeG: 5.00,
       vibrationFactor: 1.35,
       idleVibration: 22, // Getaran mesin 1-silinder skutik pada stang saat idle
-      shockGaugeMultiplier: 35,
+      shockGaugeMultiplier: 40,
       speedEmaAlpha: 0.35,
       speedDisplayFactor: 1.05, // Standar deviasi speedometer skutik Jepang ~5%
-      minMovingSpeed: 3.5,
+      minMovingSpeed: 2.0,
       maxSpeedGlitch: 140,
       severityThresholds: {
-        severe: 2.8,
-        high: 2.0,
-        medium: 1.45,
+        severe: 2.6,
+        high: 1.85,
+        medium: 1.25,
       },
     },
   },
@@ -136,19 +136,19 @@ export const VEHICLE_PROFILES: Record<VehicleId, VehicleProfile> = {
     image: require("@/assets/vehicles/vehicle-bicycle.png"),
     markerEmoji: "🚲",
     sensorConfig: {
-      zShockThreshold: 1.15,
-      maxExtremeSpikeG: 3.80,
+      zShockThreshold: 1.00,
+      maxExtremeSpikeG: 4.00,
       vibrationFactor: 0.85,
       idleVibration: 0, // Sepeda tanpa mesin, getaran 0 saat berhenti
-      shockGaugeMultiplier: 45,
+      shockGaugeMultiplier: 48,
       speedEmaAlpha: 0.40,
       speedDisplayFactor: 1.00, // Kecepatan sepeda murni ground speed GPS
-      minMovingSpeed: 2.5,
+      minMovingSpeed: 1.5,
       maxSpeedGlitch: 50,
       severityThresholds: {
-        severe: 2.3,
-        high: 1.7,
-        medium: 1.15,
+        severe: 2.2,
+        high: 1.6,
+        medium: 1.00,
       },
     },
   },

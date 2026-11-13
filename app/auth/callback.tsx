@@ -15,6 +15,7 @@
  * 7. Screen ini cukup refresh sesi dan redirect ke tujuan
  */
 
+import { useAppTheme } from "@/contexts/theme-context";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
@@ -22,21 +23,18 @@ import { ActivityIndicator, Text, View } from "react-native";
 
 export default function AuthCallback() {
   const router = useRouter();
+  const { colors } = useAppTheme();
   const { refreshSession, user, isOnboardingCompleted } = useAuth();
 
   useEffect(() => {
     let mounted = true;
 
     const handleCallback = async () => {
-      // Beri waktu expoClient plugin untuk memproses dan menyimpan token
       await new Promise((resolve) => setTimeout(resolve, 300));
-
-      // Refresh sesi untuk memuat user yang baru login
       await refreshSession();
 
       if (!mounted) return;
 
-      // Arahkan ke halaman yang sesuai
       if (user) {
         if (!isOnboardingCompleted) {
           router.replace("/(onboarding)");
@@ -44,7 +42,6 @@ export default function AuthCallback() {
           router.replace("/(tabs)");
         }
       } else {
-        // Jika session tidak ditemukan setelah callback, kembali ke login
         router.replace("/(auth)");
       }
     };
@@ -59,10 +56,16 @@ export default function AuthCallback() {
   }, []);
 
   return (
-    <View className="flex-1 items-center justify-center bg-custom-white">
-      <ActivityIndicator size="large" color="#1DA1F2" />
-      <Text className="mt-4 font-quicksand text-sm text-slate-500">
-        Memverifikasi autentikasi...
+    <View
+      className="flex-1 items-center justify-center"
+      style={{ backgroundColor: colors.canvas }}
+    >
+      <ActivityIndicator size="large" color={colors.brand} />
+      <Text
+        className="mt-4 font-inter text-sm"
+        style={{ color: colors.textMuted }}
+      >
+        Verifying authentication...
       </Text>
     </View>
   );

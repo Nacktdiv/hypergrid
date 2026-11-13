@@ -1,9 +1,14 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Modal, ScrollView, Text, View } from "react-native";
-import { CalendarDays as CalendarIcon, ChevronLeft, ChevronRight, X } from "lucide-react-native";
+import {
+  CalendarDays as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+  X,
+} from "lucide-react-native";
 
-import { cn } from "@/lib/utils";
 import { Touchable } from "@/components/ui/touchable";
+import { useOptionalTheme } from "@/contexts/theme-context";
 import {
   getRecent7Days,
   formatToIsoDate,
@@ -16,14 +21,16 @@ export interface DaySelectorProps {
 }
 
 /**
- * Pemilih Hari Intuitif (7 Hari Terakhir Dinamis + Tombol Kalender).
- * Menggunakan prinsip Swiss Design: grid fungsional, kontras tinggi, tipografi tegas.
+ * Intuitive Day Selector (Last 7 days + Calendar modal picker).
  */
-export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
+export const DaySelector = React.memo(function DaySelector({
+  selectedId,
+  onSelect,
+}: DaySelectorProps) {
+  const { colors, isDark } = useOptionalTheme();
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
-  const recentDays = getRecent7Days();
+  const recentDays = useMemo(() => getRecent7Days(), []);
 
-  // State kalender modal (bulan & tahun yang sedang ditampilkan)
   const [currentViewDate, setCurrentViewDate] = useState(new Date());
 
   const handlePrevMonth = () => {
@@ -42,7 +49,6 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
     });
   };
 
-  // Generate hari-hari dalam bulan aktif kalender
   const daysInMonth = new Date(
     currentViewDate.getFullYear(),
     currentViewDate.getMonth() + 1,
@@ -65,7 +71,6 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
   return (
     <View className="gap-2">
       <View className="flex-row items-center gap-2">
-        {/* Tombol Kalender Swiss Design */}
         <Touchable
           accessibilityLabel="Open date range calendar"
           accessibilityRole="button"
@@ -73,21 +78,19 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
           scaleTo={0.94}
         >
           <View
-            className={cn(
-              "h-[58px] w-[58px] items-center justify-center rounded-xl border shadow-sm",
-              isCustomDateSelected
-                ? "border-brand bg-brand"
-                : "border-gray-200/80 bg-white",
-            )}
+            className="h-[58px] w-[58px] items-center justify-center rounded-2xl border shadow-sm"
+            style={{
+              backgroundColor: isCustomDateSelected ? colors.brand : colors.card,
+              borderColor: isCustomDateSelected ? colors.brand : colors.border,
+            }}
           >
             <CalendarIcon
               size={22}
-              color={isCustomDateSelected ? "#FFFFFF" : "#0F172A"}
+              color={isCustomDateSelected ? "#FFFFFF" : colors.text}
             />
           </View>
         </Touchable>
 
-        {/* Scroll Horizontal 7 Hari Sebelum Hari Ini */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -104,67 +107,113 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
         </ScrollView>
       </View>
 
-      {/* MODAL KALENDER RENTANG TANGGAL (SWISS DESIGN) */}
+      {/* Date Range Calendar Modal */}
       <Modal
         animationType="slide"
         transparent
         visible={calendarModalVisible}
         onRequestClose={() => setCalendarModalVisible(false)}
       >
-        <View className="flex-1 justify-end bg-black/60">
-          <View className="rounded-t-[32px] border-t border-gray-100 bg-white p-6 shadow-2xl">
-            {/* Header Modal Swiss */}
-            <View className="flex flex-row items-end justify-end">
-              <Touchable onPress={() => setCalendarModalVisible(false)}>
-                <View className="rounded-full border border-gray-200 bg-gray-100 p-2">
-                  <X size={18} color="#0F172A" />
+        <View
+          className="flex-1 justify-end"
+          style={{ backgroundColor: colors.overlay }}
+        >
+          <View
+            className="rounded-t-[32px] border-t p-6 shadow-2xl"
+            style={{
+              backgroundColor: colors.sheet,
+              borderTopColor: colors.border,
+            }}
+          >
+            <View className="flex-row items-center justify-between">
+              <Text
+                className="font-inter-bold text-base"
+                style={{ color: colors.text }}
+              >
+                Select Date
+              </Text>
+              <Touchable
+                accessibilityLabel="Close calendar"
+                accessibilityRole="button"
+                onPress={() => setCalendarModalVisible(false)}
+              >
+                <View
+                  className="rounded-full border p-2"
+                  style={{
+                    backgroundColor: colors.subtle,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <X size={18} color={colors.text} />
                 </View>
               </Touchable>
             </View>
 
-            {/* Navigasi Bulan */}
             <View className="my-4 flex-row items-center justify-between">
-              <Touchable onPress={handlePrevMonth}>
-                <View className="rounded-lg bg-gray-100 border border-gray-300 p-2">
-                  <ChevronLeft size={16} color="#0F172A" />
+              <Touchable
+                accessibilityLabel="Previous month"
+                accessibilityRole="button"
+                onPress={handlePrevMonth}
+              >
+                <View
+                  className="rounded-xl border p-2"
+                  style={{
+                    backgroundColor: colors.subtle,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <ChevronLeft size={16} color={colors.text} />
                 </View>
               </Touchable>
-              <Text className="font-chivo-bold text-base uppercase text-gray-900">
+              <Text
+                className="font-inter-extrabold text-sm uppercase tracking-wider"
+                style={{ color: colors.text }}
+              >
                 {monthYearLabel}
               </Text>
-              <Touchable onPress={handleNextMonth}>
-                <View className="rounded-lg bg-gray-100 border border-gray-300 p-2">
-                  <ChevronRight size={16} color="#0F172A" />
+              <Touchable
+                accessibilityLabel="Next month"
+                accessibilityRole="button"
+                onPress={handleNextMonth}
+              >
+                <View
+                  className="rounded-xl border p-2"
+                  style={{
+                    backgroundColor: colors.subtle,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <ChevronRight size={16} color={colors.text} />
                 </View>
               </Touchable>
             </View>
 
-            {/* Nama Hari Grid */}
-            <View className="flex-row justify-between border-b border-gray-200 pb-2">
+            <View
+              className="flex-row justify-between border-b pb-2"
+              style={{ borderBottomColor: colors.border }}
+            >
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((h) => (
                 <Text
                   key={h}
-                  className="w-10 text-center font-mono text-[10px] font-bold text-gray-400"
+                  className="w-10 text-center font-mono text-[10px] font-bold"
+                  style={{ color: colors.textMuted }}
                 >
                   {h}
                 </Text>
               ))}
             </View>
 
-            {/* Grid Tanggal */}
             <View className="mt-2 flex-row flex-wrap">
-              {/* Offset hari awal */}
               {Array.from({ length: firstDayOfWeek }).map((_, i) => (
                 <View key={`empty-${i}`} className="h-10 w-[14.28%]" />
               ))}
 
-              {/* Tanggal dalam bulan */}
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const dayNum = i + 1;
                 const dateObj = new Date(
                   currentViewDate.getFullYear(),
                   currentViewDate.getMonth(),
-                  dayNum,
+                  dayNum
                 );
                 const isoString = formatToIsoDate(dateObj);
                 const isSelected = selectedId === isoString;
@@ -183,24 +232,29 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
                       }}
                     >
                       <View
-                        className={cn(
-                          "h-full w-full items-center justify-center rounded-lg border",
-                          isSelected
-                            ? "border-gray-900 bg-gray-900 text-white"
+                        className="h-full w-full items-center justify-center rounded-xl border"
+                        style={{
+                          backgroundColor: isSelected
+                            ? colors.brand
                             : isToday
-                              ? "border-brand bg-sky-50"
-                              : "border-transparent bg-transparent",
-                        )}
+                              ? colors.brandSoft
+                              : "transparent",
+                          borderColor: isSelected
+                            ? colors.brand
+                            : isToday
+                              ? colors.brandBorder
+                              : "transparent",
+                        }}
                       >
                         <Text
-                          className={cn(
-                            "font-mono text-xs font-bold",
-                            isSelected
-                              ? "text-white"
+                          className="font-mono text-xs font-bold"
+                          style={{
+                            color: isSelected
+                              ? "#FFFFFF"
                               : isToday
-                                ? "text-brand"
-                                : "text-gray-800",
-                          )}
+                                ? colors.brandText
+                                : colors.text,
+                          }}
                         >
                           {dayNum}
                         </Text>
@@ -211,8 +265,10 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
               })}
             </View>
 
-            {/* Preset Cepat (Swiss Style Bar) */}
-            <View className="mt-6 flex-row gap-2 border-t border-gray-200 pt-4">
+            <View
+              className="mt-6 flex-row gap-2.5 border-t pt-4"
+              style={{ borderTopColor: colors.border }}
+            >
               <Touchable
                 className="flex-1"
                 onPress={() => {
@@ -220,8 +276,17 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
                   setCalendarModalVisible(false);
                 }}
               >
-                <View className="items-center justify-center rounded-xl border border-gray-300 bg-white py-2.5">
-                  <Text className="text-xs text-gray-900">
+                <View
+                  className="items-center justify-center rounded-xl border py-2.5"
+                  style={{
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Text
+                    className="font-inter-semibold text-xs"
+                    style={{ color: colors.text }}
+                  >
                     Today
                   </Text>
                 </View>
@@ -236,8 +301,17 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
                   setCalendarModalVisible(false);
                 }}
               >
-                <View className="items-center justify-center rounded-xl border border-gray-300 bg-gray-100 py-2.5">
-                  <Text className="text-xs text-custom-black">
+                <View
+                  className="items-center justify-center rounded-xl border py-2.5"
+                  style={{
+                    backgroundColor: isDark ? colors.cardMuted : colors.subtle,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Text
+                    className="font-inter-semibold text-xs"
+                    style={{ color: colors.text }}
+                  >
                     Yesterday
                   </Text>
                 </View>
@@ -248,7 +322,7 @@ export function DaySelector({ selectedId, onSelect }: DaySelectorProps) {
       </Modal>
     </View>
   );
-}
+});
 
 type DayPillProps = {
   day: DayOption;
@@ -256,7 +330,13 @@ type DayPillProps = {
   onPress: () => void;
 };
 
-function DayPill({ day, isActive, onPress }: DayPillProps) {
+const DayPill = React.memo(function DayPill({
+  day,
+  isActive,
+  onPress,
+}: DayPillProps) {
+  const { colors } = useOptionalTheme();
+
   return (
     <Touchable
       accessibilityLabel={day.longLabel}
@@ -266,30 +346,25 @@ function DayPill({ day, isActive, onPress }: DayPillProps) {
       scaleTo={0.92}
     >
       <View
-        className={cn(
-          "w-[56px] items-center justify-center gap-0.5 rounded-xl border py-2 shadow-sm",
-          isActive
-            ? "border-brand bg-brand"
-            : "border-gray-200/80 bg-white"
-        )}
+        className="w-[56px] items-center justify-center gap-0.5 rounded-2xl border py-2 shadow-sm"
+        style={{
+          backgroundColor: isActive ? colors.brand : colors.card,
+          borderColor: isActive ? colors.brand : colors.border,
+        }}
       >
         <Text
-          className={cn(
-            "text-[10px] font-bold uppercase",
-            isActive ? "text-white" : "text-gray-700"
-          )}
+          className="font-inter-bold text-[10px] uppercase"
+          style={{ color: isActive ? "#FFFFFF" : colors.textMuted }}
         >
           {day.short}
         </Text>
         <Text
-          className={cn(
-            "font-mono-bold text-base",
-            isActive ? "text-white" : "text-gray-900"
-          )}
+          className="font-mono-bold text-base"
+          style={{ color: isActive ? "#FFFFFF" : colors.text }}
         >
           {day.date}
         </Text>
       </View>
     </Touchable>
   );
-}
+});

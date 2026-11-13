@@ -155,6 +155,7 @@ export interface CreateDetectionDto {
   speedKmh?: number | null;
   zAccelPeak?: number | null;
   modelVersion?: string;
+  vehicleType?: string;
   detectedAt: string;
 }
 

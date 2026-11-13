@@ -1,11 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
+
+import { useOptionalTheme } from "@/contexts/theme-context";
 import type { AreaSummary, DamagePoint, MapData } from "./map-data";
+
+const TILE_URLS = {
+  light: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+} as const;
 
 export type LeafletMapProps = {
   data: MapData;
   vehicleType?: "car" | "motor" | "bicycle";
+  /** Optional explicit map theme override; defaults to current app theme */
+  mapTheme?: "light" | "dark";
   /** Matikan gestur pan/zoom — untuk peta ringkas di riwayat */
   interactive?: boolean;
   /** Koordinat untuk fokus/flyTo ke lokasi tertentu */
@@ -25,6 +34,7 @@ const WebViewComponent = WebView as any;
 export const LeafletMap = React.memo(function LeafletMap({
   data,
   vehicleType = "car",
+  mapTheme,
   interactive = true,
   focusCoords,
   onDamagePress,
@@ -32,6 +42,9 @@ export const LeafletMap = React.memo(function LeafletMap({
   onAreaSummaryPress,
   onClearSelection,
 }: LeafletMapProps) {
+  const { resolvedTheme } = useOptionalTheme();
+  const activeMapTheme = mapTheme ?? resolvedTheme;
+
   const webViewRef = useRef<any>(null);
   const isMapLoaded = useRef<boolean>(false);
   const lastInjectedPos = useRef<{ lat: number; lng: number } | null>(null);
@@ -39,8 +52,11 @@ export const LeafletMap = React.memo(function LeafletMap({
   const lastDamageJsonRef = useRef<string>("");
   const lastActiveClusterIdRef = useRef<string | null>(null);
 
-  // Simpan data awal saat pertama kali mount
+  // Simpan data & tema awal saat pertama kali mount agar WebView tidak reload saat tema berubah
   const [initialData] = useState<MapData>(data);
+  const [initialTheme] = useState<"light" | "dark">(activeMapTheme);
+  const activeMapThemeRef = useRef<"light" | "dark">(activeMapTheme);
+  activeMapThemeRef.current = activeMapTheme;
 
   // Buat HTML Leaflet sekali dengan titik awal nyata
   const htmlContent = useMemo(() => {
@@ -48,6 +64,7 @@ export const LeafletMap = React.memo(function LeafletMap({
     const centerLat = camera.latitude;
     const centerLng = camera.longitude;
     const zoomLevel = Math.max(12, Math.min(18, Math.round(camera.zoom)));
+    const initialBg = initialTheme === "dark" ? "#090B10" : "#F4F6F9";
 
     const routeCoords = JSON.stringify(
       route.coordinates.map((c) => [c.latitude, c.longitude]),
@@ -68,7 +85,7 @@ export const LeafletMap = React.memo(function LeafletMap({
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body, #map { height: 100%; width: 100%; background: #f8fafc; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    html, body, #map { height: 100%; width: 100%; background: ${initialBg}; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     .damage-marker {
       display: flex;
       align-items: center;
@@ -238,8 +255,12 @@ export const LeafletMap = React.memo(function LeafletMap({
         attributionControl: false
       });
 
-      // OpenStreetMap Standard Tiles
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      // Tile Layer (Light: OpenStreetMap / Dark: CartoDB DarkMatter)
+      window.HYPERGRID_TILES = {
+        light: '${TILE_URLS.light}',
+        dark: '${TILE_URLS.dark}'
+      };
+      window.baseTileLayer = L.tileLayer(window.HYPERGRID_TILES['${initialTheme}'], {
         maxZoom: 19,
         subdomains: ['a', 'b', 'c']
       }).addTo(window.map);
@@ -251,9 +272,9 @@ export const LeafletMap = React.memo(function LeafletMap({
       window.clusterRoadCache = {};
       if (initialRoute && initialRoute.length > 0) {
         window.routePolyline = L.polyline(initialRoute, {
-          color: '#1DA1F2',
+          color: '#0A84FF',
           weight: 5,
-          opacity: 0.85,
+          opacity: 0.9,
           lineJoin: 'round'
         }).addTo(window.map);
       }
@@ -1307,9 +1328,9 @@ export const LeafletMap = React.memo(function LeafletMap({
           window.routePolyline.setLatLngs(validCoords);
         } else if (validCoords.length > 0) {
           window.routePolyline = L.polyline(validCoords, {
-            color: '#1DA1F2',
+            color: '#0A84FF',
             weight: 5,
-            opacity: 0.85,
+            opacity: 0.9,
             lineJoin: 'round'
           }).addTo(window.map);
         }
@@ -1318,6 +1339,18 @@ export const LeafletMap = React.memo(function LeafletMap({
           try {
             window.map.fitBounds(validCoords, { padding: [60, 60], maxZoom: 16, animate: true });
           } catch(e) {}
+        }
+      };
+
+      window.setMapTheme = function(theme) {
+        var nextTheme = theme === 'dark' ? 'dark' : 'light';
+        var bg = nextTheme === 'dark' ? '#090B10' : '#F4F6F9';
+        document.documentElement.style.backgroundColor = bg;
+        document.body.style.backgroundColor = bg;
+        var mapEl = document.getElementById('map');
+        if (mapEl) mapEl.style.backgroundColor = bg;
+        if (window.baseTileLayer && window.HYPERGRID_TILES && window.HYPERGRID_TILES[nextTheme]) {
+          window.baseTileLayer.setUrl(window.HYPERGRID_TILES[nextTheme]);
         }
       };
 
@@ -1332,7 +1365,7 @@ export const LeafletMap = React.memo(function LeafletMap({
 </body>
 </html>
     `;
-  }, [initialData, interactive, vehicleType]);
+  }, [initialData, initialTheme, interactive]);
 
   // Pembaruan ikon kendaraan seketika saat user memilih jenis kendaraan baru di main page
   useEffect(() => {
@@ -1463,12 +1496,22 @@ export const LeafletMap = React.memo(function LeafletMap({
     webViewRef.current.injectJavaScript(js);
   }, [focusCoords]);
 
+  // 7. Sinkronisasi tile Light/Dark tanpa reload WebView
+  useEffect(() => {
+    if (!isMapLoaded.current || !webViewRef.current) return;
+    const js = `
+      if (window.setMapTheme) window.setMapTheme('${activeMapTheme}');
+      true;
+    `;
+    webViewRef.current.injectJavaScript(js);
+  }, [activeMapTheme]);
+
   const handleMessage = (event: any) => {
     try {
       const payload = JSON.parse(event.nativeEvent.data);
       if (payload.type === "MAP_READY") {
         isMapLoaded.current = true;
-        // Langsung sinkronkan posisi dan rute saat ini begitu map siap
+        // Langsung sinkronkan posisi, tema tile, dan rute saat ini begitu map siap
         const lat = data.vehiclePosition.latitude;
         const lng = data.vehiclePosition.longitude;
         const routeJson = JSON.stringify(
@@ -1480,6 +1523,7 @@ export const LeafletMap = React.memo(function LeafletMap({
         const activeJson = JSON.stringify(activePt || null);
 
         webViewRef.current?.injectJavaScript(`
+          if (window.setMapTheme) window.setMapTheme('${activeMapThemeRef.current}');
           if (window.updatePosition) window.updatePosition(${lat}, ${lng});
           if (window.updateRoute) window.updateRoute(${routeJson});
           if (${activeJson}) window.highlightCluster(${activeJson});
@@ -1499,8 +1543,10 @@ export const LeafletMap = React.memo(function LeafletMap({
     }
   };
 
+  const mapBg = activeMapTheme === "dark" ? "#090B10" : "#F4F6F9";
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: mapBg }]}>
       <WebViewComponent
         ref={webViewRef}
         originWhitelist={["*"]}
@@ -1511,8 +1557,8 @@ export const LeafletMap = React.memo(function LeafletMap({
         onMessage={handleMessage}
         startInLoadingState={true}
         renderLoading={() => (
-          <View style={styles.loader}>
-            <ActivityIndicator size="small" color="#1DA1F2" />
+          <View style={[styles.loader, { backgroundColor: mapBg }]}>
+            <ActivityIndicator size="small" color="#0A84FF" />
           </View>
         )}
       />
@@ -1525,7 +1571,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: "100%",
     width: "100%",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#F4F6F9",
     overflow: "hidden",
   },
   webView: {
@@ -1537,6 +1583,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#F4F6F9",
   },
 });

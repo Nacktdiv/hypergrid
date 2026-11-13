@@ -1,29 +1,34 @@
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { Camera } from "lucide-react-native";
-import { useState } from "react";
+import { Camera, Pencil } from "lucide-react-native";
+import React, { useState } from "react";
 import { ActivityIndicator, Alert, Text, View } from "react-native";
 
 import { Touchable } from "@/components/ui/touchable";
+import { useOptionalTheme } from "@/contexts/theme-context";
 import { PROFILE } from "./mock-data";
 
 export interface ProfileHeaderProps {
   userName?: string;
+  userEmail?: string;
   userImage?: string | null;
   onImageUpdated?: (imageUri: string) => Promise<void> | void;
   onEditPhoto?: () => void;
+  onEditProfile?: () => void;
 }
 
 /**
- * Top Profile Header dengan pemilihan & persistensi avatar pengguna.
- * Figma #114:1311 (judul "Profile", centered) + #114:1312 (avatar 112px + tombol kamera 32px).
+ * Compact User Account Identity Card matching Light/Dark design system.
  */
-export function ProfileHeader({
+export const ProfileHeader = React.memo(function ProfileHeader({
   userName,
+  userEmail,
   userImage,
   onImageUpdated,
   onEditPhoto,
+  onEditProfile,
 }: ProfileHeaderProps) {
+  const { colors } = useOptionalTheme();
   const [isUploading, setIsUploading] = useState(false);
 
   const processImageResult = async (result: ImagePicker.ImagePickerResult) => {
@@ -43,8 +48,8 @@ export function ProfileHeader({
       }
     } catch (err: any) {
       Alert.alert(
-        "Gagal Menyimpan Foto",
-        err.message || "Terjadi kesalahan saat mengunggah foto profil.",
+        "Photo Save Failed",
+        err.message || "Unable to upload profile photo."
       );
     } finally {
       setIsUploading(false);
@@ -56,8 +61,8 @@ export function ProfileHeader({
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
-          "Izin Kamera Diperlukan",
-          "HyperGrid membutuhkan izin kamera untuk mengambil foto profil.",
+          "Camera Permission Required",
+          "HyperGrid needs camera access to take a profile photo."
         );
         return;
       }
@@ -72,7 +77,7 @@ export function ProfileHeader({
 
       await processImageResult(result);
     } catch (err) {
-      console.warn("[ProfileHeader] Gagal membuka kamera:", err);
+      console.warn("[ProfileHeader] Camera error:", err);
     }
   };
 
@@ -82,8 +87,8 @@ export function ProfileHeader({
         await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
-          "Izin Galeri Diperlukan",
-          "HyperGrid membutuhkan izin galeri untuk memilih foto profil.",
+          "Gallery Permission Required",
+          "HyperGrid needs photo library access to select a profile photo."
         );
         return;
       }
@@ -98,7 +103,7 @@ export function ProfileHeader({
 
       await processImageResult(result);
     } catch (err) {
-      console.warn("[ProfileHeader] Gagal membuka galeri:", err);
+      console.warn("[ProfileHeader] Gallery error:", err);
     }
   };
 
@@ -106,86 +111,114 @@ export function ProfileHeader({
     onEditPhoto?.();
 
     Alert.alert(
-      "Ubah Foto Profil",
-      "Pilih sumber foto profil Anda:",
+      "Update Profile Photo",
+      "Choose a photo source:",
       [
         {
-          text: "Ambil Foto (Kamera)",
+          text: "Take Photo (Camera)",
           onPress: handlePickFromCamera,
         },
         {
-          text: "Pilih dari Galeri",
+          text: "Choose from Library",
           onPress: handlePickFromGallery,
         },
         {
-          text: "Batal",
+          text: "Cancel",
           style: "cancel",
         },
       ],
-      { cancelable: true },
+      { cancelable: true }
     );
   };
 
   const avatarSource = userImage ? { uri: userImage } : PROFILE.avatar;
 
   return (
-    <View className="items-center gap-4">
-      <Text className="text-center font-chivo-bold text-xl text-black">
-        Profile
-      </Text>
-
-      <View className="h-28 w-28">
-        {/* Avatar 112px + stroke putih 3px — Figma #114:1314 */}
-        <View
-          className="h-full w-full overflow-hidden rounded-full border-[3px] border-white bg-slate-100"
-          style={{
-            shadowColor: "#000000",
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.05,
-            shadowRadius: 2,
-          }}
-        >
-          <Image
-            source={avatarSource}
-            style={{ width: "100%", height: "100%" }}
-            contentFit="cover"
-            transition={200}
-          />
-
-          {isUploading ? (
-            <View className="absolute inset-0 items-center justify-center bg-black/40">
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            </View>
-          ) : null}
-        </View>
-
-        {/* Tombol kamera 32px di kanan-bawah avatar — Figma #114:1316 */}
-        <Touchable
-          accessibilityLabel="Change profile photo"
-          accessibilityRole="button"
-          className="absolute -bottom-1 -right-1"
-          onPress={handlePressCamera}
-          disabled={isUploading}
-        >
+    <View
+      className="flex-row items-center rounded-[20px] border p-4"
+      style={{
+        backgroundColor: colors.card,
+        borderColor: colors.border,
+      }}
+    >
+      {/* Avatar with quick photo edit badge */}
+      <Touchable
+        accessibilityLabel="Change profile photo"
+        accessibilityRole="button"
+        onPress={handlePressCamera}
+        disabled={isUploading}
+        scaleTo={0.95}
+      >
+        <View className="h-14 w-14 relative">
           <View
-            className="h-8 w-8 items-center justify-center rounded-full border border-[#F3F4F6] bg-white shadow-sm"
+            className="h-full w-full overflow-hidden rounded-full border-2"
             style={{
-              shadowColor: "#000000",
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.12,
-              shadowRadius: 8,
+              borderColor: colors.brandBorder,
+              backgroundColor: colors.subtle,
             }}
           >
-            <Camera size={14} color="#1DA1F2" />
+            <Image
+              source={avatarSource}
+              style={{ width: "100%", height: "100%" }}
+              contentFit="cover"
+              transition={200}
+            />
+            {isUploading ? (
+              <View className="absolute inset-0 items-center justify-center bg-black/45">
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              </View>
+            ) : null}
           </View>
-        </Touchable>
+
+          <View
+            className="absolute -bottom-0.5 -right-0.5 h-6 w-6 items-center justify-center rounded-full border"
+            style={{
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            }}
+          >
+            <Camera size={11} color={colors.brand} />
+          </View>
+        </View>
+      </Touchable>
+
+      {/* Account Name & Email */}
+      <View className="flex-1 mx-3.5">
+        <Text
+          className="font-inter-bold text-base"
+          style={{ color: colors.text }}
+          numberOfLines={1}
+        >
+          {userName || "HyperGrid Driver"}
+        </Text>
+        <Text
+          className="font-inter text-xs mt-0.5"
+          style={{ color: colors.textMuted }}
+          numberOfLines={1}
+        >
+          {userEmail || "driver@hypergrid.io"}
+        </Text>
       </View>
 
-      {userName ? (
-        <Text className="font-chivo-bold text-lg text-custom-black">
-          {userName}
-        </Text>
+      {/* Edit Profile Pen Button */}
+      {onEditProfile ? (
+        <Touchable
+          accessibilityLabel="Edit profile details"
+          accessibilityRole="button"
+          onPress={onEditProfile}
+          scaleTo={0.92}
+        >
+          <View
+            className="h-10 w-10 items-center justify-center rounded-full border"
+            style={{
+              backgroundColor: colors.subtle,
+              borderColor: colors.border,
+            }}
+          >
+            <Pencil size={16} color={colors.textSecondary} />
+          </View>
+        </Touchable>
       ) : null}
     </View>
   );
-}
+});

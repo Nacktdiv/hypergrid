@@ -1,28 +1,36 @@
 import { Tabs } from "expo-router";
-import { CarFront, RotateCcwClock, User } from "lucide-react-native";
+import { CarFront, RotateCcwClock, Settings, User } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { useAppTheme } from "@/contexts/theme-context";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const { colors } = useAppTheme();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
+        lazy: true,
+        freezeOnBlur: true,
+        animation: "none",
+        sceneStyle: { backgroundColor: colors.canvas },
         tabBarStyle: {
-          backgroundColor: "#FFFFFF",
-          borderTopColor: "#FFF",
+          backgroundColor: colors.tabBar,
+          borderTopColor: colors.tabBorder,
           borderTopWidth: 1,
-          height: 56 + Math.max(insets.bottom, 10),
-          paddingBottom: Math.max(insets.bottom, 10),
+          height: 58 + Math.max(insets.bottom, 8),
+          paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: 8,
+          elevation: 0,
         },
-        tabBarActiveTintColor: "#1DA1F2",
-        tabBarInactiveTintColor: "#64748B",
+        tabBarActiveTintColor: colors.brand,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: {
-          // fontFamily: "Inter_700Bold",
-          fontSize: 9,
-          marginTop: -2,
+          fontFamily: "Inter_600SemiBold",
+          fontSize: 11,
+          marginTop: 2,
         },
       }}
     >
@@ -32,7 +40,7 @@ export default function TabsLayout() {
           title: "Start",
           tabBarAccessibilityLabel: "Start Tab",
           tabBarIcon: ({ color, focused }) => (
-            <CarFront size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
+            <CarFront size={22} color={color} strokeWidth={focused ? 2.4 : 1.9} />
           ),
         }}
       />
@@ -45,7 +53,7 @@ export default function TabsLayout() {
             <RotateCcwClock
               size={22}
               color={color}
-              strokeWidth={focused ? 2.5 : 2}
+              strokeWidth={focused ? 2.4 : 1.9}
             />
           ),
         }}
@@ -56,7 +64,21 @@ export default function TabsLayout() {
           title: "Profile",
           tabBarAccessibilityLabel: "Profile Tab",
           tabBarIcon: ({ color, focused }) => (
-            <User size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
+            <User size={22} color={color} strokeWidth={focused ? 2.4 : 1.9} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: "Settings",
+          tabBarAccessibilityLabel: "Settings Tab",
+          tabBarIcon: ({ color, focused }) => (
+            <Settings
+              size={22}
+              color={color}
+              strokeWidth={focused ? 2.4 : 1.9}
+            />
           ),
         }}
       />

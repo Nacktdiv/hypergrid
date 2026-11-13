@@ -11,6 +11,8 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 
+import { useOptionalTheme } from "@/contexts/theme-context";
+
 export type SlideCommitPhase = "idle" | "pending" | "done" | "error";
 
 export interface SlideCommitProps {
@@ -43,11 +45,11 @@ export function SlideCommit({
   onConfirm,
   onDone,
   onError,
-  trackColor = "#1DA1F2",
-  idleTrackColor = "#E2E8F0",
-  handleColor = "#1DA1F2",
-  successColor = "#10B981",
-  dangerColor = "#EF4444",
+  trackColor,
+  idleTrackColor,
+  handleColor,
+  successColor,
+  dangerColor,
   height = 56,
   width,
   radius,
@@ -55,6 +57,14 @@ export function SlideCommit({
   icon,
   className = "",
 }: SlideCommitProps) {
+  const { isDark, colors } = useOptionalTheme();
+  const resolvedTrackColor = trackColor ?? colors.brand;
+  const resolvedIdleTrackColor =
+    idleTrackColor ?? (isDark ? "#1E2430" : "#E8EEF5");
+  const resolvedHandleColor = handleColor ?? colors.brand;
+  const resolvedSuccessColor = successColor ?? "#10B981";
+  const resolvedDangerColor = dangerColor ?? "#EF4444";
+
   const [phase, setPhase] = useState<SlideCommitPhase>("idle");
   const [containerWidth, setContainerWidth] = useState<number>(width || 0);
 
@@ -281,10 +291,15 @@ export function SlideCommit({
 
   const baseBgColor =
     phase === "done"
-      ? successColor
+      ? resolvedSuccessColor
       : phase === "error"
-        ? dangerColor
-        : idleTrackColor;
+        ? resolvedDangerColor
+        : resolvedIdleTrackColor;
+
+  const isLightHandle =
+    resolvedHandleColor.toUpperCase() === "#FFFFFF" ||
+    resolvedHandleColor.toUpperCase() === "#FFF";
+  const handleIconColor = isLightHandle ? resolvedTrackColor : "#FFFFFF";
 
   return (
     <Animated.View
@@ -311,7 +326,7 @@ export function SlideCommit({
             styles.activeTrackFill,
             {
               width: fillWidth,
-              backgroundColor: trackColor,
+              backgroundColor: resolvedTrackColor,
               borderRadius: r,
             },
           ]}
@@ -324,8 +339,7 @@ export function SlideCommit({
           <Animated.Text
             style={[
               styles.labelText,
-              styles.labelIdleText,
-              { opacity: labelOpacity },
+              { color: colors.textSecondary, opacity: labelOpacity },
             ]}
             numberOfLines={1}
           >
@@ -364,21 +378,21 @@ export function SlideCommit({
             width: GRIP,
             height: GRIP,
             borderRadius: gripRadius,
-            backgroundColor: handleColor,
+            backgroundColor: resolvedHandleColor,
             transform: [{ translateX }],
           },
         ]}
       >
         {phase === "idle" ? (
           (icon ?? (
-            <ChevronsRight size={22} color="#475569" strokeWidth={2.6} />
+            <ChevronsRight size={22} color={handleIconColor} strokeWidth={2.6} />
           ))
         ) : phase === "pending" ? (
-          <ActivityIndicator size="small" color={trackColor} />
+          <ActivityIndicator size="small" color={handleIconColor} />
         ) : phase === "done" ? (
-          <Check size={22} color={successColor} strokeWidth={3} />
+          <Check size={22} color={handleIconColor} strokeWidth={3} />
         ) : (
-          <TriangleAlert size={22} color={dangerColor} strokeWidth={2.6} />
+          <TriangleAlert size={22} color={handleIconColor} strokeWidth={2.6} />
         )}
       </Animated.View>
     </Animated.View>
@@ -403,16 +417,13 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 48,
+    paddingHorizontal: 56,
   },
   labelText: {
+    fontFamily: "Inter_700Bold",
     fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
     textAlign: "center",
-  },
-  labelIdleText: {
-    color: "#64748B",
   },
   labelActiveText: {
     color: "#FFFFFF",

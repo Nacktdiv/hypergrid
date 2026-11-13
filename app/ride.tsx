@@ -9,6 +9,7 @@ import { LiveMap } from "@/components/ride/live-map";
 import { TopFloatingBar } from "@/components/ride/top-floating-bar";
 import { TripCompletedView } from "@/components/ride/trip-completed-view";
 import { EmergencyModal } from "@/components/ui/emergency-modal";
+import { useAppTheme } from "@/contexts/theme-context";
 import { useVehicle } from "@/contexts/vehicle-context";
 import { EDGE_AI_CONFIG } from "@/edge-ai/model-config";
 import type { RawSensorSample } from "@/edge-ai/types";
@@ -73,6 +74,7 @@ export default function RideScreen() {
     return null;
   }, [params.destinationName, params.destinationLat, params.destinationLon, params.routeCoords]);
 
+  const { colors } = useAppTheme();
   const { user } = useAuth();
   const { vehicleProfile } = useVehicle();
   const [isPaused, setIsPaused] = useState(false);
@@ -195,6 +197,11 @@ export default function RideScreen() {
   const gpsSpeedRef = useRef<number>(gpsSpeed);
   const vehicleProfileRef = useRef(vehicleProfile);
   const lastUiUpdateRef = useRef<number>(0);
+  const windowPeakTotalGRef = useRef<number>(0);
+  const windowPeakDynamicGRef = useRef<number>(0);
+  const windowPeakVibRef = useRef<number>(0);
+  const windowPeakShockLevelRef = useRef<number>(0);
+  const lastMotionAtRef = useRef<number>(0);
 
   useEffect(() => {
     liveCoordsRef.current = liveCoords;
@@ -224,7 +231,7 @@ export default function RideScreen() {
   // Kecepatan spidometer terkalibrasi secara dinamis sesuai profil kendaraan
   const currentSpeed = useMemo(() => {
     if (isPaused || isFinished) return 0;
-    const minSpeed = vehicleProfile.sensorConfig.minMovingSpeed ?? 3.5;
+    const minSpeed = vehicleProfile.sensorConfig.minMovingSpeed ?? 2.0;
     const displayFactor = vehicleProfile.sensorConfig.speedDisplayFactor ?? 1.0;
 
     if (gpsSpeed >= minSpeed) {
@@ -270,6 +277,11 @@ export default function RideScreen() {
   const { clusters, nearbyCluster, fetchClusters, checkNearby } =
     usePotholeClusters();
   const { detections: recordedDetections, fetchDetections } = useDetections();
+  const fetchClustersRef = useRef(fetchClusters);
+
+  useEffect(() => {
+    fetchClustersRef.current = fetchClusters;
+  }, [fetchClusters]);
 
   // Muat seluruh klaster jalan dan titik history setelah animasi transisi masuk selesai
   useEffect(() => {
@@ -323,7 +335,7 @@ export default function RideScreen() {
       if (user?.id && d.userId && d.userId !== user.id) continue;
       if (String(d.id).startsWith("ride_")) continue;
       if (typeof d.confidence === "number" && d.confidence <= 0) continue;
-      if (typeof d.speedKmh === "number" && d.speedKmh < 3.5) continue;
+      if (typeof d.speedKmh === "number" && d.speedKmh < 1.5) continue;
       if (typeof d.zAccelPeak === "number" && d.zAccelPeak < 0.6) continue;
 
       const pos = { latitude: d.latitude, longitude: d.longitude };
@@ -426,48 +438,72 @@ export default function RideScreen() {
 
       const currentProfile = vehicleProfileRef.current;
       const currentGpsSpeed = gpsSpeedRef.current;
-      const minSpeed = currentProfile.sensorConfig.minMovingSpeed ?? 3.5;
-      const isMoving = currentGpsSpeed >= minSpeed;
-
-      // Shock gauge visual (0–100) & G-Force hanya aktif saat kendaraan bergerak
-      const computedLevel = isMoving
-        ? Math.min(
-            100,
-            Math.max(
-              8,
-              Math.round(
-                dynamicVerticalG *
-                  currentProfile.sensorConfig.shockGaugeMultiplier +
-                  10
-              )
-            )
-          )
-        : 0;
-
-      // Vibrasi sasis dinamis (m/s²) sesuai standar kendaraan (0 saat diam)
-      const idleVib = currentProfile.sensorConfig.idleVibration ?? 0;
-      let dynamicVib = 0;
-      if (isMoving) {
-        dynamicVib = Math.round(
-          (dynamicVerticalG * 9.81 * 2.8 + idleVib) *
-            currentProfile.sensorConfig.vibrationFactor
-        );
-        dynamicVib = Math.min(180, Math.max(idleVib, dynamicVib));
-      }
-
-      const activeG = isMoving ? roundedG : 0;
-
-      // Throttle pembaruan state React UI ke ~5 Hz (setiap 200ms) untuk mencegah re-render banjir bridge
+      const minSpeed = currentProfile.sensorConfig.minMovingSpeed ?? 2.0;
       const now = Date.now();
-      if (now - lastUiUpdateRef.current >= 200) {
-        lastUiUpdateRef.current = now;
-        setLiveGForce(activeG);
-        if (isMoving) {
-          setMaxGForce((prev) => Math.max(prev, roundedG));
-        }
-        setShockLevel(computedLevel);
-        setCurrentVibration(dynamicVib);
+      const isMovingNow = currentGpsSpeed >= minSpeed;
+
+      if (isMovingNow) {
+        lastMotionAtRef.current = now;
       }
+      const hasRecentMotion =
+        isMovingNow ||
+        (lastMotionAtRef.current > 0 && now - lastMotionAtRef.current < 4000);
+
+      // Telemetri gauge, vibrasi & G-Force aktif terus selama trip berjalan (terkalibrasi profil kendaraan)
+      const computedLevel = Math.min(
+        100,
+        Math.max(
+          8,
+          Math.round(
+            dynamicVerticalG * currentProfile.sensorConfig.shockGaugeMultiplier + 10
+          )
+        )
+      );
+
+      const idleVib = currentProfile.sensorConfig.idleVibration ?? 0;
+      const rawDynamicVib = Math.round(
+        (dynamicVerticalG * 9.81 * 2.8 + idleVib) *
+          currentProfile.sensorConfig.vibrationFactor
+      );
+      const dynamicVib = Math.min(180, Math.max(idleVib, rawDynamicVib));
+
+      // Peak-hold akumulator per sampel 50ms agar lonjakan lubang tajam tidak terbuang di antara tick UI
+      if (roundedG > windowPeakTotalGRef.current) {
+        windowPeakTotalGRef.current = roundedG;
+      }
+      if (dynamicVerticalG > windowPeakDynamicGRef.current) {
+        windowPeakDynamicGRef.current = dynamicVerticalG;
+      }
+      if (dynamicVib > windowPeakVibRef.current) {
+        windowPeakVibRef.current = dynamicVib;
+      }
+      if (computedLevel > windowPeakShockLevelRef.current) {
+        windowPeakShockLevelRef.current = computedLevel;
+      }
+
+      // Flush peak window ke React state ~6.7 Hz (150ms) untuk HUD mulus & responsif
+      if (now - lastUiUpdateRef.current >= 150) {
+        lastUiUpdateRef.current = now;
+        const peakG = windowPeakTotalGRef.current || roundedG;
+        const peakLevel = windowPeakShockLevelRef.current || computedLevel;
+        const peakVib = windowPeakVibRef.current || dynamicVib;
+
+        windowPeakTotalGRef.current = 0;
+        windowPeakDynamicGRef.current = 0;
+        windowPeakShockLevelRef.current = 0;
+        windowPeakVibRef.current = 0;
+
+        setLiveGForce(peakG);
+        setMaxGForce((prev) => Math.max(prev, peakG));
+        setShockLevel(peakLevel);
+        setCurrentVibration(peakVib);
+      }
+
+      const speedForSample = isMovingNow
+        ? currentGpsSpeed
+        : hasRecentMotion
+        ? minSpeed
+        : currentGpsSpeed;
 
       // Tambahkan ke rolling window buffer Edge AI (20 Hz)
       const sample: RawSensorSample = {
@@ -477,12 +513,12 @@ export default function RideScreen() {
         gx: gyroRef.current.gx,
         gy: gyroRef.current.gy,
         gz: gyroRef.current.gz,
-        speedKmh: currentGpsSpeed,
+        speedKmh: speedForSample,
         timestampMs: now,
       };
       addSampleRef.current(sample);
 
-      // Pre-filter Trigger evaluasi Edge AI (hanya saat kendaraan bergerak nyata)
+      // Pre-filter Trigger evaluasi Edge AI
       const shockThreshold = currentProfile.sensorConfig.zShockThreshold;
       const maxSpikeLimit =
         currentProfile.sensorConfig.maxExtremeSpikeG ??
@@ -502,7 +538,7 @@ export default function RideScreen() {
         gyroMag > EDGE_AI_CONFIG.maxGyroTumbleRadPerSec;
 
       if (
-        isMoving &&
+        hasRecentMotion &&
         dynamicVerticalG >= shockThreshold &&
         !isExtremeArtifact &&
         isCooldownPassed
@@ -532,7 +568,10 @@ export default function RideScreen() {
         runInferenceRef.current(
           { latitude: currentLat, longitude: currentLon },
           { offlineOnly: false },
-          currentProfile.sensorConfig
+          {
+            ...currentProfile.sensorConfig,
+            vehicleType: currentProfile.id,
+          }
         )
           .then((res) => {
             if (res?.isAnomalyDetected) {
@@ -545,7 +584,7 @@ export default function RideScreen() {
                 id: `det_${Date.now()}`,
                 title: isTflite
                   ? `TFLite: ${Math.round(res.probability * 100)}% Pothole (${dynamicVerticalG.toFixed(2)}G)`
-                  : `Pothole Detected (${confPct}% Conf • ${dynamicVerticalG.toFixed(2)}G)`,
+                  : `Pothole Detected (${confPct}% Conf · ${dynamicVerticalG.toFixed(2)}G)`,
                 subtitle: "Road defect registered & logged",
                 gForce: dynamicVerticalG,
                 severity: dynamicVerticalG > 1.8 ? "danger" : "warning",
@@ -558,6 +597,7 @@ export default function RideScreen() {
                 reportCount: 1,
               };
               setLiveDetections((prev) => [...prev, newDamage]);
+              fetchClustersRef.current({ limit: 500 }).catch(() => {});
             }
           })
           .catch((err: unknown) => {
@@ -783,6 +823,36 @@ export default function RideScreen() {
     [triggerShockAlert]
   );
 
+  const handleStopDriveRef = useRef(handleStopDrive);
+  useEffect(() => {
+    handleStopDriveRef.current = handleStopDrive;
+  });
+  const handleStopDriveStable = useCallback(() => {
+    void handleStopDriveRef.current();
+  }, []);
+
+  const handleTogglePause = useCallback(() => {
+    setIsPaused((value) => !value);
+  }, []);
+
+  const handleOpenEmergency = useCallback(() => {
+    setIsEmergencyVisible(true);
+  }, []);
+
+  const handleCloseEmergency = useCallback(() => {
+    setIsEmergencyVisible(false);
+  }, []);
+
+  const handleViewHistory = useCallback(() => {
+    setIsFinished(false);
+    router.replace("/(tabs)/history");
+  }, [router]);
+
+  const handleBackHome = useCallback(() => {
+    setIsFinished(false);
+    router.replace("/(tabs)");
+  }, [router]);
+
   if (isFinished) {
     const hasRealDetection =
       detectedCount > 0 && Boolean(lastResult?.isAnomalyDetected);
@@ -804,7 +874,10 @@ export default function RideScreen() {
         data={{
           elapsedSeconds,
           detectedCount,
-          maxGForce: detectedCount > 0 || totalDistanceMeters >= 5 ? maxGForce : 0,
+          maxGForce:
+            detectedCount > 0 || totalDistanceMeters >= 5 || maxGForce > 1.05
+              ? maxGForce
+              : 0,
           distanceMeters: totalDistanceMeters,
           vehicleName: vehicleProfile.name,
           vehiclePlate: vehicleProfile.plate,
@@ -815,20 +888,14 @@ export default function RideScreen() {
           destinationName: resolvedDestinationName || destination?.name,
           startLocationName,
         }}
-        onViewHistory={() => {
-          setIsFinished(false);
-          router.replace("/(tabs)/history");
-        }}
-        onBackHome={() => {
-          setIsFinished(false);
-          router.replace("/(tabs)");
-        }}
+        onViewHistory={handleViewHistory}
+        onBackHome={handleBackHome}
       />
     );
   }
 
   return (
-    <View className="flex-1 bg-custom-black">
+    <View className="flex-1" style={{ backgroundColor: colors.canvas }}>
       <LiveMap
         isPaused={isPaused}
         currentCoords={liveCoords}
@@ -842,7 +909,7 @@ export default function RideScreen() {
       <View className="absolute inset-0">
         <TopFloatingBar
           onBack={handleBackToMain}
-          onOpenEmergency={() => setIsEmergencyVisible(true)}
+          onOpenEmergency={handleOpenEmergency}
           destinationName={destination?.name}
           remainingDistanceMeters={remainingDistanceMeters}
         />
@@ -856,11 +923,12 @@ export default function RideScreen() {
             vibration={currentVibration}
             shockLevel={shockLevel}
             gForce={liveGForce}
+            peakGForce={maxGForce}
             anomalyCount={detectedCount}
             elapsedSeconds={elapsedSeconds}
             isPaused={isPaused}
-            onTogglePause={() => setIsPaused((value) => !value)}
-            onStop={handleStopDrive}
+            onTogglePause={handleTogglePause}
+            onStop={handleStopDriveStable}
             shockAlert={activeShockAlert}
             onDismissShockAlert={handleDismissShockAlert}
           />
@@ -870,7 +938,7 @@ export default function RideScreen() {
       {/* MODAL PUSAT BANTUAN DARURAT (HOTLINE & SHARE LIVE LOCATION) */}
       <EmergencyModal
         visible={isEmergencyVisible}
-        onClose={() => setIsEmergencyVisible(false)}
+        onClose={handleCloseEmergency}
         currentCoords={liveCoords}
         speedKmh={currentSpeed}
       />

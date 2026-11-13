@@ -70,6 +70,7 @@ export function useEdgeAi() {
       coords: { latitude: number; longitude: number },
       options?: { offlineOnly?: boolean },
       vehicleConfig?: {
+        vehicleType?: string;
         zShockThreshold?: number;
         minMovingSpeed?: number;
         severityThresholds?: { severe: number; high: number; medium: number };
@@ -90,7 +91,12 @@ export function useEdgeAi() {
 
         if (modelReady && snapshot.length >= EDGE_AI_CONFIG.minSamplesForInference) {
           // ── Mode A: Full TFLite (47 fitur matematis dari window) ───────────
-          result = await defaultEdgeDetector.inferWindow(window, predict, vehicleConfig);
+          try {
+            result = await defaultEdgeDetector.inferWindow(window, predict, vehicleConfig);
+          } catch (tfliteErr) {
+            console.warn('[useEdgeAi] TFLite runtime fallback to heuristic:', tfliteErr);
+            result = defaultEdgeDetector.inferWindowHeuristic(window, vehicleConfig);
+          }
         } else if (snapshot.length >= 3) {
           // ── Mode B: Smart Window Heuristic (3D EMA Gravitasi + Crest Factor) ─
           result = defaultEdgeDetector.inferWindowHeuristic(window, vehicleConfig);

@@ -21,27 +21,29 @@ export function MetricPill({
   className,
 }: MetricPillProps) {
   const containerStyle = {
-    light: "bg-slate-100/90 border border-slate-200/60",
-    dark: "bg-slate-800/90 border border-slate-700/60",
-    outline: "bg-white border border-slate-200",
+    light:
+      "bg-slate-100/90 dark:bg-[#1E2430] border border-slate-200/60 dark:border-[#2B3344]",
+    dark: "bg-[#1A1F2B] border border-[#2B3344]",
+    outline:
+      "bg-white dark:bg-[#151922] border border-slate-200 dark:border-[#232936]",
   }[variant];
 
   const labelColor = {
-    light: "text-slate-500",
+    light: "text-slate-500 dark:text-slate-400",
     dark: "text-slate-400",
-    outline: "text-slate-500",
+    outline: "text-slate-500 dark:text-slate-400",
   }[variant];
 
   const valueColor = {
-    light: "text-slate-900",
+    light: "text-slate-900 dark:text-slate-50",
     dark: "text-white",
-    outline: "text-slate-900",
+    outline: "text-slate-900 dark:text-slate-50",
   }[variant];
 
   return (
     <View
       className={cn(
-        "flex-1 flex-row items-center gap-2.5 rounded-2xl py-2 px-3",
+        "flex-1 flex-row items-center gap-2.5 rounded-2xl py-2.5 px-3",
         containerStyle,
         className
       )}
@@ -50,20 +52,20 @@ export function MetricPill({
       <View className="flex-1 justify-center">
         <Text
           numberOfLines={1}
-          className={cn("font-quicksand-semibold text-[10px]", labelColor)}
+          className={cn("font-inter-semibold text-[10px]", labelColor)}
         >
           {label}
         </Text>
         <Text
           numberOfLines={1}
-          className={cn("font-quicksand-bold text-xs", valueColor)}
+          className={cn("font-inter-bold text-xs mt-0.5", valueColor)}
         >
           {value}
         </Text>
         {subValue ? (
           <Text
             numberOfLines={1}
-            className="font-quicksand text-[9px] text-slate-400"
+            className="font-inter text-[10px] text-slate-500 dark:text-slate-400 mt-0.5"
           >
             {subValue}
           </Text>

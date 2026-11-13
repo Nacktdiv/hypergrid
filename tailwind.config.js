@@ -2,6 +2,7 @@ const { hairlineWidth } = require("nativewind/theme");
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: "class",
   // NOTE: Update this to include the paths to all files that contain Nativewind classes.
   content: [
     "./app/**/*.{js,jsx,ts,tsx}",
@@ -63,18 +64,21 @@ module.exports = {
           foreground: "hsl(var(--card-foreground))",
         },
         brand: {
-          DEFAULT: "#1DA1F2",
-          hover: "#0084D9",
-          light: "#E0F2FE",
-          dark: "#0369A1",
+          DEFAULT: "#0A84FF",
+          hover: "#0070E0",
+          light: "#E6F2FF",
+          dark: "#0066CC",
         },
         surface: {
-          canvas: "#F8FAFC",
+          canvas: "#F4F6F9",
           card: "#FFFFFF",
           sheet: "#FFFFFF",
-          subtle: "#F1F5F9",
-          dark: "#0F172A",
-          "dark-card": "#182032",
+          subtle: "#EEF2F6",
+          dark: "#090B10",
+          "dark-sheet": "#10131A",
+          "dark-card": "#151922",
+          "dark-subtle": "#1E2430",
+          "dark-border": "#232936",
         },
         status: {
           success: "#10B981",
@@ -83,21 +87,21 @@ module.exports = {
           "warning-light": "#FFFBEB",
           danger: "#EF4444",
           "danger-light": "#FEF2F2",
-          info: "#1DA1F2",
-          "info-light": "#E0F2FE",
+          info: "#0A84FF",
+          "info-light": "#E6F2FF",
         },
         custom: {
-          white: "#F8FAFC",
+          white: "#F4F6F9",
           black: "#0F172A",
-          primary: "#1DA1F2",
-          active: "#E0F2FE",
-          borderActive: "#1DA1F2",
+          primary: "#0A84FF",
+          active: "#E6F2FF",
+          borderActive: "#0A84FF",
           disabled: "#F1F5F9",
           borderDisabled: "#E2E8F0",
           danger: "#EF4444",
           warning: "#F59E0B",
           success: "#10B981",
-          info: "#1DA1F2",
+          info: "#0A84FF",
         },
       },
       borderRadius: {

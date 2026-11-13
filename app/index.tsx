@@ -1,21 +1,22 @@
 import { useAuth } from "@/contexts/auth-context";
+import { useAppTheme } from "@/contexts/theme-context";
 import { Redirect } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 
 /**
- * Root Gateway / Traffic Controller:
- * Mengarahkan pengguna secara deterministik berdasarkan sesi token & status onboarding.
- * - Belum login / tidak ada token -> redirect ke `/(auth)`
- * - Sudah login tapi belum onboarding -> redirect ke `/(onboarding)`
- * - Sudah login & onboarding selesai -> redirect ke `/(tabs)`
+ * Root Gateway / Traffic Controller
  */
 export default function RootIndex() {
   const { user, isAuthenticated, isLoading, isOnboardingCompleted } = useAuth();
+  const { colors } = useAppTheme();
 
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#1DA1F2" />
+      <View
+        className="flex-1 items-center justify-center"
+        style={{ backgroundColor: colors.canvas }}
+      >
+        <ActivityIndicator size="large" color={colors.brand} />
       </View>
     );
   }

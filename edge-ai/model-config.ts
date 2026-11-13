@@ -27,7 +27,7 @@ export const EDGE_AI_CONFIG = {
   detectionCooldownMs: 3000,
 
   /** Kecepatan minimum kendaraan (km/jam) agar evaluasi lubang jalan aktif */
-  minDetectionSpeedKmh: 10.0,
+  minDetectionSpeedKmh: 2.0,
 
   /** Ambang batas guncangan vertikal dinamis minimum (di atas 1G gravitasi bumi) */
   defaultShockThresholdG: 1.10,
@@ -109,16 +109,16 @@ export const VEHICLE_SHOCK_PROFILES: Record<
   }
 > = {
   car: {
-    minShockThreshold: 1.10,
-    severityThresholds: { severe: 2.20, high: 1.60, medium: 1.10 },
+    minShockThreshold: 1.05,
+    severityThresholds: { severe: 2.20, high: 1.55, medium: 1.05 },
   },
   motor: {
-    minShockThreshold: 1.45,
-    severityThresholds: { severe: 2.80, high: 2.00, medium: 1.45 },
+    minShockThreshold: 1.25,
+    severityThresholds: { severe: 2.60, high: 1.85, medium: 1.25 },
   },
   bicycle: {
-    minShockThreshold: 1.15,
-    severityThresholds: { severe: 2.30, high: 1.70, medium: 1.15 },
+    minShockThreshold: 1.00,
+    severityThresholds: { severe: 2.20, high: 1.60, medium: 1.00 },
   },
 };
 
@@ -225,14 +225,18 @@ export function evaluateDetectionStatus(
   }
 
   // 3. CONFIRMED VIA SENSOR:
-  // Gunakan threshold hentakan sensor terkalibrasi per kendaraan (default: 2.0G, motor: 2.0G, car: 1.6G)
-  const sensorShockThreshold = Math.min(2.0, cfg.high);
-  if (confidence >= 0.50 && peak >= sensorShockThreshold) {
+  // Lolos bila hentakan menembus sensorShockThreshold (1.6G) ATAU menembus batas getaran kendaraan dengan confidence >= 0.55
+  const sensorShockThreshold = Math.min(1.6, cfg.high);
+  if (
+    confidence >= 0.50 &&
+    (peak >= sensorShockThreshold ||
+      (confidence >= 0.55 && peak >= cfg.minShockThreshold))
+  ) {
     return 'CONFIRMED_VIA_SENSOR';
   }
 
   // 4. UNCERTAIN (Butuh Konfirmasi DBSCAN):
-  if (confidence >= 0.50 && peak < sensorShockThreshold) {
+  if (confidence >= 0.50) {
     return 'UNCERTAIN';
   }
 
